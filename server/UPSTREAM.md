@@ -145,7 +145,7 @@ Upstream code that would have referenced a higher module, or an `internal` symbo
 
 ### Domain & DB (Phase 1 Stage 4)
 
-Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENSION` tables, told apart by a new `type` column (see "Database migrations" below). Upstream's code is manga-only, so every query of it that reads a *set* of these rows, or acts on a row the client names, now also requires `type = MANGA`. Lookups that reach `EXTENSION` through `SOURCE` (manga-only by construction), inserts (the column defaults to `MANGA`) and `removeExtensionStore`/`ExtensionStoreService.upsert` (keyed by the unique `index_url`; made type-aware in Stage 5/7) are unchanged.
+Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENSION` tables, told apart by a new `type` column (see "Database migrations" below). Upstream's code is manga-only, so every query of it that reads a *set* of these rows, or acts on a row the client names, now also requires `type = MANGA`. Lookups that reach `EXTENSION` through `SOURCE` (manga-only by construction), inserts (the column defaults to `MANGA`) and `removeExtensionStore`/`ExtensionStoreService.upsert` (keyed by the unique `index_url`) are unchanged. Since Stage 5 `removeExtensionStore` goes through `RepoService` (see "Repo manager" below); Stage 7 adds `type` to the GraphQL inputs.
 
 | File | Change |
 |---|---|
@@ -160,6 +160,45 @@ Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENS
 | `core/.../graphql/dataLoaders/ExtensionDataLoader.kt` | `ExtensionDataLoader` (`extension(pkgName)`): `type = MANGA` |
 | `core/.../graphql/dataLoaders/ExtensionStoreDataLoader.kt` | `ExtensionStoreDataLoader` (`extensionStore(indexUrl)`): `type = MANGA` |
 | `core/.../graphql/mutations/ExtensionMutation.kt` | `type = MANGA` on the `updateExtension(s)` lookup and the two `fetchExtensions` payload lists |
+
+### Repo manager (Phase 1 Stage 5)
+
+The repo manager lives in `madoyomi.core.repo` (see "New Madoyomi code"). Upstream's store code now delegates to it, so both kinds of repo share one parser, one format-detection path and one trust model.
+
+| File | Change |
+|---|---|
+| `core/.../manga/impl/extension/ExtensionStoreService.kt` | `fetch` and `getExtensions` delegate to `RepoIndexFetcher` (format `AUTO`, or `JSON` for a legacy store's `getExtensions`, which reproduces upstream's "read `index.min.json`, don't follow `index_v2`"). `syncPrefsToDb` adds new URLs through `RepoService.add` (so a repo typed into the config file is trusted like any added repo). The old inline parsing is gone; `getAndRefresh` and `upsert` are unchanged but no longer called by Madoyomi code. |
+| `core/.../manga/impl/extension/ExtensionsList.kt` | `fetchExtensions` calls `RepoService.refreshAll(MANGA)` (last-good cache). `updateExtensionDatabase` is `internal` (upstream: `private`), takes `kind` (the set of rows it syncs; new rows get `type = kind`) and `prune` (without it nothing counts as missing), and writes `is_torrent` |
+| `core/.../manga/impl/extension/github/NetworkLegacyExtension.kt` | `torrent: Int = 0` (Aniyomi's legacy index; upstream's `ignoreUnknownKeys` dropped it) |
+| `core/.../manga/model/dataclass/ExtensionInfo.kt` | `isTorrent: Boolean = false`, carried into `EXTENSION.is_torrent` |
+| `core/.../graphql/mutations/ExtensionStoreMutation.kt` | `addExtensionStore` → `RepoService.add(indexUrl, MANGA)`; `removeExtensionStore` → `RepoService.remove(indexUrl)`. Inputs and payloads are unchanged (Stage 7 adds `type`/`format`) |
+| `core/.../server/ServerSetup.kt` | after the startup `syncPrefsToDb()`, `RepoService.refreshOnStartup()` refreshes every repo of both kinds once, in the background |
+
+How the repo manager behaves:
+- **Formats.**
+  - `AUTO` is upstream's behaviour: gzip sniff, then the first byte (`[` legacy `index.min.json` → its `repo.json`, `{` `repo.json` or JSON v2, otherwise protobuf). It follows `index_v2`, at most 3 hops.
+  - `JSON` never follows `index_v2`, and `PROTOBUF` decodes the URL as protobuf without sniffing.
+  - The format is stored per repo (`EXTENSIONSTORE.format`), and refreshes use it.
+- **Two protobuf schemas.** Mihon's (`NetworkExtensionStore`, upstream DTO) is for manga. Aniyomi's (`AnimeNetworkExtensionStore`) is for anime: field 8 is a bool `is_torrent` and the sources moved to field 9, so upstream's DTO cannot read yuzono's `index.pb`. The parser tries the repo kind's schema first and then the other one, so a repo added as the wrong kind fails the package check with `REPO_TYPE_MISMATCH`.
+- **Add** (`add(indexUrl, kind, format)`):
+  - The stored URL is where the index resolved to.
+  - Every listed pkg must match the kind (`.animeextension.` / `.extension.`).
+  - The repo's signing key is trusted: `signing_key_trusted = true`, plus a `TRUSTED_SIGNATURE` row (origin STORE) unless that hash already has one.
+  - Re-adding with a new key revokes the old key, unless another repo still vouches for it.
+- **Remove:**
+  - The FK cascade drops the repo's trust row. `TRUSTED_SIGNATURE.hash` is the primary key, so a key shared with another trusted repo gets its row re-pointed at that repo, and USER trust is never touched.
+  - The repo's uninstalled listings are deleted.
+  - Installed extensions of the repo (or signed with its key) whose hash is no longer trusted get `is_loaded = false` and are unloaded (`ExtensionUnloader`: sources out of `GetSource`'s cache, class loader closed). Until Stage 6 adds the trust gate to `GetSource`, a manga extension unloaded this way can still be reloaded lazily.
+- **Refresh** (`refreshAll(kind?)`, on demand through `fetchExtensions` and at startup):
+  - A failed repo keeps its rows and gets `last_error`; a row it last listed is only replaced by a newer version.
+  - Pruning (upstream's delete/obsolete of missing entries) only runs when every repo of that kind fetched.
+  - A changed signing key is not applied (as in Mihon): the refresh fails until the user re-adds the repo.
+  - A repo whose URL changed (e.g. it gained `index_v2`) is updated in place, so its id, trust, type and format survive (upstream deletes and re-inserts it).
+  - Listings of the wrong kind are dropped with a warning.
+  - A refresh with no repos of a kind does nothing.
+- **Persistence.** Anime repos live only in `EXTENSIONSTORE`. Manga repos are also mirrored to the upstream `extensionStores` setting.
+- **Duplicates.** A pkg offered by two repos of the same kind keeps upstream's rule: one row, the highest version code wins.
+- No migration: every column used here exists since `M0069`.
 
 ### New Madoyomi code
 
@@ -179,6 +218,15 @@ Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENS
 | `core/src/main/kotlin/madoyomi/core/database/MadoyomiMigration.kt` | marker interface for Madoyomi migrations (see "Database migrations") |
 | `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0069_MadoyomiExtensionKinds.kt`, `M0070_AnimeTables.kt` | Madoyomi migrations. New files, but in upstream's migration package, because the runner only scans that package. |
 | `core/src/test/kotlin/madoyomi/core/database/MigrationsFromEmptyDbTest.kt` | the migration chain on empty and pre-Madoyomi H2 databases, re-runs, schema and Exposed-table checks |
+| `core/src/main/kotlin/madoyomi/core/repo/ExtensionListing.kt`, `RepoStoreMeta.kt` | the common listing model (`ExtensionListing`, `ListingSource`), repo metadata, `FetchedRepo`, signing-key normalisation, the pkg/kind check |
+| `core/src/main/kotlin/madoyomi/core/repo/RepoIndexParser.kt` | `RepoIndexParser` + `ParsedIndex` (v2 store, legacy `repo.json`, legacy `index.min.json`), gzip sniff (64 MiB cap) |
+| `core/src/main/kotlin/madoyomi/core/repo/JsonIndexParser.kt`, `ProtobufIndexParser.kt` | the two parsers over upstream's DTOs |
+| `core/src/main/kotlin/madoyomi/core/repo/AnimeNetworkExtensionStore.kt` | Aniyomi's `index.pb` schema (reverse-engineered, see the Phase 1 doc §10) |
+| `core/src/main/kotlin/madoyomi/core/repo/RepoIndexFetcher.kt` | format detection/override and redirects over a `RepoHttp` (the default uses `NetworkHelper`'s client) |
+| `core/src/main/kotlin/madoyomi/core/repo/RepoService.kt` | repo add/remove/refresh, trust and the last-good cache (see "Repo manager" above) |
+| `core/src/main/kotlin/madoyomi/core/extension/ExtensionUnloader.kt` | drops a loaded extension's sources and class loader |
+| `core/src/main/kotlin/madoyomi/core/error/MadoyomiException.kt` | `MadoyomiException(code, message, details)` + `ErrorCode` (Stage 7 maps it to GraphQL errors) |
+| `core/src/test/kotlin/madoyomi/core/repo/*`, `core/src/test/resources/repo/*` | parser, fetcher and service tests. Fixtures are text: trimmed real yuzono `index.min.json`/`repo.json`, and trimmed yuzono and Keiyoushi `index.pb` stored as base64 of the gzipped bytes. `RepoServiceLiveTest` hits the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 
 ## Database migrations
 

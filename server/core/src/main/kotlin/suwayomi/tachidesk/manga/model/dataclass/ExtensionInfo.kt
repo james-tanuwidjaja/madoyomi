@@ -20,6 +20,8 @@ data class ExtensionInfo(
     val lang: String,
     val contentWarning: ContentWarning,
     val sources: List<ExtensionSource>,
+    // Madoyomi: anime listings carry the index's torrent flag into EXTENSION.is_torrent
+    val isTorrent: Boolean = false,
 )
 
 data class ExtensionSource(

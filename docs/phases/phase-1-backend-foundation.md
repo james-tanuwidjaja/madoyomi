@@ -41,7 +41,7 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 8. Write migrations for the new tables, and test that upgrading from an empty DB works.
 
 ### Backend — repo manager
-9. `RepoIndexParser` interface with `JsonIndexParser` (yuzono `index.min.json`) and `ProtobufIndexParser` (Keiyoushi `index.pb`), both producing a common `ExtensionListing` model.
+9. `RepoIndexParser` interface with `JsonIndexParser` (yuzono `index.min.json`) and `ProtobufIndexParser` (Keiyoushi `index.pb`), both producing a common `ExtensionListing` model. The parsers take the repo kind, because Aniyomi's `index.pb` (yuzono) uses a different schema from Mihon's (§10).
 10. Detect the format from the URL suffix or content sniffing; let the user override it.
 11. Repo CRUD + refresh (manual, plus on app start). Cache the last good index if a refresh fails.
 
@@ -78,10 +78,10 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 - [x] Migration test from an empty DB (`MigrationsFromEmptyDbTest`: empty DB, second run is a no-op, upgrade from a pre-Madoyomi DB, Madoyomi migrations re-runnable, Exposed tables match the schema)
 
 ### Repo manager
-- [ ] `JsonIndexParser` (anime)
-- [ ] `ProtobufIndexParser` (manga)
-- [ ] Format detection + override
-- [ ] Repo add/remove/refresh with last-good cache
+- [x] `JsonIndexParser` (anime): legacy `index.min.json` with the `torrent` flag, `repo.json`, JSON v2 (`madoyomi.core.repo`)
+- [x] `ProtobufIndexParser` (manga): Mihon `index.pb` via upstream's DTO, plus Aniyomi's `index.pb` schema for anime (§10)
+- [x] Format detection + override (`AUTO` = upstream sniffing + `index_v2`; `JSON`/`PROTOBUF` force a parser; stored per repo)
+- [x] Repo add/remove/refresh with last-good cache (`RepoService`: type check, store-key trust, shared-key-safe remove, startup + on-demand refresh, `last_error`; see §9)
 
 ### Extension lifecycle
 - [ ] Install (download, verify, cert hash, dex2jar, store)
@@ -99,7 +99,7 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 - [ ] Uniform error model
 
 ### Tests
-- [ ] Parser unit tests with fixtures
+- [x] Parser unit tests with fixtures (`core/src/test/kotlin/madoyomi/core/repo/`, text fixtures in `core/src/test/resources/repo/`; protobuf stored as base64 of the gzipped bytes)
 - [ ] Install → trust → list integration test
 - [ ] `./gradlew build` passes
 
@@ -119,3 +119,45 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 
 - One JVM process for both extension types, or isolated processes? (final answer; PLAN.md §7)
 - DB choice confirmed (Suwayomi's existing DB vs. SQLite).
+
+## 9. Decision record
+
+Repo manager (Stage 5). The rest of the phase's decisions are added at the end of the phase.
+
+| Decision | Why |
+|---|---|
+| Anime repos persist only in the DB (`EXTENSIONSTORE`, `type = ANIME`). Upstream's `extensionStores` setting stays a manga-only mirror. | No new setting and no generated-settings changes; the DB is the source of truth for both kinds, and the GraphQL `extensionStores` query reads it. |
+| A pkg offered by two repos of the same kind keeps upstream's rule: one `EXTENSION` row, highest version code wins (ties: the older repo). | `pkg_name` is unique; trust is per signature, not per repo, so this doesn't affect trust. |
+| A signing key that changes on refresh is not applied; the refresh fails (`last_error`) until the user re-adds the repo. | Same as Mihon. A compromised repo can't swap keys silently. |
+| Adding checks every pkg against the repo type (`.animeextension.` vs `.extension.`) and rejects a mismatch (`REPO_TYPE_MISMATCH`). A refresh drops mismatched entries with a warning. | A wrong-type repo is a user mistake, best reported at once; one bad entry later shouldn't freeze a repo. |
+| `ANIME_SOURCE` rows come from the listing at install (Stage 6), not at refresh. | Same as manga `SOURCE` rows today. |
+| The existing `addExtensionStore`/`removeExtensionStore`/`fetchExtensions` mutations go through `RepoService` (manga). Stage 7 adds `type`/`format`. | They are the only entry points, and they must follow the trust model and the last-good cache. |
+| A refresh never grants trust. Repos added before Stage 5 stay untrusted (`signing_key_trusted = false`) until they are re-added. | Trust is only ever granted by a user action. |
+| Removing a repo revokes per signature: the row of a key shared with another trusted repo moves to that repo, and USER trust is never touched. | `TRUSTED_SIGNATURE.hash` is the primary key (one row per key). |
+
+## 10. Findings log
+
+**2026-11-03: repo indexes (Stage 5).** No `protoc` was available, so a throwaway test walked the protobuf wire format and decoded with the DTOs.
+- **yuzono `index.pb`** (`https://github.com/yuzono/anime-repo/raw/repo/index.pb`, reached from `repo.json`'s `index_v2`):
+  - **It uses Aniyomi's schema, not Mihon's.** The store, contact and resources messages are the same, but in `Extension` field 7 is the content warning (1/2/3), **field 8 is a bool `is_torrent`**, and **field 9 is the repeated `Source`** (Mihon has the sources at field 8). Source fields: 1 id, 2 name, 3 language, 4 home URL, 5 mirror URLs (16 sources have some).
+  - Upstream's Mihon DTO throws on it, so Suwayomi as it stands can't add yuzono with `AUTO`. Madoyomi has `AnimeNetworkExtensionStore` for it.
+  - **The torrent flag is in the protobuf:** field 8 is set on exactly the 7 extensions with `"torrent": 1` in `index.min.json` (hentaitorrent, nyaatorrent, ptorrent, stremio, subsplease, torrentio, torrentioanime). So `is_torrent` comes from the index in both formats. Stage 6 can still cross-check it against the manifest (`tachiyomi.animeextension.torrent`).
+  - 247 extensions, 301 sources, gzipped (15,970 bytes, 86,172 raw). The **same 247 pkgs and the same version codes as `index.min.json`** (Phase 0 also saw 247).
+  - Content warnings: 175 SAFE, 5 MIXED, 67 NSFW. Libs: `14` ×197, `16` ×50.
+  - Names have no `Aniyomi: ` prefix, which the JSON has. APK/icon URLs are on `cdn.jsdelivr.net` (the JSON's are relative to the raw GitHub repo).
+  - Signing key `cbec121a…c45905`, the same as `repo.json`; badge `Yū`; Discord in the contact.
+- **yuzono `index.min.json`:**
+  - `torrent` is an int 0/1.
+  - Source ids are JSON strings, which kotlinx decodes as `Long`.
+  - `nsfw` is 0/1. As upstream does, 1 maps to MIXED, so the JSON can't tell MIXED from NSFW; the protobuf can.
+- **Keiyoushi `index.pb`:**
+  - 1452 extensions, 2365 sources (137 with mirror URLs), all 1452 with a `jar_url` (field 501).
+  - Gzipped 106,214 bytes / 727,528 raw. Key `9add655a…4da2`.
+  - Its `repo.json` has `index_v2` → `index.pb` and no `shortName`.
+- **Live check** (`RepoServiceLiveTest`, `MADOYOMI_LIVE_REPO_TESTS=1`):
+  - yuzono `AUTO` → `index.pb`, 247 listings / 7 torrent;
+  - yuzono `JSON` → `repo.json` (legacy), 247 / 7;
+  - Keiyoushi `index.min.json` `AUTO` → `index.pb`, 1452.
+
+  Each repo is trusted as a STORE key and refreshes cleanly.
+- kotlinx-protobuf can fail on truncated input with `IndexOutOfBoundsException`, not only `SerializationException`, so the parser treats any runtime exception as "not this format".

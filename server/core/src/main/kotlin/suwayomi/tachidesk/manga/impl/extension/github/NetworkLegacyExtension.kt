@@ -25,6 +25,8 @@ data class NetworkLegacyExtension(
     val code: Long,
     val nsfw: Int,
     val sources: List<Source>? = null,
+    // Madoyomi: Aniyomi's legacy index marks torrent extensions with "torrent": 1
+    val torrent: Int = 0,
 ) {
     @Serializable
     data class Source(

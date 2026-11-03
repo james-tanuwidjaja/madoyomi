@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import madoyomi.core.MadoyomiFeatures
+import madoyomi.core.repo.RepoService
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.cef.network.CefCookieManager
 import org.jetbrains.exposed.v1.core.and
@@ -496,6 +497,8 @@ fun applicationSetup() {
         serverConfig.extensionStores,
         { _ ->
             ExtensionStoreService.syncPrefsToDb()
+            // Madoyomi: then refresh every repo (manga and anime) once, in the background
+            RepoService.default.refreshOnStartup()
         },
         ignoreInitialValue = false,
     )
