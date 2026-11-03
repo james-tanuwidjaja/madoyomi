@@ -69,19 +69,19 @@ Timebox: ~1–2 weeks. If a spike goes over its timebox, stop, write down what b
 - [ ] Keiyoushi repo added; note whether it uses `index.pb` or JSON
 - [ ] 2–3 manga extensions installed
 - [ ] Browse → details → chapters → pages works for each
-- [ ] `docs/research/suwayomi-notes.md` written (classloader, stubs, DB, API, WebView)
+- [x] `docs/research/suwayomi-notes.md` written (classloader, stubs, DB, API, WebView)
 
 ### S2 — Protobuf index
-- [ ] `index.pb` decoded raw with `protoc --decode_raw`
-- [ ] Field names confirmed against Mihon's client code
-- [ ] `docs/research/index-pb.proto` written
-- [ ] Kotlin parser prints all extensions; entry count is plausible
+- [x] `index.pb` decoded raw with `protoc --decode_raw`
+- [x] Field names confirmed against Mihon's client code
+- [x] `docs/research/index-pb.proto` written
+- [x] Kotlin parser prints all extensions; entry count is plausible
 
 ### S3 — Anime extension on JVM
-- [ ] One yuzono APK chosen and downloaded to `tools/apks/`
-- [ ] Converted with dex2jar
-- [ ] Referenced classes listed in `docs/research/anime-ext-classes.md`
-- [ ] `extensions-lib` version identified
+- [x] One yuzono APK chosen and downloaded to `tools/apks/`
+- [x] Converted with dex2jar
+- [x] Referenced classes listed in `docs/research/anime-ext-classes.md`
+- [x] `extensions-lib` version identified
 - [ ] Harness loads the extension class
 - [ ] `getPopularAnime(1)` returns results
 - [ ] `getEpisodeList` returns episodes
@@ -90,16 +90,16 @@ Timebox: ~1–2 weeks. If a spike goes over its timebox, stop, write down what b
 
 ### S4 — mpv playback
 - [ ] mpv plays a returned video with its headers
-- [ ] External subtitles load
-- [ ] JSON IPC over a named pipe works (`time-pos` read)
-- [ ] HLS and MP4 both tested
+- [x] External subtitles load
+- [x] JSON IPC over a named pipe works (`time-pos` read)
+- [x] HLS and MP4 both tested
 
 ### S5 — Tauri sidecar
 - [x] Tauri 2 + Vue 3 scaffold in `app/`
-- [ ] Dummy JVM server prints its port and serves `/health`
-- [ ] Tauri spawns it and parses the port
-- [ ] Vue calls `/health` through the backend URL
-- [ ] Sidecar is killed when the app closes
+- [x] Dummy JVM server prints its port and serves `/health`
+- [x] Tauri spawns it and parses the port
+- [x] Vue calls `/health` through the backend URL
+- [x] Sidecar is killed when the app closes
 
 ### Wrap-up
 - [ ] Decision record filled in (section 9)
@@ -127,10 +127,30 @@ Timebox: ~1–2 weeks. If a spike goes over its timebox, stop, write down what b
 
 | Decision | Choice | Reason | Date |
 |---|---|---|---|
-| Fork vs. library | _TBD_ | | |
-| REST vs. GraphQL | _TBD_ | | |
-| One JVM vs. isolated | _TBD_ | | |
+| Fork vs. library | _Proposed:_ **fork** | Suwayomi is a single app, not a library: one `server` module plus `AndroidCompat`. Everything we need (dex2jar-in-process + `BytecodeEditor`, `ChildFirstURLClassLoader`, `AndroidCompat`, the shared `eu.kanade.tachiyomi.network`, the `index.pb`/JSON store service, Exposed/H2) lives inside it. It once had anime tables (M0004–M0006, dropped in M0019), so the structure fits. **Confirm after the S1 build/run.** | 2026-11-03 (proposed) |
+| REST vs. GraphQL | _Proposed:_ **extend GraphQL** | Suwayomi's REST v1 now only serves binaries (icons, thumbnails, pages, downloads). Everything else is GraphQL (~14.5k lines incl. subscriptions). Building a parallel REST API would mean rewriting most of that. Keep REST for binary endpoints (image proxy, video/page bytes). The PLAN.md §5 sketch then maps to GraphQL queries and mutations. **Confirm with the user.** | 2026-11-03 (proposed) |
+| One JVM vs. isolated | _Proposed (initial):_ **one JVM** | Anime and manga extensions use the same `eu.kanade.tachiyomi.network` API (`GET`/`POST`/`await*`, `NetworkHelper`), the same Injekt DI and the same Android stubs. Their source APIs live in different packages (`source` vs `animesource`), so nothing clashes. Each extension already gets its own classloader. Revisit in Phase 1 for crash isolation. | 2026-11-03 (proposed) |
 
 ## 10. Findings log
 
-_Write notes here as spikes complete: what worked, what broke, surprises._
+### 2026-11-03
+
+**Tooling.** The system `java` is a Zulu 11 JRE, too old (Suwayomi needs JDK 21). Temurin 21.0.13, jadx 1.5.6 and Gradle 9.8.2 are in `tools/bin/`. Upstream sources (Suwayomi-Server @ `7b061be`, aniyomi @ `9741444`, mihon @ `e588e04`, aniyomiorg/extensions-lib tags 14/16/v17) are cloned into `tools/upstream/` (gitignored). `d2j-dex2jar.sh` breaks under Git Bash because of its `:`-separated classpath: call java directly (see `spikes/README.md`).
+
+**Blocked: running third-party code.** The agent's permission policy refused `./gradlew :server:shadowJar` in the Suwayomi clone ("code from external"). The same applies to running the Suwayomi jar and executing extension code in the S3 harness. S1 (run) and S3 (runtime) are waiting on the user's go-ahead. Everything else was done by reading source, static analysis, or our own code.
+
+**S1 (from source, run pending).** See [suwayomi-notes.md](../research/suwayomi-notes.md). Highlights: Suwayomi parses Keiyoushi's `index.pb` natively (gzip-sniffing, protobuf/JSON by first byte). It uses the Keiyoushi `jarUrl` to skip dex2jar. GraphQL is the main API and REST only serves binaries. Cloudflare is handled through FlareSolverr, and WebView through KCEF (JCEF).
+
+**S2 (done).** `index.pb` is **gzip-compressed** protobuf served as `application/octet-stream` with no `Content-Encoding`, so clients must gunzip it themselves. The schema matches Mihon's `NetworkExtensionStore` exactly, plus the Keiyoushi field 501 `jarUrl`: [index-pb.proto](../research/index-pb.proto). The Kotlin parser (`spikes/index-pb`) decodes 1448 extensions / 2361 sources (all unique ids), which matches the raw decode. All entries are lib 1.6 and all have a `jarUrl`. Content warnings: 564 safe, 490 mixed, 394 NSFW. The Keiyoushi `index.min.json` is now just an "Outdated App" stub.
+
+**S3 (static done, runtime pending).** See [anime-ext-classes.md](../research/anime-ext-classes.md). AnimeGG ("14.2") and AnimePahe ("16.56") were dex2jar'd cleanly. **The manifest `extensionLib` (14/16) does not describe the binary API**: the lib-14 AnimeGG calls lib-16 `Hoster`/`Video` API. So the host must implement the newest `animesource` surface (port the Aniyomi app's `source-api`, which keeps the deprecated `Video` constructor). The extensions are R8-minified and bundle `keiyoushi.utils`. AnimePahe uses `android.webkit.WebView`, so it needs a real WebView (KCEF), not a stub. Lib v17 (tagged upstream, not used by yuzono yet: 197 × 14.x, 50 × 16.x) moves more methods into `AnimeSource` (episode/season updates, related anime). Expect to have to follow it.
+
+**S4 (mechanics done; real-extension video pending S3).** `spikes/mpv-play/play.ps1` plus a local header-checking proxy (`header-proxy.mjs`) that returns 403 without the right Referer/User-Agent. Results:
+- MP4 (range requests) and HLS (master + 5 variant playlists + every `.ts` segment) both play with `time-pos` advancing over `\\.\pipe\madoyomi-mpv-test`. The headers reached **every** request, including HLS segments and the HTTP subtitle.
+- Header formats that work: `--referrer=` and `--user-agent=` for those two, and **one `--http-header-fields-append="Name: value"` per other header**, which keeps values containing `,`/`;` intact (`X-Test: a,b;c` arrived verbatim). Avoid the comma-joined `--http-header-fields=` form.
+- Subtitles: `--sub-files-append=` per file. Both HTTP URLs and local paths load as external tracks (checked via the `track-list` property).
+- **Use `--ytdl=no`.** Without it, mpv's ytdl hook retries a failed URL through yt-dlp with a browser User-Agent, which hides header bugs and leaks requests.
+- mpv probes every HLS variant at start-up (a request per variant playlist plus segments), so expect a burst of requests against rate-limited hosts.
+- Still to do: `--audio-files-append` with a real multi-audio source. Lib-16 `Video.mpvArgs`/`timestamps` should feed the Phase 4 launcher.
+
+**S5 (done).** `spikes/sidecar` (Javalin 7 on `127.0.0.1:0`) prints `MADOYOMI_PORT=<port>`, serves `/health` with CORS for `http://localhost:1420` / `tauri.localhost`, starts in ~1 s on JDK 21, and exits when its stdin closes. `app/src-tauri/src/sidecar.rs` spawns it (`CREATE_NO_WINDOW`), parses the port on a reader thread (Mutex + Condvar), and exposes `get_backend_url` (waits up to 20 s; uses `spawn_blocking`). Verified with `pnpm tauri dev`: the log shows `backend listening on 127.0.0.1:<port>` and then `request GET /health -> 200 (origin=http://localhost:1420)` from the Vue home screen. A window close (WM_CLOSE) logs `stopping backend` and the JVM is gone. **Force-killing `madoyomi.exe` also takes the JVM down** (Job Object with `KILL_ON_JOB_CLOSE`). Known gap: there is a tiny window between `spawn` and `AssignProcessToJobObject`. Phase 3 can close it with `CREATE_SUSPENDED` or by spawning through a job-aware wrapper.

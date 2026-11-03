@@ -96,10 +96,10 @@ Exit: all five work. Decide **fork Suwayomi vs. depend on it as a library** (for
 
 Milestones:
 - [ ] S1 manga via Suwayomi works
-- [ ] S2 `index.pb` schema documented and parsed
+- [x] S2 `index.pb` schema documented and parsed
 - [ ] S3 anime extension returns videos on the JVM
 - [ ] S4 mpv plays a returned video with headers
-- [ ] S5 Tauri spawns the JVM sidecar and Vue calls it
+- [x] S5 Tauri spawns the JVM sidecar and Vue calls it
 - [ ] Fork/library and REST/GraphQL decisions recorded
 
 ### Phase 1 — Backend foundation
@@ -263,10 +263,10 @@ Alternative: keep Suwayomi's GraphQL API and add anime types to it. Decide after
 
 ## 7. Open decisions
 
-- [ ] Fork Suwayomi-Server, or write a fresh backend reusing its extension-host code?
-- [ ] REST, or extend Suwayomi's GraphQL?
+- [ ] Fork Suwayomi-Server, or write a fresh backend reusing its extension-host code? _Proposed after Phase 0 source review: fork (see phase-0 §9; confirm after the S1 run)._
+- [ ] REST, or extend Suwayomi's GraphQL? _Proposed: extend GraphQL, keep REST for binary endpoints (phase-0 §9)._
 - [ ] mpv in a separate window (MVP) vs. embedded (later): confirm UX priority
-- [ ] One JVM process for both extension types, or isolated processes?
+- [ ] One JVM process for both extension types, or isolated processes? _Initial answer: one JVM (shared network/DI/stub layer); final call in Phase 1._
 - [x] Name: Madoyomi · License: MPL-2.0
 - [ ] Windows-only, or keep macOS/Linux possible (the architecture already allows it)?
 

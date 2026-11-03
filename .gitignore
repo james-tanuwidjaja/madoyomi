@@ -27,6 +27,10 @@ build/
 # Local tool binaries (dex2jar, jadx, mpv builds, test APKs, jlink output)
 tools/bin/
 tools/apks/
+tools/upstream/
+
+# Spike outputs (downloaded indexes, harness results, logs)
+spikes/**/out/
 *.apk
 *.dex
 

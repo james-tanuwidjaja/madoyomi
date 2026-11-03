@@ -1,0 +1,75 @@
+// Mihon "extension store" index (index.pb), as served by Keiyoushi:
+//   https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb
+//
+// Reverse-engineered on 2026-11-03 with `protoc --decode_raw`, then cross-checked against:
+//   - Mihon      data/src/main/java/mihon/data/extension/model/NetworkExtensionStore.kt (@ProtoNumber)
+//   - Suwayomi   server/.../manga/impl/extension/github/NetworkExtensionStore.kt       (adds field 501)
+//
+// Wire notes:
+//   - The file is GZIP-compressed protobuf (magic 1f 8b), served as application/octet-stream
+//     with no Content-Encoding header, so HTTP clients will not decompress it on their own.
+//     Mihon and Suwayomi both sniff the gzip magic and decompress it themselves.
+//   - The same message can also be served as JSON (first byte '{'). Mihon picks JSON or protobuf
+//     by looking at the first byte, and accepts the CONTENT_WARNING_* names for the enum.
+//   - A legacy repo.json can point at this file through its "index_v2" field.
+//   - Snapshot 2026-11-03: 106,136 bytes gzipped / 725,238 raw, 1448 extensions, 2361 sources,
+//     extensionLib values "1.4" .. "1.6", contentWarning values 1..3 all present,
+//     field 102 not used (the list is inline in 101), Source.message (7) not present.
+//
+// Parsers must ignore unknown fields: the format is maintained upstream and may change without notice.
+
+syntax = "proto3";
+
+package mihon.extensionstore;
+
+message ExtensionStore {
+  string name = 1;                  // "Keiyoushi"
+  string badge_label = 2;           // "KEI"
+  string signing_key = 3;           // SHA-256 of the APK signing cert, lowercase hex
+  Contact contact = 4;
+  ExtensionList extension_list = 101;   // inline list (what Keiyoushi uses)...
+  optional string extension_list_url = 102; // ...or a URL to a separate ExtensionList document
+}
+
+message Contact {
+  string website = 1;
+  optional string discord = 2;
+}
+
+message ExtensionList {
+  repeated Extension extensions = 1;
+}
+
+message Extension {
+  string name = 1;                  // "Akuma" (no "Tachiyomi: " prefix, unlike the legacy JSON)
+  string package_name = 2;          // "eu.kanade.tachiyomi.extension.all.akuma"
+  Resources resources = 3;
+  string extension_lib = 4;         // "1.6"
+  int64 version_code = 5;           // 106011
+  string version_name = 6;          // "1.6.11"
+  ContentWarning content_warning = 7;
+  repeated Source sources = 8;
+}
+
+message Resources {
+  string apk_url = 1;               // absolute URL (GitHub release asset)
+  string icon_url = 2;
+  optional string jar_url = 501;    // Keiyoushi-specific: a prebuilt JVM jar (no dex2jar needed)
+}
+
+message Source {
+  int64 id = 1;                     // signed 64-bit source id
+  string name = 2;
+  string language = 3;              // "en", "all", "pt-BR", ...
+  string home_url = 4;
+  repeated string mirror_urls = 5;
+  // 6 is reserved for a per-source content warning (commented out in Mihon)
+  optional string message = 7;
+}
+
+enum ContentWarning {
+  CONTENT_WARNING_UNSPECIFIED = 0;
+  CONTENT_WARNING_SAFE = 1;
+  CONTENT_WARNING_MIXED = 2;
+  CONTENT_WARNING_NSFW = 3;
+}
