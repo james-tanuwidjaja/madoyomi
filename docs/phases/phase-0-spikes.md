@@ -65,51 +65,51 @@ Timebox: ~1–2 weeks. If a spike goes over its timebox, stop, write down what b
 ## 5. Checklist
 
 ### S1 — Manga via Suwayomi
-- [ ] Suwayomi-Server builds and runs locally
-- [ ] Keiyoushi repo added; note whether it uses `index.pb` or JSON
-- [ ] 2–3 manga extensions installed
-- [ ] Browse → details → chapters → pages works for each
-- [ ] `docs/research/suwayomi-notes.md` written (classloader, stubs, DB, API, WebView)
+- [x] Suwayomi-Server builds and runs locally (clean `shadowJar` 4 min 35 s on JDK 21; up in ~6 s)
+- [x] Keiyoushi repo added; note whether it uses `index.pb` or JSON (**`index.pb` natively**, 1448 extensions, installs the `jarUrl` jars)
+- [x] 2–3 manga extensions installed (MangaDex, MangaPill, MangaKatana, plus the Cloudflare-protected Manganato)
+- [x] Browse → details → chapters → pages works for each (all three non-Cloudflare ones, page image fetched; Manganato fails without FlareSolverr, as expected)
+- [x] `docs/research/suwayomi-notes.md` written (classloader, stubs, DB, API, WebView)
 
 ### S2 — Protobuf index
-- [ ] `index.pb` decoded raw with `protoc --decode_raw`
-- [ ] Field names confirmed against Mihon's client code
-- [ ] `docs/research/index-pb.proto` written
-- [ ] Kotlin parser prints all extensions; entry count is plausible
+- [x] `index.pb` decoded raw with `protoc --decode_raw`
+- [x] Field names confirmed against Mihon's client code
+- [x] `docs/research/index-pb.proto` written
+- [x] Kotlin parser prints all extensions; entry count is plausible
 
 ### S3 — Anime extension on JVM
-- [ ] One yuzono APK chosen and downloaded to `tools/apks/`
-- [ ] Converted with dex2jar
-- [ ] Referenced classes listed in `docs/research/anime-ext-classes.md`
-- [ ] `extensions-lib` version identified
-- [ ] Harness loads the extension class
-- [ ] `getPopularAnime(1)` returns results
-- [ ] `getEpisodeList` returns episodes
-- [ ] `getVideoList` returns videos with headers/subtitles
-- [ ] Missing class/method log captured
+- [x] One yuzono APK chosen and downloaded to `tools/apks/`
+- [x] Converted with dex2jar
+- [x] Referenced classes listed in `docs/research/anime-ext-classes.md`
+- [x] `extensions-lib` version identified
+- [x] Harness loads the extension class (AnimeGG and AnimePahe, on the unchanged Suwayomi runtime)
+- [x] `getPopularAnime(1)` returns results (AnimeGG: 125; AnimePahe blocked by Cloudflare, see §10)
+- [x] `getEpisodeList` returns episodes (AnimeGG: 1167)
+- [x] `getVideoList` returns videos with headers/subtitles (AnimeGG: 5 MP4s with `User-Agent` + `referer`, via `getHosterList`; the source is hardsubbed, so no subtitle tracks)
+- [x] Missing class/method log captured (`out/missing.log`: empty on the paths that ran)
 
 ### S4 — mpv playback
-- [ ] mpv plays a returned video with its headers
-- [ ] External subtitles load
-- [ ] JSON IPC over a named pipe works (`time-pos` read)
-- [ ] HLS and MP4 both tested
+- [x] mpv plays a returned video with its headers (AnimeGG 1080p MP4; the host returns 500 without the Referer)
+- [x] External subtitles load
+- [x] JSON IPC over a named pipe works (`time-pos` read)
+- [x] HLS and MP4 both tested
 
 ### S5 — Tauri sidecar
 - [x] Tauri 2 + Vue 3 scaffold in `app/`
-- [ ] Dummy JVM server prints its port and serves `/health`
-- [ ] Tauri spawns it and parses the port
-- [ ] Vue calls `/health` through the backend URL
-- [ ] Sidecar is killed when the app closes
+- [x] Dummy JVM server prints its port and serves `/health`
+- [x] Tauri spawns it and parses the port
+- [x] Vue calls `/health` through the backend URL
+- [x] Sidecar is killed when the app closes
 
 ### Wrap-up
-- [ ] Decision record filled in (section 9)
-- [ ] PLAN.md §7 open decisions updated
+- [x] Decision record filled in (section 9)
+- [x] PLAN.md §7 open decisions updated
 
 ## 6. Exit criteria
 
-- [ ] All five spikes pass, or have a written workaround.
-- [ ] One anime episode played end-to-end: extension → `Video` → mpv.
-- [ ] Fork-vs-library and REST-vs-GraphQL decisions recorded.
+- [x] All five spikes pass, or have a written workaround. (Cloudflare-protected sources, Manganato and AnimePahe, need FlareSolverr or a KCEF-based solver: a Phase 1/2 item.)
+- [x] One anime episode played end-to-end: extension → `Video` → mpv. (AnimeGG, One Piece ep. 1, 2026-11-03)
+- [x] Fork-vs-library and REST-vs-GraphQL decisions recorded.
 
 ## 7. Risks & notes
 
@@ -127,10 +127,49 @@ Timebox: ~1–2 weeks. If a spike goes over its timebox, stop, write down what b
 
 | Decision | Choice | Reason | Date |
 |---|---|---|---|
-| Fork vs. library | _TBD_ | | |
-| REST vs. GraphQL | _TBD_ | | |
-| One JVM vs. isolated | _TBD_ | | |
+| Fork vs. library | **Fork** Suwayomi-Server | Suwayomi is a single app, not a library: one `server` module plus `AndroidCompat`. Everything we need (dex2jar-in-process + `BytecodeEditor`, `ChildFirstURLClassLoader`, `AndroidCompat`, the shared `eu.kanade.tachiyomi.network`, the `index.pb`/JSON store service, Exposed/H2) lives inside it. It once had anime tables (M0004–M0006, dropped in M0019), so the structure fits. **S1 confirmed it**: it builds on Windows with JDK 21 alone, starts headless in ~6 s, and runs Keiyoushi extensions over GraphQL. **S3 confirmed it** from the anime side: the S3 harness ran AnimeGG on Suwayomi's own `applicationSetup()`/`PackageTools`/network layer **unchanged**, adding only the ported `animesource` package. Using it as a library would mean depending on a 169 MB app jar with no API stability, which even breaks the serialization compiler plugin (see §10). | 2026-11-03 |
+| REST vs. GraphQL | **Extend GraphQL**; REST only for binaries | Suwayomi's REST v1 now only serves binaries (icons, thumbnails, pages, downloads). Everything else is GraphQL (~14.5k lines incl. subscriptions). Building a parallel REST API would mean rewriting most of that. S1 drove the whole manga flow over GraphQL (0.1–1.5 s per call), and page URLs come back as REST binary paths. Keep REST for binary endpoints (image proxy, page bytes, later video proxy). The PLAN.md §5 sketch maps to GraphQL queries and mutations with an `anime` namespace. Confirmed by the user. | 2026-11-03 |
+| One JVM vs. isolated | **One JVM** (initial) | Anime and manga extensions use the same `eu.kanade.tachiyomi.network` API (`GET`/`POST`/`await*`, `NetworkHelper`), the same Injekt DI and the same Android stubs. Their source APIs live in different packages (`source` vs `animesource`), so nothing clashes. Each extension already gets its own classloader. S3 showed it: an anime extension ran inside the same runtime that serves manga, with no unresolved classes. Revisit in Phase 1 for crash isolation. | 2026-11-03 |
 
 ## 10. Findings log
 
-_Write notes here as spikes complete: what worked, what broke, surprises._
+### 2026-11-03
+
+**Tooling.** The system `java` is a Zulu 11 JRE, too old (Suwayomi needs JDK 21). Temurin 21.0.13, jadx 1.5.6 and Gradle 9.8.2 are in `tools/bin/`. Upstream sources (Suwayomi-Server @ `7b061be`, aniyomi @ `9741444`, mihon @ `e588e04`, aniyomiorg/extensions-lib tags 14/16/v17) are cloned into `tools/upstream/` (gitignored). `d2j-dex2jar.sh` breaks under Git Bash because of its `:`-separated classpath: call java directly (see `spikes/README.md`).
+
+**Blocked: running third-party code.** The agent's permission policy refused `./gradlew :server:shadowJar` in the Suwayomi clone ("code from external"). The same applies to running the Suwayomi jar and executing extension code in the S3 harness. S1 (run) and S3 (runtime) are waiting on the user's go-ahead. Everything else was done by reading source, static analysis, or our own code. _(Resolved later the same day: the user approved running it. See "Runtime spikes" below.)_
+
+**S1 (from source, run pending).** See [suwayomi-notes.md](../research/suwayomi-notes.md). Highlights: Suwayomi parses Keiyoushi's `index.pb` natively (gzip-sniffing, protobuf/JSON by first byte). It uses the Keiyoushi `jarUrl` to skip dex2jar. GraphQL is the main API and REST only serves binaries. Cloudflare is handled through FlareSolverr, and WebView through KCEF (JCEF).
+
+**S2 (done).** `index.pb` is **gzip-compressed** protobuf served as `application/octet-stream` with no `Content-Encoding`, so clients must gunzip it themselves. The schema matches Mihon's `NetworkExtensionStore` exactly, plus the Keiyoushi field 501 `jarUrl`: [index-pb.proto](../research/index-pb.proto). The Kotlin parser (`spikes/index-pb`) decodes 1448 extensions / 2361 sources (all unique ids), which matches the raw decode. All entries are lib 1.6 and all have a `jarUrl`. Content warnings: 564 safe, 490 mixed, 394 NSFW. The Keiyoushi `index.min.json` is now just an "Outdated App" stub.
+
+**S3 (static done, runtime pending).** See [anime-ext-classes.md](../research/anime-ext-classes.md). AnimeGG ("14.2") and AnimePahe ("16.56") were dex2jar'd cleanly. **The manifest `extensionLib` (14/16) does not describe the binary API**: the lib-14 AnimeGG calls lib-16 `Hoster`/`Video` API. So the host must implement the newest `animesource` surface (port the Aniyomi app's `source-api`, which keeps the deprecated `Video` constructor). The extensions are R8-minified and bundle `keiyoushi.utils`. AnimePahe uses `android.webkit.WebView`, so it needs a real WebView (KCEF), not a stub. Lib v17 (tagged upstream, not used by yuzono yet: 197 × 14.x, 50 × 16.x) moves more methods into `AnimeSource` (episode/season updates, related anime). Expect to have to follow it.
+
+**S4 (mechanics done; real-extension video pending S3).** `spikes/mpv-play/play.ps1` plus a local header-checking proxy (`header-proxy.mjs`) that returns 403 without the right Referer/User-Agent. Results:
+- MP4 (range requests) and HLS (master + 5 variant playlists + every `.ts` segment) both play with `time-pos` advancing over `\\.\pipe\madoyomi-mpv-test`. The headers reached **every** request, including HLS segments and the HTTP subtitle.
+- Header formats that work: `--referrer=` and `--user-agent=` for those two, and **one `--http-header-fields-append="Name: value"` per other header**, which keeps values containing `,`/`;` intact (`X-Test: a,b;c` arrived verbatim). Avoid the comma-joined `--http-header-fields=` form.
+- Subtitles: `--sub-files-append=` per file. Both HTTP URLs and local paths load as external tracks (checked via the `track-list` property).
+- **Use `--ytdl=no`.** Without it, mpv's ytdl hook retries a failed URL through yt-dlp with a browser User-Agent, which hides header bugs and leaks requests.
+- mpv probes every HLS variant at start-up (a request per variant playlist plus segments), so expect a burst of requests against rate-limited hosts.
+- Still to do: `--audio-files-append` with a real multi-audio source. Lib-16 `Video.mpvArgs`/`timestamps` should feed the Phase 4 launcher.
+
+**S5 (done).** `spikes/sidecar` (Javalin 7 on `127.0.0.1:0`) prints `MADOYOMI_PORT=<port>`, serves `/health` with CORS for `http://localhost:1420` / `tauri.localhost`, starts in ~1 s on JDK 21, and exits when its stdin closes. `app/src-tauri/src/sidecar.rs` spawns it (`CREATE_NO_WINDOW`), parses the port on a reader thread (Mutex + Condvar), and exposes `get_backend_url` (waits up to 20 s; uses `spawn_blocking`). Verified with `pnpm tauri dev`: the log shows `backend listening on 127.0.0.1:<port>` and then `request GET /health -> 200 (origin=http://localhost:1420)` from the Vue home screen. A window close (WM_CLOSE) logs `stopping backend` and the JVM is gone. **Force-killing `madoyomi.exe` also takes the JVM down** (Job Object with `KILL_ON_JOB_CLOSE`). Known gap: there is a tiny window between `spawn` and `AssignProcessToJobObject`. Phase 3 can close it with `CREATE_SUSPENDED` or by spawning through a job-aware wrapper.
+
+### 2026-11-03: runtime spikes (S1 run, S3 runtime, S4 with a real video)
+
+**S1 (done).** Details: [suwayomi-notes.md § S1 run results](../research/suwayomi-notes.md#s1-run-results-2026-11-03).
+- Build and run: a clean `:server:shadowJar` works on Windows with only `tools/bin/jdk-21` (4 min 35 s, 169 MB jar). It starts headless with a throwaway `rootDir` in about 6 s, H2 and migrations included, and uses about 616 MB working set.
+- GraphQL smoke test (`spikes/suwayomi-smoke/smoke.ps1`): the Keiyoushi `index.pb` store gives 1448 extensions. **MangaDex** (API), **MangaPill** and **MangaKatana** (HTML) each pass install → popular → details → chapters → pages → page image (`image/jpeg` via `/api/v1/manga/{id}/chapter/{n}/page/0`). **Manganato** (Cloudflare) installs, but popular fails with `Cloudflare bypass currently disabled` (no FlareSolverr).
+- Sidecar defaults to change: `ip` defaults to `0.0.0.0`, so pass `127.0.0.1` (checked). `kcefEnabled` defaults to `true` on Windows (background Chromium download), so default it off.
+
+**S3 (done, with AnimeGG).** Details: [anime-ext-classes.md § Runtime results](../research/anime-ext-classes.md#runtime-results-2026-11-03).
+- Set-up: `spikes/anime-harness` runs on the Suwayomi fat jar **unchanged**: its `applicationSetup()` for DI/AndroidCompat/network, and `PackageTools.dex2jar`/`getPackageInfo` for loading. The only addition is the `animesource` API copied from the Aniyomi app (about 1.9k lines, four trivial edits). It compiled against Suwayomi's network/util packages with no shims.
+- **AnimeGG (lib 14)**: popular gives 125 entries, then details, 1167 episodes, `getHosterList` (one `no_hoster_list` hoster) and 5 MP4 videos with `User-Agent` + `referer` headers. `out/missing.log` is **empty**.
+- **AnimePahe (lib 16)**: loads and instantiates, then fails at the first request with the same Cloudflare error. KCEF wasn't tried because Suwayomi's Cloudflare path only uses FlareSolverr. Pahe's own WebView code was never reached.
+- Build gotcha: the kotlinx.serialization compiler plugin rejects the fat jar (`PROVIDED_RUNTIME_TOO_LOW`, manifest version `r1`). The fix is to compile against a stripped copy plus the real artifact. The fork builds from source, so it won't hit this.
+
+**S4 (done).** `play.ps1 -VideoJson anime-harness/out/video.json -Hidden`: AnimeGG 1080p MP4 (h264/aac, 25 min) gives `RESULT playback=PASS`, with `time-pos` advancing over the named pipe. Control check: the URL returns **HTTP 500 without the Referer**. With it, the URL goes through 2 redirects to a `vidcache.net` CDN, and mpv followed them with `--referrer`/`--user-agent`. Still open (no source for it yet): `--audio-files-append` with a real multi-audio source, and applying `Video.mpvArgs`. AnimeGG returns neither.
+
+**Carried into later phases.**
+- Cloudflare is the main compatibility gap on both sides. Either bundle or support FlareSolverr, or (better for a desktop app) add a KCEF-backed solver behind `CloudflareInterceptor`, the way the Aniyomi app uses a WebView. Phase 1 (network) / Phase 2 (anime compatibility).
+- The Phase 2 compatibility harness can start from `spikes/anime-harness` (dex2jar → load → popular → episodes → hosters → videos, with result JSON and missing-class logging).

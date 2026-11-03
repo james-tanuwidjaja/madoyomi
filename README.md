@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** The project is in **Phase 0 (spikes)**. Only the Tauri + Vue app shell exists so far. See the [Roadmap](#roadmap).
+> **Early development. Not usable yet.** The project is in **Phase 0 (spikes)**. Only the Tauri + Vue app shell and throwaway spikes exist so far. See the [Roadmap](#roadmap).
 
 ---
 
@@ -110,7 +110,7 @@ pnpm tauri dev
 To work on the UI only, run `pnpm dev` and open <http://localhost:1420> in a browser. Tauri APIs are not available in this mode.
 
 > [!NOTE]
-> The JVM backend is not connected yet. Once the sidecar work lands (Phase 0 S5, then Phase 3), `pnpm tauri dev` will start the backend as well. This section will be updated then.
+> `pnpm tauri dev` also starts a JVM sidecar. For now it is the Phase 0 dummy backend (`spikes/sidecar`), not the real server. Build it once with `cd spikes; .\gradlew :sidecar:shadowJar` (needs JDK 21 in `tools/bin/jdk-21`, or set `MADOYOMI_JAVA`). Without it the app still opens, and the home screen shows "Backend: error". See [spikes/README.md](spikes/README.md).
 
 ## Common commands
 
@@ -135,7 +135,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 
 | Phase | Focus | Status | Details |
 |---|---|---|---|
-| 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | 🟡 In progress (app scaffold done) | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
+| 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | 🟡 In progress (S2 index, S5 sidecar, mpv IPC done; S1 + S3 runs pending) | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ⚪ Not started | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ⚪ Not started | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
 | 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | ⚪ Not started | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
