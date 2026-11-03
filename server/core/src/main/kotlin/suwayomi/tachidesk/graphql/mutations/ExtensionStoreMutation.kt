@@ -7,8 +7,9 @@ package suwayomi.tachidesk.graphql.mutations
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import madoyomi.core.repo.RepoService
+import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import suwayomi.tachidesk.graphql.directives.RequireAuth
@@ -36,17 +37,9 @@ class ExtensionStoreMutation {
     fun addExtensionStore(input: AddExtensionStoreInput): CompletableFuture<AddExtensionStorePayload?> {
         val (clientMutationId, indexUrl) = input
         return future {
-            val store = ExtensionStoreService.fetch(indexUrl)
-
-            ExtensionStoreService.upsert(store)
-            ExtensionStoreService.syncDbToPrefs()
-            val row =
-                transaction {
-                    ExtensionStoreTable
-                        .selectAll()
-                        .where { ExtensionStoreTable.indexUrl eq store.indexUrl }
-                        .first()
-                }
+            // Madoyomi: added as a manga repo through RepoService, which trusts its signing key, lists its
+            // extensions and syncs the setting (upstream: fetch + upsert + syncDbToPrefs + re-select). Stage 7 adds type/format
+            val row = RepoService.default.add(indexUrl, ExtensionKind.MANGA)
 
             AddExtensionStorePayload(
                 clientMutationId = clientMutationId,
@@ -79,13 +72,13 @@ class ExtensionStoreMutation {
                         ?.let { ExtensionStoreType(it) }
                 }
 
-            store?.let {
-                transaction {
-                    ExtensionStoreTable.deleteWhere { ExtensionStoreTable.indexUrl eq indexUrl }
-                }
+            // Madoyomi: removed through RepoService, which keeps a key shared with another repo trusted, drops the
+            // repo's listings and unloads its untrusted extensions (upstream: deleteWhere + syncDbToPrefs)
+            if (store != null) {
+                RepoService.default.remove(indexUrl)
+            } else {
+                ExtensionStoreService.syncDbToPrefs()
             }
-
-            ExtensionStoreService.syncDbToPrefs()
 
             RemoveExtensionStorePayload(
                 clientMutationId = clientMutationId,

@@ -7,14 +7,15 @@ package suwayomi.tachidesk.manga.impl.extension
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
-import eu.kanade.tachiyomi.network.awaitSuccess
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.okio.decodeFromBufferedSource
 import kotlinx.serialization.protobuf.ProtoBuf
+import madoyomi.core.repo.RepoIndexFetcher
+import madoyomi.core.repo.RepoIndexFormat
+import madoyomi.core.repo.RepoService
+import madoyomi.core.repo.toExtensionInfo
+import madoyomi.core.repo.toExtensionStore
 import madoyomi.exthost.ExtensionKind
 import okio.BufferedSource
 import okio.buffer
@@ -27,11 +28,6 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
-import suwayomi.tachidesk.manga.impl.extension.github.NetworkExtensionStore
-import suwayomi.tachidesk.manga.impl.extension.github.NetworkLegacyExtension
-import suwayomi.tachidesk.manga.impl.extension.github.NetworkLegacyExtensionRepo
-import suwayomi.tachidesk.manga.impl.extension.github.toExtensionInfo
-import suwayomi.tachidesk.manga.impl.extension.github.toExtensionInfos
 import suwayomi.tachidesk.manga.model.dataclass.ExtensionInfo
 import suwayomi.tachidesk.manga.model.dataclass.ExtensionStore
 import suwayomi.tachidesk.manga.model.table.ExtensionStoreTable
@@ -46,52 +42,16 @@ object ExtensionStoreService {
     val protoBuf: ProtoBuf by injectLazy()
     val json: Json by injectLazy()
 
-    suspend fun fetch(indexUrl: String): ExtensionStore {
-        var updatedIndexUrl: String = indexUrl
-        return try {
-            val response = network.client.newCall(GET(updatedIndexUrl)).awaitSuccess()
-            response.body.source().decompressIfGzipped().use { source ->
-                val networkStore =
-                    when (source.peek().readByte()) {
-                        // "[..."
-                        0x5B.toByte() -> {
-                            run {
-                                if (!indexUrl.endsWith("/index.min.json")) {
-                                    throw IllegalArgumentException("Provided legacy store url is not valid")
-                                }
-                                updatedIndexUrl = indexUrl.replace("/index.min.json", "/repo.json")
-                                network.client.newCall(GET(updatedIndexUrl)).awaitSuccess().body.source().use {
-                                    json.decodeFromBufferedSource<NetworkLegacyExtensionRepo>(it)
-                                }
-                            }
-                        }
-
-                        // "{..."
-                        0x7B.toByte() -> {
-                            try {
-                                json.decodeFromBufferedSource<NetworkLegacyExtensionRepo>(source.peek())
-                            } catch (_: IllegalArgumentException) {
-                                json.decodeFromBufferedSource<NetworkExtensionStore>(source)
-                            }
-                        }
-
-                        else -> {
-                            protoBuf.decodeFromByteArray<NetworkExtensionStore>(source.readByteArray())
-                        }
-                    }
-
-                if (networkStore is NetworkLegacyExtensionRepo && networkStore.indexV2 != null) {
-                    return fetch(networkStore.indexV2)
-                }
-
-                networkStore.toExtensionStore(updatedIndexUrl)
-            }
+    suspend fun fetch(indexUrl: String): ExtensionStore =
+        try {
+            // Madoyomi: delegates to madoyomi.core.repo.RepoIndexFetcher, which keeps upstream's sniffing and
+            // repo.json/index_v2 redirects (format AUTO) and parses with JsonIndexParser/ProtobufIndexParser
+            RepoIndexFetcher.network.fetch(indexUrl, RepoIndexFormat.AUTO, ExtensionKind.MANGA).toExtensionStore()
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             logger.error(e) { "Failed to fetch extension store '$indexUrl'" }
             throw e
         }
-    }
 
     fun upsert(store: ExtensionStore) {
         transaction {
@@ -198,15 +158,16 @@ object ExtensionStoreService {
 
         toAdd.forEach { url ->
             try {
-                val store = fetch(url)
-                if (store.indexUrl != url) {
+                // Madoyomi: added through RepoService (trusts the repo's signing key, lists its extensions);
+                // upstream: val store = fetch(url) ... upsert(store)
+                val store = RepoService.default.add(url, ExtensionKind.MANGA, RepoIndexFormat.AUTO, syncPrefs = false)
+                if (store[ExtensionStoreTable.indexUrl] != url) {
                     transaction {
                         ExtensionStoreTable.deleteWhere { ExtensionStoreTable.indexUrl eq url }
                     }
                     needsPrefUpdate = true
-                    toRemove -= store.indexUrl
+                    toRemove -= store[ExtensionStoreTable.indexUrl]
                 }
-                upsert(store)
             } catch (e: Exception) {
                 logger.warn(e) { "Failed to sync preference store '$url' to database" }
             }
@@ -226,43 +187,14 @@ object ExtensionStoreService {
     }
 
     suspend fun getExtensions(store: ExtensionStore): List<ExtensionInfo> {
+        // Madoyomi: delegates to madoyomi.core.repo.RepoIndexFetcher. JSON on a legacy store's repo.json reads its
+        // index.min.json without following index_v2, as upstream did; v2 stores (inline or extensionListUrl) use AUTO
+        val format = if (store.isLegacy) RepoIndexFormat.JSON else RepoIndexFormat.AUTO
         val extensions =
-            if (store.extensionListUrl != null) {
-                val response = network.client.newCall(GET(store.extensionListUrl)).awaitSuccess()
-                response.body.source().decompressIfGzipped().use { source ->
-                    when (source.peek().readByte()) {
-                        // "{..."
-                        0x7B.toByte() -> {
-                            json.decodeFromBufferedSource<NetworkExtensionStore.ExtensionList>(source)
-                        }
-
-                        else -> {
-                            protoBuf.decodeFromByteArray<NetworkExtensionStore.ExtensionList>(
-                                source.readByteArray(),
-                            )
-                        }
-                    }.toExtensionInfos(store)
-                }
-            } else if (!store.isLegacy) {
-                val response = network.client.newCall(GET(store.indexUrl)).awaitSuccess()
-                response.body.source().decompressIfGzipped().use { source ->
-                    when (source.peek().readByte()) {
-                        // "{..."
-                        0x7B.toByte() -> json.decodeFromBufferedSource<NetworkExtensionStore>(source)
-
-                        else -> protoBuf.decodeFromByteArray<NetworkExtensionStore>(source.readByteArray())
-                    }.extensionList!!
-                        .toExtensionInfos(store)
-                }
-            } else {
-                val storeBaseUrl = store.indexUrl.removeSuffix("/repo.json")
-                val response = network.client.newCall(GET("$storeBaseUrl/index.min.json")).awaitSuccess()
-                response.body.source().use { source ->
-                    json
-                        .decodeFromBufferedSource<List<NetworkLegacyExtension>>(source)
-                        .map { it.toExtensionInfo(store, storeBaseUrl) }
-                }
-            }
+            RepoIndexFetcher.network
+                .fetch(store.indexUrl, format, ExtensionKind.MANGA)
+                .extensions
+                .map { it.toExtensionInfo(store.indexUrl) }
         return extensions
     }
 

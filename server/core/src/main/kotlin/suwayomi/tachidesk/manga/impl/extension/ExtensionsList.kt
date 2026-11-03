@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.source.local.LocalSource
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import madoyomi.core.repo.RepoService
 import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -38,20 +39,10 @@ object ExtensionsList {
     var updateMap = ConcurrentHashMap<String, ExtensionInfo>()
 
     suspend fun fetchExtensions() {
-        val allExtensions = mutableListOf<ExtensionInfo>()
-
-        ExtensionStoreService.getAndRefresh().forEach { store ->
-            try {
-                val extensions = ExtensionStoreService.getExtensions(store)
-                allExtensions.addAll(extensions)
-            } catch (e: Exception) {
-                logger.warn(e) {
-                    "Failed to fetch extensions for store: ${store.indexUrl}"
-                }
-            }
-        }
-
-        updateExtensionDatabase(allExtensions)
+        // Madoyomi: refreshes the manga repos through RepoService, which keeps a failed store's rows (last-good
+        // cache, EXTENSIONSTORE.last_error) and only prunes when every store fetched. Upstream: getAndRefresh() +
+        // getExtensions(store) per store, then updateExtensionDatabase(allExtensions)
+        RepoService.default.refreshAll(ExtensionKind.MANGA)
     }
 
     suspend fun fetchExtensionsCached() {
@@ -95,7 +86,13 @@ object ExtensionsList {
 
     private val updateExtensionDatabaseMutex = Mutex()
 
-    private suspend fun updateExtensionDatabase(foundExtensions: List<ExtensionInfo>) {
+    // Madoyomi: internal (upstream: private) and type-aware, for madoyomi.core.repo.RepoService: rows of [kind] only;
+    // without [prune], entries missing from [foundExtensions] are left alone (upstream always deletes/obsoletes them)
+    internal suspend fun updateExtensionDatabase(
+        foundExtensions: List<ExtensionInfo>,
+        kind: ExtensionKind = ExtensionKind.MANGA,
+        prune: Boolean = true,
+    ) {
         updateExtensionDatabaseMutex.withLock {
             transaction {
                 val uniqueExtensions =
@@ -107,15 +104,17 @@ object ExtensionsList {
                 val installedExtensions =
                     ExtensionTable
                         .selectAll()
-                        // Madoyomi: manga rows only, so the sync never updates, obsoletes or deletes anime extensions
-                        .where { ExtensionTable.type eq ExtensionKind.MANGA }
+                        // Madoyomi: rows of this kind only, so a manga sync never touches anime extensions and vice versa
+                        .where { ExtensionTable.type eq kind }
                         .toList()
                         .associateBy { it[ExtensionTable.pkgName] }
 
                 val extensionsToUpdate = mutableListOf<Pair<ExtensionInfo, ResultRow>>()
                 val extensionsToInsert = mutableListOf<ExtensionInfo>()
+                // Madoyomi: nothing is missing unless the caller has every store's list (upstream: installedExtensions.filter)
+                val prunable = if (prune) installedExtensions else emptyMap()
                 val extensionsToDelete =
-                    installedExtensions.filter { it.value[ExtensionTable.storeIndexUrl] != null }.mapNotNull { (pkgName, extension) ->
+                    prunable.filter { it.value[ExtensionTable.storeIndexUrl] != null }.mapNotNull { (pkgName, extension) ->
                         extension.takeUnless { uniqueExtensions.any { it.pkgName == pkgName } }
                     }
 
@@ -195,6 +194,7 @@ object ExtensionsList {
                                     this[ExtensionTable.apkUrl] = foundExtension.apkUrl
                                     this[ExtensionTable.jarUrl] = foundExtension.jarUrl
                                     this[ExtensionTable.iconUrl] = foundExtension.iconUrl
+                                    this[ExtensionTable.isTorrent] = foundExtension.isTorrent // Madoyomi
                                 }
                             }.toExecutable()
                             .execute(this@transaction)
@@ -214,6 +214,9 @@ object ExtensionsList {
                         this[ExtensionTable.apkUrl] = foundExtension.apkUrl
                         this[ExtensionTable.jarUrl] = foundExtension.jarUrl
                         this[ExtensionTable.iconUrl] = foundExtension.iconUrl
+                        // Madoyomi: kind and torrent flag of the new row
+                        this[ExtensionTable.type] = kind
+                        this[ExtensionTable.isTorrent] = foundExtension.isTorrent
                     }
                 }
 

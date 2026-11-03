@@ -49,7 +49,7 @@ Why this split:
 | Backend | Kotlin/JVM (base on **Suwayomi-Server**, MPL-2.0) | Keep its web framework/DB layer if forking |
 | Extension loading | dex2jar + custom classloader + Android stubs | Already solved for manga in Suwayomi |
 | Anime API | Aniyomi `extensions-lib` (`eu.kanade.tachiyomi.animesource.*`) | Match the lib version yuzono builds against (APK names show `v14.x`) |
-| Manga index parsing | `kotlinx.serialization.protobuf` | For `index.pb`; check if Suwayomi already supports it |
+| Manga index parsing | `kotlinx.serialization.protobuf` | For `index.pb`; Suwayomi's Mihon DTOs are reused, plus an Aniyomi variant for anime `index.pb` (phase-1 §10) |
 | HTTP | OkHttp (what extensions expect) | Shared client, cookie jar, rate limiting interceptors |
 | Player | mpv (sidecar) + JSON IPC | `--http-header-fields`, `--sub-files`, `--audio-files` |
 | Cloudflare / WebView | Headless browser shim (Suwayomi's approach) | Needed by a subset of extensions |
@@ -116,7 +116,7 @@ Details: [phase-1-backend-foundation.md](phases/phase-1-backend-foundation.md)
 Milestones:
 - [x] `server/` fork rebranded with module layout and attribution
 - [x] Anime domain tables + migrations
-- [ ] Repo manager parses JSON and protobuf indexes
+- [x] Repo manager parses JSON and protobuf indexes
 - [ ] Install / update / uninstall / trust for both types via the API
 - [ ] Tests pass in `./gradlew build`
 
