@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes) is done and **Phase 1 (backend foundation)** is in progress. So far there is the Tauri + Vue app shell, the throwaway spikes, and an unmodified import of Suwayomi-Server in `server/`, which has not been rebranded yet. See the [Roadmap](#roadmap).
+> **Early development. Not usable yet.** Phase 0 (spikes) is done and **Phase 1 (backend foundation)** is in progress. So far there is the Tauri + Vue app shell, the throwaway spikes, and the backend in `server/`: a Suwayomi-Server fork rebranded as Madoyomi-Server, which runs as a local sidecar (loopback only, random port, API token) and is split into modules. Next come the anime domain, the repo manager for both index formats, and extension install with trust. The app doesn't use the real backend yet. See the [Roadmap](#roadmap).
 
 ---
 
@@ -48,11 +48,25 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 | Path | What | Status |
 |---|---|---|
 | [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`) + Vue 3 UI (`src/`) | Scaffolded |
-| [`server/`](server/) | Kotlin/JVM backend: extension host, API, DB. A fork of Suwayomi-Server, imported unmodified at `7b061be` (see [server/UPSTREAM.md](server/UPSTREAM.md)). Rebrand, module split and anime domain are next. | In progress (Phase 1) |
+| [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | In progress (Phase 1) |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
 | [`tools/`](tools/) | Dev scripts (tracked), such as `fetch-upstream-assets.ps1`. Local binaries (`tools/bin/`), test APKs (`tools/apks/`) and upstream checkouts (`tools/upstream/`) are gitignored. | Active |
 | [`docs/`](docs/) | Project plan and per-phase checklists | Active |
+
+The backend in `server/` is a Gradle multi-module project:
+
+| Module | What |
+|---|---|
+| `api` | Entry point (`madoyomi.api.MainKt`), `/health`, the API-token filter. Builds the server jar. |
+| `core` | DB and migrations, manga domain, settings, GraphQL API, the Javalin web server, startup |
+| `ext-manga` | Mihon manga source API (`eu.kanade.tachiyomi.source`) |
+| `ext-anime` | Aniyomi anime source API (`eu.kanade.tachiyomi.animesource`), ported from Aniyomi. It only compiles for now; anime sources run in Phase 2. |
+| `ext-host` | What extensions run on: OkHttp network stack, helpers, the dex2jar bytecode fixer, the extension classloader |
+| `AndroidCompat` | Android API stubs that extensions call |
+| `server-config`, `server-config-generate`, `i18n` | Settings, generated settings code, translations |
+
+Dependencies run one way: `api → core → {ext-manga, ext-anime} → ext-host → {AndroidCompat, server-config}`. Package names stay as upstream's (`suwayomi.tachidesk.*`, `eu.kanade.tachiyomi.*`). New code goes under `madoyomi.*`.
 
 ## Prerequisites
 
@@ -74,7 +88,7 @@ The full list is in Tauri's guide: [Tauri prerequisites for Windows](https://v2.
 
 | Tool | Notes |
 |---|---|
-| JDK 21 ([Temurin](https://adoptium.net/)) | Runs the Kotlin backend and the spikes. The spikes expect it in `tools/bin/jdk-21` |
+| JDK 21 ([Temurin](https://adoptium.net/)) | Builds and runs the Kotlin backend and the spikes. The scripts expect it in `tools/bin/jdk-21` |
 | [IntelliJ IDEA](https://www.jetbrains.com/idea/) | Recommended IDE for `server/` (Community edition is enough) |
 | [dex2jar](https://github.com/ThexXTURBOXx/dex2jar), [jadx](https://github.com/skylot/jadx) | Convert and inspect extension APKs |
 | [mpv](https://mpv.io/installation/) | Video playback |
@@ -118,10 +132,29 @@ To work on the UI only, run `pnpm dev` and open <http://localhost:1420> in a bro
 .\tools\fetch-upstream-assets.ps1
 ```
 
-The script copies each file from `tools/upstream/Suwayomi-Server` when that checkout is at the pinned commit. Otherwise it downloads the file from GitHub. Either way it checks the file's SHA-256. Build and run instructions for the Madoyomi server come later in Phase 1.
+The script copies each file from `tools/upstream/Suwayomi-Server` when that checkout is at the pinned commit. Otherwise it downloads the file from GitHub. Either way it checks the file's SHA-256.
+
+Build and test the server (the first build takes about 4 minutes):
+
+```powershell
+cd server
+$env:JAVA_HOME = (Resolve-Path ..\tools\bin\jdk-21).Path
+.\gradlew.bat build
+```
+
+`build` runs the ktlint check and all tests. If ktlint reports style violations, `.\gradlew.bat ktlintFormat` fixes most of them; check `git diff` afterwards. The server jar is `server/api/build/Madoyomi-Server-v0.1.0.jar` (built by `.\gradlew.bat :api:shadowJar`).
+
+Run it locally the way the app will start it:
+
+```powershell
+.\tools\run-server.ps1            # builds the jar, then runs it
+.\tools\run-server.ps1 -NoBuild   # runs the last built jar
+```
+
+The script generates an API token, starts the server with a dev data dir in `tools/dev-data/` (gitignored), and prints the token. Once the server prints `MADOYOMI_PORT=<port>`, the script prints the base URL and example requests. Every request except `GET /health` needs `Authorization: Bearer <token>`. Stop it with Ctrl+C. The full startup contract (arguments, environment, endpoints) is in [server/UPSTREAM.md](server/UPSTREAM.md#startup-contract-what-the-tauri-shell-relies-on).
 
 > [!NOTE]
-> `pnpm tauri dev` also starts a JVM sidecar. For now it is the Phase 0 dummy backend (`spikes/sidecar`), not the real server. Build it once with `cd spikes; .\gradlew :sidecar:shadowJar` (needs JDK 21 in `tools/bin/jdk-21`, or set `MADOYOMI_JAVA`). Without it the app still opens, and the home screen shows "Backend: error". See [spikes/README.md](spikes/README.md).
+> `pnpm tauri dev` also starts a JVM sidecar. For now it is the Phase 0 dummy backend (`spikes/sidecar`), not the real server. The app switches to the real server, with the token, in Phase 3. Build the dummy once with `cd spikes; .\gradlew :sidecar:shadowJar` (needs JDK 21 in `tools/bin/jdk-21`, or set `MADOYOMI_JAVA`). Without it the app still opens, and the home screen shows "Backend: error". See [spikes/README.md](spikes/README.md).
 
 ## Common commands
 
@@ -139,6 +172,17 @@ Run these from `app/`:
 | `pnpm tauri build` | Build NSIS + MSI installers into `src-tauri/target/release/bundle/` |
 
 More detail is in [app/README.md](app/README.md).
+
+Backend commands. Run the Gradle ones from `server/`, with `JAVA_HOME` set to `tools/bin/jdk-21`:
+
+| Command | What it does |
+|---|---|
+| `.\gradlew.bat build` | Compile all modules, run ktlint and all tests |
+| `.\gradlew.bat :core:test` | Run the server tests only |
+| `.\gradlew.bat :api:shadowJar` | Build `server/api/build/Madoyomi-Server-v0.1.0.jar` |
+| `.\gradlew.bat ktlintFormat` | Reformat Kotlin sources |
+| `.\tools\run-server.ps1` (from the repo root) | Build and run the server with a dev data dir and a fresh token |
+| `.\tools\fetch-upstream-assets.ps1` (from the repo root) | Restore the upstream fonts and test images |
 
 ## Roadmap
 
@@ -186,9 +230,10 @@ The project is private and solo for now. The workflow:
 
 1. Read [docs/PLAN.md](docs/PLAN.md) and the relevant phase document before starting work.
 2. Tick checklist items in `docs/phases/` only when they are done **and verified**.
-3. Before opening a PR, run `pnpm lint`, `pnpm typecheck` and `pnpm test` in `app/`.
+3. Before opening a PR, run `pnpm lint`, `pnpm typecheck` and `pnpm test` in `app/`. For backend changes, also run `.\gradlew.bat build` in `server/`.
 4. Work on a branch and open a pull request into `main`.
-5. Never commit APKs, `.dex` files, tool binaries, or the upstream fonts and test images restored by `tools/fetch-upstream-assets.ps1`.
+5. Never commit APKs, `.dex` files, jars, tool binaries, or the upstream fonts and test images restored by `tools/fetch-upstream-assets.ps1`.
+6. When you change an upstream file in `server/`, mark the edit with a `// Madoyomi:` comment and list it in [server/UPSTREAM.md](server/UPSTREAM.md).
 
 ## Acknowledgements
 
@@ -202,4 +247,4 @@ Madoyomi does not host, ship or provide any content or extensions. Users add ext
 
 ## License
 
-[MPL-2.0](LICENSE). Files derived from upstream projects keep their original license headers. `server/` is a fork of Suwayomi-Server (MPL-2.0); see [server/UPSTREAM.md](server/UPSTREAM.md).
+[MPL-2.0](LICENSE). Files derived from upstream projects keep their original license headers. `server/` is a fork of Suwayomi-Server (MPL-2.0); see [server/UPSTREAM.md](server/UPSTREAM.md). The extension APIs from Mihon and Aniyomi are Apache-2.0. Attribution is in [NOTICE](NOTICE), and all third-party code and notable libraries are listed in [THIRD_PARTY.md](THIRD_PARTY.md).

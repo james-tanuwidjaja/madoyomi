@@ -56,9 +56,9 @@ $Assets = @(
     @{ Up = 'AndroidCompat/src/main/resources/font/NotoSans/NotoSansSymbols2-Regular.ttf'; Sha = 'f67f40c65f929f029827ab37cfdc4897dfd9ae3c28d9e98ba46e0d52e39eb97e' }
     @{ Up = 'AndroidCompat/src/main/resources/font/NotoSans/NotoSerif-Italic-VariableFont_wdth,wght.ttf'; Sha = 'cb8557fec7738ede172114f2ca5933e6ca14b10b55dac3cd36abbfbb562abebb' }
     @{ Up = 'AndroidCompat/src/main/resources/font/NotoSans/NotoSerif-VariableFont_wdth,wght.ttf'; Sha = '26485cbd00507110de7a77cd63d0ec99d356f38e5d9c0c5d07ecea1c7827ea24' }
-    @{ Up = 'server/src/test/resources/dice.jxl'; Sha = 'cfaf3684efc2348c7886e60c400ad25249a49b9f52b85b163433402b9e95e34a' }
-    @{ Up = 'server/src/test/resources/fox.profile0.8bpc.yuv420.avif'; Sha = 'cb884c82ac7b6d4fa03b1f687e9e20abc346107095473e9c1d422aaf0de14eaf' }
-    @{ Up = 'server/src/test/resources/sample1.heif'; Sha = '46ac93516093b70bfed23d11f651819a4fb946088a6a933d6a5d34f4fb967bad' }
+    @{ Up = 'server/src/test/resources/dice.jxl'; Local = 'core/src/test/resources/dice.jxl'; Sha = 'cfaf3684efc2348c7886e60c400ad25249a49b9f52b85b163433402b9e95e34a' }
+    @{ Up = 'server/src/test/resources/fox.profile0.8bpc.yuv420.avif'; Local = 'core/src/test/resources/fox.profile0.8bpc.yuv420.avif'; Sha = 'cb884c82ac7b6d4fa03b1f687e9e20abc346107095473e9c1d422aaf0de14eaf' }
+    @{ Up = 'server/src/test/resources/sample1.heif'; Local = 'core/src/test/resources/sample1.heif'; Sha = '46ac93516093b70bfed23d11f651819a4fb946088a6a933d6a5d34f4fb967bad' }
 )
 
 function Get-Sha256([string]$Path) {

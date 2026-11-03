@@ -49,17 +49,18 @@ if (-not $NoBuild) {
     $env:JAVA_HOME = $Jdk
     Push-Location $ServerDir
     try {
-        & .\gradlew.bat :server:shadowJar --console=plain
+        & .\gradlew.bat :api:shadowJar --console=plain
         if ($LASTEXITCODE -ne 0) { throw "Gradle build failed (exit code $LASTEXITCODE)" }
     } finally {
         Pop-Location
     }
 }
 
-$jar = Get-ChildItem -LiteralPath (Join-Path $ServerDir 'server\build') -Filter 'Madoyomi-Server-*.jar' -ErrorAction SilentlyContinue |
+# The api module builds the fat jar (see server/api/build.gradle.kts).
+$jar = Get-ChildItem -LiteralPath (Join-Path $ServerDir 'api\build') -Filter 'Madoyomi-Server-*.jar' -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
-if (-not $jar) { throw 'No Madoyomi-Server jar in server\server\build. Run without -NoBuild first.' }
+if (-not $jar) { throw 'No Madoyomi-Server jar in server\api\build. Run without -NoBuild first.' }
 
 if (-not $Token) {
     $bytes = New-Object byte[] 32

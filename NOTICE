@@ -1,0 +1,30 @@
+Madoyomi
+Copyright (C) Madoyomi contributors
+
+Madoyomi is licensed under the Mozilla Public License, v. 2.0 (see LICENSE).
+
+This product includes software developed by third parties:
+
+* Suwayomi-Server (https://github.com/Suwayomi/Suwayomi-Server)
+  Copyright (C) Contributors to the Suwayomi project
+  Licensed under the Mozilla Public License, v. 2.0.
+  server/ is a fork of Suwayomi-Server; its files keep their MPL-2.0 headers.
+  See server/UPSTREAM.md for the imported commit and every Madoyomi change.
+
+* Tachiyomi / Mihon (https://github.com/mihonapp/mihon)
+  Copyright 2015 Javier Tomás
+  Licensed under the Apache License, Version 2.0.
+  The manga source API and helpers under eu.kanade.tachiyomi.* in server/ext-host,
+  server/ext-manga and server/core, which reached Madoyomi through Suwayomi-Server.
+
+* Aniyomi (https://github.com/aniyomiorg/aniyomi)
+  Copyright 2015 Javier Tomás and the Tachiyomi, Mihon and Aniyomi contributors
+  Licensed under the Apache License, Version 2.0.
+  The anime source API (eu.kanade.tachiyomi.animesource.*) in server/ext-anime,
+  ported from Aniyomi's source-api and modified (see server/ext-anime/NOTICE.md).
+
+A copy of the Apache License, Version 2.0 sits next to the code it covers, in
+server/*/src/main/kotlin/eu/kanade/tachiyomi/LICENSE, and is available at
+http://www.apache.org/licenses/LICENSE-2.0.
+
+Other third-party components and libraries are listed in THIRD_PARTY.md.
