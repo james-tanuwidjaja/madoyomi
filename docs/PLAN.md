@@ -95,12 +95,12 @@ Goal: prove each hard part works in isolation before committing.
 Exit: all five work. Decide **fork Suwayomi vs. depend on it as a library** (fork is likely more practical).
 
 Milestones:
-- [ ] S1 manga via Suwayomi works
+- [x] S1 manga via Suwayomi works
 - [x] S2 `index.pb` schema documented and parsed
-- [ ] S3 anime extension returns videos on the JVM
-- [ ] S4 mpv plays a returned video with headers
+- [x] S3 anime extension returns videos on the JVM
+- [x] S4 mpv plays a returned video with headers
 - [x] S5 Tauri spawns the JVM sidecar and Vue calls it
-- [ ] Fork/library and REST/GraphQL decisions recorded
+- [x] Fork/library and REST/GraphQL decisions recorded
 
 ### Phase 1 — Backend foundation
 Details: [phase-1-backend-foundation.md](phases/phase-1-backend-foundation.md)
@@ -243,7 +243,7 @@ GET    /api/image?src=&sourceId=          image proxy
 WS     /ws                                downloads, updates, playback progress events
 ```
 
-Alternative: keep Suwayomi's GraphQL API and add anime types to it. Decide after Phase 0.
+**Decided in Phase 0: keep Suwayomi's GraphQL API and add anime types to it.** The endpoints above map to GraphQL queries and mutations. REST stays only for binaries (`/api/image`, page bytes, later a video proxy).
 
 ---
 
@@ -263,8 +263,8 @@ Alternative: keep Suwayomi's GraphQL API and add anime types to it. Decide after
 
 ## 7. Open decisions
 
-- [ ] Fork Suwayomi-Server, or write a fresh backend reusing its extension-host code? _Proposed after Phase 0 source review: fork (see phase-0 §9; confirm after the S1 run)._
-- [ ] REST, or extend Suwayomi's GraphQL? _Proposed: extend GraphQL, keep REST for binary endpoints (phase-0 §9)._
+- [x] Fork Suwayomi-Server, or write a fresh backend reusing its extension-host code? **Fork** (phase-0 §9; confirmed by the S1 run and the S3 harness running on Suwayomi's runtime unchanged).
+- [x] REST, or extend Suwayomi's GraphQL? **Extend GraphQL**, keep REST for binary endpoints (phase-0 §9).
 - [ ] mpv in a separate window (MVP) vs. embedded (later): confirm UX priority
 - [ ] One JVM process for both extension types, or isolated processes? _Initial answer: one JVM (shared network/DI/stub layer); final call in Phase 1._
 - [x] Name: Madoyomi · License: MPL-2.0
@@ -274,7 +274,7 @@ Alternative: keep Suwayomi's GraphQL API and add anime types to it. Decide after
 
 ## 8. First tasks (start here)
 
-These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps.
+These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** Next up is [Phase 1](phases/phase-1-backend-foundation.md).
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

@@ -1,6 +1,6 @@
 # Aniyomi extension class references (Phase 0 / S3)
 
-Two yuzono extensions, one from each "lib" generation, analysed **statically**. Running them in the harness is still to do (see [phase-0-spikes.md](../phases/phase-0-spikes.md)).
+Two yuzono extensions, one from each "lib" generation, analysed statically and then **run** in `spikes/anime-harness` (2026-11-03; see [Runtime results](#runtime-results-2026-11-03)).
 
 | APK | Package | Manifest `tachiyomix.extensionLib` | Entry class | Size |
 |---|---|---|---|---|
@@ -87,6 +87,27 @@ Overrides: AnimeGG overrides the classic `*Request`/`*Parse` pairs including `vi
 
 All Android/androidx classes above are implemented in Suwayomi's `AndroidCompat` (see [suwayomi-notes.md](suwayomi-notes.md)) **except** `android.widget.Button`, `android.widget.TextView`, `android.text.Editable` and `android.text.TextWatcher`. Those come only from the `android-jar` API stubs, which throw at runtime. AnimePahe uses them only inside its preference-dialog UI, so they matter only once we render extension settings (Phase 2/3).
 
+## Runtime results (2026-11-03)
+
+Harness: `spikes/anime-harness` (`.\gradlew :anime-harness:run`, see `spikes/README.md`). Set-up:
+- **Runtime = the Suwayomi-Server fat jar, unchanged.** The harness calls Suwayomi's own `applicationSetup()` (Koin, AndroidCompat, `NetworkHelper`, H2 in a throwaway dir: ~3.2 s), converts the APK with `PackageTools.dex2jar` (in-process dex2jar + `BytecodeEditor.fixAndroidClasses`, the same path Suwayomi uses to install) and reads the manifest with `PackageTools.getPackageInfo`.
+- **Only the anime API is ours.** `eu.kanade.tachiyomi.animesource.*` was copied from the Aniyomi app's `source-api` (commonMain) with four trivial edits (see `spikes/anime-harness/NOTICE.md`), about 1.9k lines including docs. It compiled against Suwayomi's `eu.kanade.tachiyomi.network`/`util` with no other changes: `awaitSingle`, `asJsoup`, `ProgressListener`, `newCachelessCallWithProgress`, `Bitmap` and `androidx.preference.PreferenceScreen` all exist there already.
+- Classloader: Suwayomi's lookup order (system → jar → parent), plus logging of every class it can't resolve.
+- Build gotcha: the kotlinx.serialization compiler plugin refuses the fat jar (its manifest version is `r1`, which gives `PROVIDED_RUNTIME_TOO_LOW`). The harness compiles against a copy without `kotlinx/serialization/**` plus the real 1.12.0 artifact, and runs on the untouched jar. The real fork builds from source, so it won't hit this.
+
+| Step | AnimeGG (lib 14) | AnimePahe (lib 16) |
+|---|---|---|
+| dex2jar + instantiate | ok (710 + 252 ms) | ok (387 + 26 ms) |
+| `getPopularAnime(1)` | ok, 125 entries (2.0 s) | **FAIL**: `IOException: Cloudflare bypass currently disabled` (`animepahe.pw` answers OkHttp with a Cloudflare challenge; Suwayomi's interceptor needs FlareSolverr) |
+| `getAnimeDetails` | ok (One Piece, status, genre, description) | not reached |
+| `getEpisodeList` | ok, 1167 episodes | not reached |
+| `getHosterList` | ok: one `no_hoster_list` hoster with 5 prefetched videos (GG wraps its legacy list with `toHosterList()`, so the legacy `getVideoList(episode)` fallback wasn't needed) | not reached |
+| Videos | 5 × MP4 (`[SUBBED] AnimeGG:1080p/720p/…`), `headers` = `User-Agent` + `referer` (lowercase key), no subtitle/audio tracks (hardsubbed), no `mpvArgs`/`timestamps`, `resolution` null, `initialized` false | not reached |
+
+The AnimeGG `Video` headers are **required**. The URL returns HTTP 500 without the `Referer`. With it, the URL goes through 2 redirects to a `vidcache.net:8166` CDN as `206 video/mp4`. S4 played this video in mpv (see the phase doc).
+
+**AnimePahe / WebView.** The run never got to Pahe's own WebView code: it fails at the first request. KCEF was **not** enabled, because Suwayomi's Cloudflare path doesn't use it. Unblocking Pahe needs either FlareSolverr or a WebView-based (KCEF) Cloudflare solver, which is how Aniyomi does it. That is a Phase 2 item, along with checking Pahe's WebView/DDoS-Guard code once it gets past Cloudflare.
+
 ## Missing class / method log (runtime)
 
-_To be filled in by the harness run (`spikes/anime-harness/out/missing.log`)._
+`spikes/anime-harness/out/missing.log`: **empty**. No unresolved classes, and no `NoClassDefFoundError`/`NoSuchMethodError`/`AbstractMethodError`/`"Stub!"` on any path that ran: AnimeGG end to end, and AnimePahe as far as instantiate + the first request. The static gap list above (`android.widget.Button`/`TextView`, `android.text.*`, used only by Pahe's preference UI) still stands, but nothing exercised it. The Phase 2 compatibility harness over the top ~20 extensions is what will fill this log.

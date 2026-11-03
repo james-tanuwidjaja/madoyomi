@@ -4,7 +4,7 @@ Source read: `Suwayomi/Suwayomi-Server` `master` @ `7b061be` (2026-11-01), shall
 Latest release at the time: `v2.4.2366` (`Suwayomi-Server-v2.4.2366.jar`).
 License: MPL-2.0 (per-file headers).
 
-> Status: these notes come from **reading the source**. The run-it-and-browse part of S1 (build, add the repo, install, read) has **not** been done yet: see the S1 checklist in [phase-0-spikes.md](../phases/phase-0-spikes.md).
+> Status: the sections below come from **reading the source**. The build-and-run part of S1 was done on 2026-11-03: see [S1 run results](#s1-run-results-2026-11-03) at the end.
 
 ## Build & toolchain
 
@@ -76,8 +76,28 @@ Meta-data keys used: `tachiyomi.extension.class`, `tachiyomi.extension.factory`,
 | GraphQL API | Probably extend | REST is too thin to build on; see the decision record |
 | WebUI bundling, tray, launcher, OPDS, KOReader sync | Disable | Not needed in a Tauri shell |
 
-## Open questions for the S1 run
+## S1 run results (2026-11-03)
 
-- How long does a clean `shadowJar` build take, and does it work on Windows with only `tools/bin/jdk-21`?
-- Do the three test extensions (HTML, JSON API, Cloudflare) browse, open details, list chapters and return pages?
-- How big is the startup cost (KCEF download, H2 init) when started as a sidecar with a throwaway data dir?
+Script: `spikes/suwayomi-smoke/smoke.ps1` (GraphQL only, see `spikes/README.md`).
+
+**Build.** A clean `./gradlew :server:shadowJar` on Windows 11 with only `tools/bin/jdk-21` (Temurin 21.0.13) as `JAVA_HOME` **works** and takes **4 min 35 s**, including the Gradle daemon start and dependency download. Output: `server/build/Suwayomi-Server-v2.4.1.jar`, **169 MB**. Note that the version in the jar name is `v2.4.1`, not the release tag `v2.4.2366`.
+
+**Start-up as a sidecar.** Flags: `-Dsuwayomi.tachidesk.config.server.{rootDir=<throwaway>, port=4567, webUIEnabled=false, systemTrayEnabled=false, initialOpenInBrowserEnabled=false, kcefEnabled=false}`.
+- From the first log line to `Javalin … Listening` takes about **5.6 s**: H2 creation, 69 migrations, config and Koin all included. Working set after the smoke test: about **616 MB**.
+- The data dir holds `database.mv.db`, `server.conf`, `settings/`, and `extensions/` with the installed **Keiyoushi jars** (`tachiyomi-*.jar`, no APK, no dex2jar). The rest (`backups`, `downloads`, `local`, `logs`) stays empty.
+- **`kcefEnabled` defaults to `true` on Windows/Linux**, so a default first start downloads a Chromium build in the background. The sidecar must turn it off and enable it only when an extension needs a WebView.
+- **It binds `0.0.0.0` by default.** The sidecar must pass `ip=127.0.0.1`. Checked: it then logs `Listening on http://127.0.0.1:4567/`.
+
+**GraphQL smoke test** (`addExtensionStore(index.pb)` → `fetchExtensions` → `updateExtension(install)` → `fetchSourceManga(POPULAR)` → `fetchManga` → `fetchChapters` → `fetchChapterPages` → GET `/api/v1/manga/{id}/chapter/{n}/page/0`):
+
+| Extension | Kind | Result |
+|---|---|---|
+| store | Keiyoushi `index.pb` | `addExtensionStore` 785 ms, name `Keiyoushi`, badge `KEI`. `fetchExtensions` lists **1448**, all with a `jarUrl` (same as S2) |
+| `all.mangadex` 1.6.1 | JSON API, 61 sources | **PASS**: popular 20, details, 3 chapters, 17 pages, page 0 `image/jpeg` 1.8 MB |
+| `en.mangapill` 1.6.1 | plain HTML | **PASS**: popular 10, details, 405 chapters, 92 pages, page 0 `image/jpeg` 164 KB |
+| `en.mangakatana` 1.6.2 | plain HTML | **PASS**: popular 20, details, 2 chapters, 51 pages, page 0 `image/jpeg` 107 KB |
+| `en.manganelo` 1.6.25 (Manganato) | Cloudflare-protected | **FAIL (expected)**: installs, but popular throws `IOException: Cloudflare bypass currently disabled` from `CloudflareInterceptor` (FlareSolverr not configured) |
+
+Each GraphQL call took 0.1–1.5 s. Page URLs from `fetchChapterPages` are Suwayomi-relative (`/api/v1/manga/1/chapter/1/page/0`), so the image proxy pattern is already there. The Keiyoushi jars are R8-minified as well (frames like `keiyoushi.a.t.a`, `eu.kanade.tachiyomi.b.a.k`).
+
+**Cloudflare in practice.** Suwayomi's `CloudflareInterceptor` only solves challenges through **FlareSolverr**. KCEF is used only for extensions that drive `android.webkit.WebView` themselves. The Aniyomi/Mihon apps solve Cloudflare with a WebView instead. A Phase 1/2 option for Madoyomi is a KCEF-backed solver behind the same interceptor, so users don't have to run FlareSolverr (Docker). The same failure blocks AnimePahe in S3.

@@ -35,7 +35,29 @@ cmd //c "..\\bin\\jadx\\bin\\jadx.bat -q --no-src -d jadx-x x.apk"   # manifest 
 
 (`d2j-dex2jar.sh` does not work from Git Bash on Windows because it builds a `:`-separated classpath. Call java directly as shown above, or use the `.bat`.)
 
-Runtime harness: not written yet, waiting on the decision about running third-party code (see the phase doc).
+Runtime harness: needs the Suwayomi-Server fat jar (see S1 below; or pass `-PsuwayomiJar=<path>`).
+
+```powershell
+.\gradlew :anime-harness:run                      # AnimeGG + AnimePahe from tools/apks/
+.\gradlew :anime-harness:run -Papks=C:\x.apk,C:\y.apk
+.\gradlew :anime-harness:run -Pkcef=true          # let Suwayomi download KCEF (Chromium) for WebView extensions
+```
+
+Writes `anime-harness/out/<apk>.result.json` (every step with timings, the popular/episode/hoster/video data), `out/video.json` (the first playable video, in the shape `play.ps1` reads) and `out/missing.log`. Suwayomi state goes to `out/data/`. The `animesource` API under `anime-harness/src/main/kotlin/eu/kanade/` is copied from Aniyomi (Apache-2.0): see `anime-harness/NOTICE.md`.
+
+## S1: Suwayomi-Server + `suwayomi-smoke/`
+
+```powershell
+# build (about 5 min clean) -> tools/upstream/Suwayomi-Server/server/build/Suwayomi-Server-v*.jar
+cd ..\tools\upstream\Suwayomi-Server; .\gradlew.bat :server:shadowJar; cd ..\..\..\spikes
+# run headless with a throwaway data dir
+$c = "-Dsuwayomi.tachidesk.config.server"
+java "$c.rootDir=$env:TEMP\suwa-data" "$c.ip=127.0.0.1" "$c.port=4567" "$c.webUIEnabled=false" "$c.systemTrayEnabled=false" "$c.initialOpenInBrowserEnabled=false" "$c.kcefEnabled=false" -jar ..\tools\upstream\Suwayomi-Server\server\build\Suwayomi-Server-v2.4.1.jar
+# add the Keiyoushi store once, then smoke-test packages
+$q = '{"query":"mutation{ addExtensionStore(input:{indexUrl:\"https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb\"}){ extensionStore{ name } } }"}'
+Invoke-RestMethod -Method Post http://127.0.0.1:4567/api/graphql -ContentType application/json -Body $q
+.\suwayomi-smoke\smoke.ps1 -Packages eu.kanade.tachiyomi.extension.all.mangadex,eu.kanade.tachiyomi.extension.en.mangapill
+```
 
 ## S4: `mpv-play/`
 
