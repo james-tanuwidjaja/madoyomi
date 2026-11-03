@@ -52,7 +52,7 @@ class MangaBakaApi(
                     .newBuilder()
                     .header(
                         "User-Agent",
-                        "Suwayomi/Suwayomi-Server/${BuildConfig.VERSION} (${BuildConfig.GITHUB})",
+                        "Madoyomi/Madoyomi-Server/${BuildConfig.VERSION} (${BuildConfig.GITHUB})", // Madoyomi: User-Agent
                     ).build()
                     .let(it::proceed)
             }.build()

@@ -1,4 +1,5 @@
-rootProject.name = System.getenv("ProductName") ?: "Suwayomi-Server"
+// Madoyomi: fixed app/jar name (upstream: System.getenv("ProductName") ?: "Suwayomi-Server")
+rootProject.name = "Madoyomi-Server"
 
 include("server")
 include("server:i18n")

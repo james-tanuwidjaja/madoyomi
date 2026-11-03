@@ -7,10 +7,12 @@ import java.io.BufferedReader
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-const val MainClass = "suwayomi.tachidesk.MainKt"
+// Madoyomi: sidecar entry point (upstream: suwayomi.tachidesk.MainKt)
+const val MainClass = "madoyomi.api.MainKt"
 
 // should be bumped with each stable release
-val getTachideskVersion = { "v2.4.${getCommitCount()}" }
+// Madoyomi: fixed version; it must stay numeric vX.Y.Z because AppInfo derives the version code from it
+val getTachideskVersion = { "v0.1.0" }
 
 val webUIRevisionTag = "r3518"
 

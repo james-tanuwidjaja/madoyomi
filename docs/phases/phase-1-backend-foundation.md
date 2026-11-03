@@ -65,12 +65,12 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 ## 5. Checklist
 
 ### Fork & structure
-- [ ] Suwayomi forked into `server/`; upstream commit recorded in `server/UPSTREAM.md`
-- [ ] Rebranded (package names, app name, data dir)
+- [x] Suwayomi forked into `server/`; upstream commit recorded in `server/UPSTREAM.md`
+- [x] Rebranded (app name, data dir, config prefix, logs, User-Agents, version). Package names are kept upstream by decision; new code goes under `madoyomi.*` (see `server/UPSTREAM.md`)
 - [ ] MPL-2.0 headers kept; `NOTICE` / `THIRD_PARTY.md` added
 - [ ] Modules created: `core`, `ext-host`, `ext-manga`, `ext-anime`, `api`
-- [ ] Unused Suwayomi features removed or disabled
-- [ ] Random port + `MADOYOMI_PORT` handshake + auth token
+- [x] Unused Suwayomi features removed or disabled (WebUI, tray, browser/Electron launch, KCEF by default, OPDS, SyncYomi/KOReader, update checks, app mutex)
+- [x] Random port + `MADOYOMI_PORT` handshake + auth token (plus `--data-dir`, loopback-only bind, Tauri-only CORS, stdin watchdog, `GET /health`)
 
 ### Domain & DB
 - [ ] `type` discriminator on repos/extensions/sources

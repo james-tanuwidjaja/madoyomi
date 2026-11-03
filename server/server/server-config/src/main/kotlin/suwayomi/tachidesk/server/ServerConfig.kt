@@ -103,7 +103,7 @@ class ServerConfig(
         protoNumber = 1,
         group = SettingGroup.NETWORK,
         privacySafe = true,
-        defaultValue = "0.0.0.0",
+        defaultValue = "127.0.0.1", // Madoyomi: loopback sidecar (upstream: 0.0.0.0)
         pattern = "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$".toRegex(),
         excludeFromBackup = true,
     )
@@ -112,8 +112,8 @@ class ServerConfig(
         protoNumber = 2,
         group = SettingGroup.NETWORK,
         privacySafe = true,
-        defaultValue = 4567,
-        min = 1,
+        defaultValue = 0, // Madoyomi: 0 = random free port (upstream: 4567)
+        min = 0, // Madoyomi: allow 0 (upstream: 1)
         max = 65535,
         excludeFromBackup = true,
     )
@@ -177,7 +177,7 @@ class ServerConfig(
         protoNumber = 10,
         group = SettingGroup.WEB_UI,
         privacySafe = true,
-        defaultValue = true,
+        defaultValue = false, // Madoyomi: sidecar default (upstream: true)
         description = "Open client on startup",
     )
 
@@ -445,7 +445,7 @@ class ServerConfig(
         protoNumber = 34,
         group = SettingGroup.MISC,
         privacySafe = true,
-        defaultValue = true,
+        defaultValue = false, // Madoyomi: sidecar default (upstream: true)
     )
 
     val maxLogFiles: MutableStateFlow<Int> by IntSetting(
@@ -670,7 +670,7 @@ class ServerConfig(
         protoNumber = 58,
         group = SettingGroup.AUTH,
         privacySafe = true,
-        defaultValue = "suwayomi-server-api",
+        defaultValue = "madoyomi-server-api", // Madoyomi: audience (upstream: suwayomi-server-api)
     )
 
     @Deprecated("Moved to preference store. User is supposed to use a login/logout mutation")
@@ -858,7 +858,7 @@ class ServerConfig(
         protoNumber = 68,
         group = SettingGroup.WEB_UI,
         privacySafe = true,
-        defaultValue = true,
+        defaultValue = false, // Madoyomi: sidecar default (upstream: true)
         requiresRestart = true,
     )
 
@@ -1009,7 +1009,7 @@ class ServerConfig(
         protoNumber = 86,
         group = SettingGroup.WEB_VIEW,
         privacySafe = true,
-        defaultValue = !Platform.current.os.isMacOS,
+        defaultValue = false, // Madoyomi: no Chromium download by default, WebView is Phase 2 (upstream: !isMacOS)
         validator = {
             if (Platform.current.os.isMacOS) {
                 return@BooleanSetting "KCEF is not supported on MacOS"

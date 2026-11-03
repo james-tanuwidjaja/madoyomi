@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import madoyomi.core.MadoyomiFeatures
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.cef.network.CefCookieManager
 import org.jetbrains.exposed.v1.core.and
@@ -85,7 +86,8 @@ private val logger = KotlinLogging.logger {}
 
 class ApplicationDirs(
     val dataRoot: String = ApplicationRootDir,
-    val tempRoot: String = "${System.getProperty("java.io.tmpdir")}/Tachidesk",
+    // Madoyomi: temp dir name (upstream: Tachidesk)
+    val tempRoot: String = "${System.getProperty("java.io.tmpdir")}/Madoyomi",
 ) {
     val extensionsRoot = "$dataRoot/extensions"
     val downloadsRoot
@@ -213,7 +215,8 @@ fun applicationSetup() {
     setLogLevelFor("org.eclipse.jetty", Level.OFF)
     setLogLevelFor("com.zaxxer.hikari", Level.WARN)
 
-    logger.info { "Running Suwayomi-Server ${BuildConfig.VERSION}" }
+    // Madoyomi: app name from BuildConfig (upstream: "Running Suwayomi-Server ...")
+    logger.info { "Running ${BuildConfig.NAME} ${BuildConfig.VERSION}" }
 
     logger.debug {
         "Loaded config:\n" +
@@ -479,7 +482,10 @@ fun applicationSetup() {
     // start DownloadManager and restore + resume downloads
     DownloadManager.restoreAndResumeDownloads()
 
-    SyncManager.scheduleSyncTask()
+    // Madoyomi: SyncYomi scheduling is disabled (MadoyomiFeatures.syncEnabled)
+    if (MadoyomiFeatures.syncEnabled) {
+        SyncManager.scheduleSyncTask()
+    }
 
     // asynchronously initialize CEF
     GlobalScope.launch {

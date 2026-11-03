@@ -97,7 +97,8 @@ suspend fun getUserFromContext(ctx: Context): UserType {
         }
 
         AuthMode.UI_LOGIN -> {
-            val authentication = ctx.header(Header.AUTHORIZATION) ?: ctx.cookie("suwayomi-server-token")
+            // Madoyomi: cookie name (upstream: suwayomi-server-token)
+            val authentication = ctx.header(Header.AUTHORIZATION) ?: ctx.cookie("madoyomi-server-token")
             val token = authentication?.substringAfter("Bearer ") ?: ctx.queryParam("token")
 
             getUserFromToken(token)
@@ -123,7 +124,8 @@ suspend fun getUserFromWsContext(ctx: WsConnectContext): UserType {
 
         AuthMode.UI_LOGIN -> {
             val authentication =
-                ctx.header(Header.AUTHORIZATION) ?: ctx.cookie("suwayomi-server-token")
+                // Madoyomi: cookie name (upstream: suwayomi-server-token)
+                ctx.header(Header.AUTHORIZATION) ?: ctx.cookie("madoyomi-server-token")
             val token = authentication?.substringAfter("Bearer ") ?: ctx.queryParam("token")
 
             getUserFromToken(token)

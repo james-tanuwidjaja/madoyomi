@@ -10,6 +10,7 @@ package suwayomi.tachidesk.manga.controller
 import io.javalin.http.HandlerType
 import io.javalin.http.HttpStatus
 import kotlinx.serialization.json.Json
+import madoyomi.core.MadoyomiFeatures
 import suwayomi.tachidesk.manga.impl.Chapter
 import suwayomi.tachidesk.manga.impl.ChapterDownloadHelper
 import suwayomi.tachidesk.manga.impl.Manga
@@ -107,7 +108,8 @@ object MangaController {
                         if (updateProgress == true) {
                             val chapterId = Chapter.updateChapterProgress(userId, mangaId, chapterIndex, pageNo = index)
                             // Sync progress with KoreaderSync if chapter update was successful
-                            if (chapterId != -1) {
+                            // Madoyomi: KOReader pushes are disabled (MadoyomiFeatures.syncEnabled)
+                            if (chapterId != -1 && MadoyomiFeatures.syncEnabled) {
                                 KoreaderSyncService.schedulePushProgress(userId, chapterId)
                             }
                         }

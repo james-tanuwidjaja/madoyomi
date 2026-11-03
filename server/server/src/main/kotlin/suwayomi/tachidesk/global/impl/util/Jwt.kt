@@ -34,7 +34,7 @@ object Jwt {
     private const val ALGORITHM = "HmacSHA256"
     private val accessTokenExpiry get() = serverConfig.jwtTokenExpiry.value
     private val refreshTokenExpiry get() = serverConfig.jwtRefreshExpiry.value
-    private const val ISSUER = "suwayomi-server"
+    private const val ISSUER = "madoyomi-server" // Madoyomi: issuer (upstream: suwayomi-server)
     private val AUDIENCE get() = serverConfig.jwtAudience.value
 
     private const val PREF_KEY = "jwt_key"

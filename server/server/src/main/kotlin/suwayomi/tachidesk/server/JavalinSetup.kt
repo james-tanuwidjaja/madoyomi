@@ -14,6 +14,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.javalin.Javalin
 import io.javalin.apibuilder.ApiBuilder.after
 import io.javalin.apibuilder.ApiBuilder.path
+import io.javalin.config.JavalinConfig
 import io.javalin.config.RoutesConfig
 import io.javalin.http.Context
 import io.javalin.http.HandlerType
@@ -34,6 +35,7 @@ import kotlinx.coroutines.future.future
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import madoyomi.core.MadoyomiFeatures
 import org.eclipse.jetty.ee10.servlet.SessionHandler
 import org.eclipse.jetty.http.HttpCookie
 import org.eclipse.jetty.server.ServerConnector
@@ -73,7 +75,16 @@ object JavalinSetup {
 
     fun <T> future(block: suspend CoroutineScope.() -> T): CompletableFuture<T> = scope.future(block = block)
 
-    fun javalinSetup() {
+    /** Madoyomi: the HTTP connector, so the sidecar can report the port actually bound (config port 0 = random). */
+    @Volatile
+    var connector: ServerConnector? = null
+        private set
+
+    /**
+     * Madoyomi: [configure] lets the sidecar entry point (madoyomi.api) add its routes and filters. It runs before
+     * upstream's [defineCore], so its `beforeMatched`/`wsBeforeUpgrade` handlers run first. Returns the started app.
+     */
+    fun javalinSetup(configure: (JavalinConfig) -> Unit = {}): Javalin {
         val app =
             Javalin.start { config ->
                 val templateEngine = TemplateEngine.createPrecompiled(ContentType.Html)
@@ -88,12 +99,15 @@ object JavalinSetup {
                 var connectorAdded = false
                 config.jetty.modifyServer { server ->
                     if (!connectorAdded) {
+                        // Madoyomi: always bind loopback, whatever server.ip says (upstream: host = serverConfig.ip.value)
+                        warnIfNotLoopback(serverConfig.ip.value)
                         val connector =
                             ServerConnector(server).apply {
-                                host = serverConfig.ip.value
+                                host = MadoyomiFeatures.LOOPBACK
                                 port = serverConfig.port.value
                             }
                         server.addConnector(connector)
+                        this.connector = connector
 
                         serverConfig.subscribeTo(
                             combine(
@@ -104,12 +118,16 @@ object JavalinSetup {
                                 val oldIp = connector.host
                                 val oldPort = connector.port
 
-                                connector.host = newIp
+                                // Madoyomi: loopback only (upstream: connector.host = newIp)
+                                warnIfNotLoopback(newIp)
+                                connector.host = MadoyomiFeatures.LOOPBACK
                                 connector.port = newPort
                                 connector.stop()
                                 connector.start()
 
-                                logger.info { "Server ip and/or port changed from $oldIp:$oldPort to $newIp:$newPort " }
+                                logger.info {
+                                    "Server ip and/or port changed from $oldIp:$oldPort to ${connector.host}:${connector.localPort} "
+                                }
                             },
                         )
                         connectorAdded = true
@@ -124,13 +142,17 @@ object JavalinSetup {
                         }
                 }
 
+                // Madoyomi: only the Tauri origins, on every path including /health
+                // (upstream: path "api/*" with reflectClientOrigin = true, i.e. any origin)
                 config.bundledPlugins.enableCors { cors ->
                     cors.addRule {
-                        it.path = ServerSubpath.maybeAddAsPrefix("api/*")
                         it.allowCredentials = false
-                        it.reflectClientOrigin = true
+                        it.allowHost(MadoyomiFeatures.ALLOWED_ORIGINS.first(), *MadoyomiFeatures.ALLOWED_ORIGINS.drop(1).toTypedArray())
                     }
                 }
+
+                // Madoyomi: sidecar routes and filters, registered before upstream's
+                configure(config)
 
                 config.routes.defineCore()
                 config.routes.apiBuilder {
@@ -140,10 +162,16 @@ object JavalinSetup {
                             MangaAPI.defineEndpoints()
                         }
 
-                        OpdsAPI.defineEndpoints()
+                        // Madoyomi: OPDS is disabled (MadoyomiFeatures.opdsEnabled)
+                        if (MadoyomiFeatures.opdsEnabled) {
+                            OpdsAPI.defineEndpoints()
+                        }
                         GraphQL.defineEndpoints()
 
                         after { ctx ->
+                            // Madoyomi: a request the token filter rejected never reached its endpoint; keep its 401
+                            if (ctx.status() == HttpStatus.UNAUTHORIZED) return@after
+
                             // If not matched, the request was for an invalid endpoint
                             // Return a 404 instead of redirecting to the UI for usability
                             if (ctx.endpoints().lastHttpEndpoint()?.path == null || ctx.endpoints().lastHttpEndpoint()?.path == "*") {
@@ -154,19 +182,12 @@ object JavalinSetup {
                 }
 
                 config.events.serverStarted {
-                    val addresses =
-                        try {
-                            when (serverConfig.ip.value) {
-                                "0.0.0.0" -> listOf("127.0.0.1") + getIPv4Addresses()
-                                else -> listOf("127.0.0.1", serverConfig.ip.value)
-                            }
-                        } catch (e: Exception) {
-                            logger.warn(e) { "Error getting IPv4 addresses" }
-                            listOf("127.0.0.1")
-                        }
+                    // Madoyomi: the connector is loopback-only (upstream listed the configured ip / all IPv4 addresses)
+                    val addresses = listOf(MadoyomiFeatures.LOOPBACK)
 
                     logger.info {
-                        val port = serverConfig.port.value
+                        // Madoyomi: the bound port, since the configured one may be 0 (upstream: serverConfig.port.value)
+                        val port = connector?.localPort ?: serverConfig.port.value
                         buildString {
                             appendLine("Server is available at:")
 
@@ -194,6 +215,15 @@ object JavalinSetup {
                 app.stop()
             },
         )
+
+        return app
+    }
+
+    // Madoyomi: see the connector setup in javalinSetup
+    private fun warnIfNotLoopback(ip: String) {
+        if (ip != MadoyomiFeatures.LOOPBACK) {
+            logger.warn { "server.ip is $ip, but Madoyomi-Server only binds ${MadoyomiFeatures.LOOPBACK}" }
+        }
     }
 
     fun RoutesConfig.defineCore() {
@@ -308,7 +338,8 @@ object JavalinSetup {
                 ctx.sessionAttribute("csrf-token", randomToken)
                 ctx.res().addHeader(
                     "Set-Cookie",
-                    "suwayomi-basic-csrf=$randomToken; Path=${ServerSubpath.maybeAddAsPrefix("/")}; HttpOnly; SameSite=Strict",
+                    // Madoyomi: cookie name (upstream: suwayomi-basic-csrf)
+                    "madoyomi-basic-csrf=$randomToken; Path=${ServerSubpath.maybeAddAsPrefix("/")}; HttpOnly; SameSite=Strict",
                 )
             }
 

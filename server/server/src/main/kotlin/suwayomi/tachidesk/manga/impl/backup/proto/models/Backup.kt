@@ -24,7 +24,8 @@ data class Backup(
 
     companion object {
         fun getBasename(name: String = ""): String {
-            val namePrefix = "org.suwayomi.tachidesk"
+            // Madoyomi: backup file prefix (upstream: org.suwayomi.tachidesk); the .tachibk extension stays
+            val namePrefix = "app.madoyomi"
             val namePrefixSeparator = if (name.isNotEmpty()) "." else ""
 
             return SafePath.buildValidFilename(namePrefix + namePrefixSeparator + name)

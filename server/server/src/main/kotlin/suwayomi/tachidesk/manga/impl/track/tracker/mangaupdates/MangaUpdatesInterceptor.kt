@@ -21,7 +21,7 @@ class MangaUpdatesInterceptor(
             originalRequest
                 .newBuilder()
                 .addHeader("Authorization", "Bearer $token")
-                .header("User-Agent", "Suwayomi ${BuildConfig.VERSION} (${BuildConfig.REVISION})")
+                .header("User-Agent", "Madoyomi ${BuildConfig.VERSION} (${BuildConfig.REVISION})") // Madoyomi: User-Agent
                 .build()
 
         return chain.proceed(authRequest)

@@ -36,6 +36,9 @@ tools/bin/
 tools/apks/
 tools/upstream/
 
+# Dev data dir used by tools/run-server.ps1 (database, settings, extensions, logs)
+tools/dev-data/
+
 # Spike outputs (downloaded indexes, harness results, logs)
 spikes/**/out/
 *.apk

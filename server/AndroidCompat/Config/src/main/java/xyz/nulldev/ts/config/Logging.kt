@@ -30,7 +30,8 @@ private fun fileSizeValueOfOrDefault(
         FileSize.valueOf(default)
     }
 
-private const val FILE_APPENDER_NAME = "SuwayomiDefaultAppender"
+// Madoyomi: appender and log file names (upstream: "SuwayomiDefaultAppender", "application")
+private const val FILE_APPENDER_NAME = "MadoyomiDefaultAppender"
 
 private fun createRollingFileAppender(
     logContext: LoggerContext,
@@ -39,7 +40,7 @@ private fun createRollingFileAppender(
     maxFileSize: String,
     maxTotalSize: String,
 ): RollingFileAppender<ILoggingEvent> {
-    val logFilename = "application"
+    val logFilename = "madoyomi"
 
     val logEncoder =
         PatternLayoutEncoder().apply {
@@ -135,5 +136,6 @@ fun setLogLevelFor(
     logger.level = level
 }
 
+// Madoyomi: read the property through CONFIG_PREFIX (upstream hard-coded "suwayomi.tachidesk.config")
 fun debugLogsEnabled(config: Config) =
-    System.getProperty("suwayomi.tachidesk.config.server.debugLogsEnabled", config.getString("server.debugLogsEnabled")).toBoolean()
+    System.getProperty("$CONFIG_PREFIX.server.debugLogsEnabled", config.getString("server.debugLogsEnabled")).toBoolean()

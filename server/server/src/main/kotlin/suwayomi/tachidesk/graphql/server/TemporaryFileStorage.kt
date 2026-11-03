@@ -21,7 +21,7 @@ import kotlin.time.Duration.Companion.days
 
 @OptIn(ExperimentalPathApi::class)
 object TemporaryFileStorage {
-    private val folder = Files.createTempDirectory("Tachidesk")
+    private val folder = Files.createTempDirectory("Madoyomi") // Madoyomi: temp dir name (upstream: Tachidesk)
     private val random = SecureRandom()
     private val files = ConcurrentHashMap<String, StoredFile>()
 
