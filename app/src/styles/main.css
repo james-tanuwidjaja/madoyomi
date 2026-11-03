@@ -1,0 +1,23 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    "Segoe UI Variable",
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  line-height: 1.5;
+  color: #e8e8ea;
+  background-color: #141417;
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}

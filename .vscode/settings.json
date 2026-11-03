@@ -1,0 +1,20 @@
+{
+  // Rust: Cargo.toml lives two levels deep, so point rust-analyzer at it
+  "rust-analyzer.linkedProjects": ["app/src-tauri/Cargo.toml"],
+
+  // Frontend lives in app/
+  "eslint.workingDirectories": ["./app"],
+
+  "editor.formatOnSave": true,
+  "[javascript][typescript][vue][json][jsonc][css][html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+  "[markdown]": {
+    "editor.formatOnSave": false
+  },
+
+  "files.eol": "\n"
+}
