@@ -79,7 +79,11 @@ madoyomi/
 
 ## 4. Phases
 
+> Detailed steps and full checklists live in [`docs/phases/`](phases/). Tick items there as work gets done, and tick the milestones below when a phase's exit criteria pass.
+
 ### Phase 0 — Spikes (de-risk first, ~1–2 weeks)
+Details: [phase-0-spikes.md](phases/phase-0-spikes.md)
+
 Goal: prove each hard part works in isolation before committing.
 
 1. **Manga extension on JVM:** run Suwayomi-Server, add the Keiyoushi repo, install 2–3 extensions, browse + read.
@@ -90,51 +94,128 @@ Goal: prove each hard part works in isolation before committing.
 
 Exit: all five work. Decide **fork Suwayomi vs. depend on it as a library** (fork is likely more practical).
 
+Milestones:
+- [ ] S1 manga via Suwayomi works
+- [ ] S2 `index.pb` schema documented and parsed
+- [ ] S3 anime extension returns videos on the JVM
+- [ ] S4 mpv plays a returned video with headers
+- [ ] S5 Tauri spawns the JVM sidecar and Vue calls it
+- [ ] Fork/library and REST/GraphQL decisions recorded
+
 ### Phase 1 — Backend foundation
+Details: [phase-1-backend-foundation.md](phases/phase-1-backend-foundation.md)
+
 - Fork Suwayomi-Server and rebrand to Madoyomi (keep MPL-2.0 headers and attribution on Suwayomi-derived files).
 - Add an `anime` domain alongside `manga`: entities, DB tables, API namespaces.
 - Repo manager handles both index formats (JSON for anime, protobuf for manga).
 - Extension install/update/uninstall, with **trust prompt** by signing-cert hash (Mihon/Aniyomi model).
 - Exit: install and list extensions for both types from the API.
 
+Milestones:
+- [ ] `server/` fork rebranded with module layout and attribution
+- [ ] Anime domain tables + migrations
+- [ ] Repo manager parses JSON and protobuf indexes
+- [ ] Install / update / uninstall / trust for both types via the API
+- [ ] Tests pass in `./gradlew build`
+
 ### Phase 2 — Anime source support
+Details: [phase-2-anime-sources.md](phases/phase-2-anime-sources.md)
+
 - Implement the Aniyomi `animesource` interfaces and models: `AnimeCatalogueSource`, `AnimeHttpSource`, `SAnime`, `SEpisode`, `Video` (with headers, subtitle tracks and audio tracks), filters and preferences.
 - Add Android stubs anime extensions commonly need (`SharedPreferences`, `Context`, `Uri`, `Base64`, `Log`, etc.).
 - Expose source preferences (extension settings screens) as JSON schema for the UI.
 - Exit: the top ~20 yuzono extensions browse, search, list episodes and return videos.
 
+Milestones:
+- [ ] `animesource` API + models implemented
+- [ ] Android stubs + missing-class logging
+- [ ] Filters and preferences exposed as JSON
+- [ ] Anime API endpoints (browse, details, episodes, videos)
+- [ ] Compat harness: ≥18/20 top yuzono extensions pass
+
 ### Phase 3 — Frontend MVP
+Details: [phase-3-frontend-mvp.md](phases/phase-3-frontend-mvp.md)
+
 - Screens: Browse (sources, popular/latest/search + filters), Details, Library, Extensions, Settings.
 - A generic filter renderer driven by the backend (text, select, checkbox, tri-state, sort, group).
 - Extension preference renderer (list, edit text, switch, multi-select).
 - Exit: browse anime + manga end-to-end in the UI.
 
+Milestones:
+- [ ] Tauri sidecar lifecycle (spawn, handshake, restart)
+- [ ] Typed API client + WebSocket
+- [ ] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens
+- [ ] Generic filter and preference renderers
+- [ ] lint / typecheck / tests pass
+
 ### Phase 4 — Playback
+Details: [phase-4-playback.md](phases/phase-4-playback.md)
+
 - mpv sidecar per playback session: launch with headers, subs and audio tracks; control over JSON IPC.
 - Quality/server picker from `getVideoList`.
 - Progress sync (time-pos → DB every N sec), mark watched at a threshold, next-episode.
 - Later: embed mpv in the app window (`--wid` child HWND) instead of a separate window.
 - Exit: watch an episode and resume where you stopped.
 
+Milestones:
+- [ ] mpv launcher with headers / subs / audio
+- [ ] Named-pipe IPC + progress saving
+- [ ] Video picker, resume prompt, watched threshold
+- [ ] Next-episode flow
+- [ ] Expired-URL retry / fallback
+
 ### Phase 5 — Manga reader
+Details: [phase-5-manga-reader.md](phases/phase-5-manga-reader.md)
+
 - Modes: paged (LTR/RTL), vertical webtoon, double page.
 - Images go through the backend proxy (source headers/cookies), with prefetch and a disk cache.
 - Exit: smooth reading of long webtoon chapters.
 
+Milestones:
+- [ ] Image proxy + disk cache + prefetch
+- [ ] Paged LTR/RTL, webtoon, double-page modes
+- [ ] Reading progress + resume
+- [ ] 100+ page webtoon chapter scrolls smoothly
+
 ### Phase 6 — Library features
+Details: [phase-6-library-features.md](phases/phase-6-library-features.md)
+
 - Categories, update checker (scheduled), history, unread/unwatched badges.
 - Download queue: manga as CBZ; anime via mpv/yt-dlp/ffmpeg using the source headers, with HLS support.
 - Backup/restore. Stretch: import Aniyomi/Mihon backup files.
 
+Milestones:
+- [ ] Categories
+- [ ] Scheduled update checker + Updates view + badges
+- [ ] History
+- [ ] Download queue (manga CBZ, anime incl. HLS)
+- [ ] Backup / restore round-trip
+
 ### Phase 7 — Packaging & release
+Details: [phase-7-packaging-release.md](phases/phase-7-packaging-release.md)
+
 - `jlink` minimal JRE; bundle `mpv.exe`; Tauri NSIS/MSI installer.
 - Tauri auto-updater for the app; the backend updates with it.
 - Crash/log collection (local log files, an "export logs" button).
 
+Milestones:
+- [ ] jlink JRE + bundled mpv (and ffmpeg/yt-dlp)
+- [ ] NSIS/MSI installers work on a clean machine without Java
+- [ ] Auto-update N → N+1 keeps user data
+- [ ] Logs + "export logs"
+- [ ] CI release workflow
+
 ### Phase 8 — Later
+Details: [phase-8-later.md](phases/phase-8-later.md)
+
 - Trackers (AniList, MyAnimeList, Kitsu).
 - Discord Rich Presence.
 - Torrent sources (some Aniyomi extensions return magnet links), e.g. via a torrent library sidecar.
+
+Milestones:
+- [ ] Trackers (AniList, MyAnimeList, Kitsu)
+- [ ] Discord Rich Presence
+- [ ] Torrent sources
 
 ---
 
@@ -193,8 +274,10 @@ Alternative: keep Suwayomi's GraphQL API and add anime types to it. Decide after
 
 ## 8. First tasks (start here)
 
+These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps.
+
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.
 3. Write a tiny Kotlin harness that loads that jar and calls `getPopularAnime(1)`.
 4. Play one returned video in mpv with its headers.
-5. Scaffold Tauri 2 + Vue 3 in `madoyomi/app` and spawn a dummy JVM sidecar.
+5. ~~Scaffold Tauri 2 + Vue 3 in `madoyomi/app`~~ (done in `547f422`), then spawn a dummy JVM sidecar.
