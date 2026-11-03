@@ -12,9 +12,12 @@ import com.expediagroup.graphql.generator.annotations.GraphQLIgnore
 import com.expediagroup.graphql.server.extensions.getValueFromDataLoader
 import eu.kanade.tachiyomi.source.local.LocalSource
 import graphql.schema.DataFetchingEnvironment
+import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
@@ -231,7 +234,10 @@ class ExtensionQuery {
             transaction {
                 val res = ExtensionTable.selectAll()
 
-                res.adjustWhere { ExtensionTable.name neq LocalSource.EXTENSION_NAME }
+                // Madoyomi: and type = MANGA (adjustWhere replaces the WHERE, so both conditions go here)
+                res.adjustWhere {
+                    (ExtensionTable.name neq LocalSource.EXTENSION_NAME) and (ExtensionTable.type eq ExtensionKind.MANGA)
+                }
 
                 res.applyOps(null, condition, filter)
 

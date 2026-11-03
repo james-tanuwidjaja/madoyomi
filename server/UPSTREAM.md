@@ -143,6 +143,24 @@ Upstream code that would have referenced a higher module, or an `internal` symbo
 
 `awaitSingle` (`RxCoroutineBridge.kt`), `JsonObject.EMPTY` (`JsonObject.kt`) and `SocksUtils.kt` moved down to `ext-host` with their packages unchanged, so their callers in `ext-manga` and `core` did not change.
 
+### Domain & DB (Phase 1 Stage 4)
+
+Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENSION` tables, told apart by a new `type` column (see "Database migrations" below). Upstream's code is manga-only, so every query of it that reads a *set* of these rows, or acts on a row the client names, now also requires `type = MANGA`. Lookups that reach `EXTENSION` through `SOURCE` (manga-only by construction), inserts (the column defaults to `MANGA`) and `removeExtensionStore`/`ExtensionStoreService.upsert` (keyed by the unique `index_url`; made type-aware in Stage 5/7) are unchanged.
+
+| File | Change |
+|---|---|
+| `core/.../manga/model/table/ExtensionTable.kt` | new columns `type`, `signatureHash`, `isTorrent`, `isLoaded` |
+| `core/.../manga/model/table/ExtensionStoreTable.kt` | new columns `type`, `format`, `lastRefreshedAt`, `lastError`, `signingKeyTrusted` |
+| `core/.../manga/impl/extension/ExtensionsList.kt` | `type = MANGA` on `extensionTableAsDataClass` and on the installed set of `updateExtensionDatabase` (which drives its updates, obsolete marking and deletes) |
+| `core/.../manga/impl/extension/ExtensionStoreService.kt` | `type = MANGA` on the store sets of `getAndRefresh`, `syncDbToPrefs` and `syncPrefsToDb`, and on the delete in `syncPrefsToDb` (the `extensionStores` setting lists manga stores only) |
+| `core/.../manga/impl/extension/Extension.kt` | `type = MANGA` on the `installExtension(pkgName)` and `uninstallExtension` lookups |
+| `core/.../manga/impl/util/source/GetSource.kt` | `type = MANGA` on the extension lookup, so the manga loader can never load another kind of jar |
+| `core/.../graphql/queries/ExtensionQuery.kt` | `extensions`: `type = MANGA` in the base query's `adjustWhere` (covers nodes, `totalCount` and page info) |
+| `core/.../graphql/queries/ExtensionStoreQuery.kt` | `extensionStores`: `type = MANGA` on the base query |
+| `core/.../graphql/dataLoaders/ExtensionDataLoader.kt` | `ExtensionDataLoader` (`extension(pkgName)`): `type = MANGA` |
+| `core/.../graphql/dataLoaders/ExtensionStoreDataLoader.kt` | `ExtensionStoreDataLoader` (`extensionStore(indexUrl)`): `type = MANGA` |
+| `core/.../graphql/mutations/ExtensionMutation.kt` | `type = MANGA` on the `updateExtension(s)` lookup and the two `fetchExtensions` payload lists |
+
 ### New Madoyomi code
 
 | Path | What |
@@ -154,6 +172,42 @@ Upstream code that would have referenced a higher module, or an `internal` symbo
 | `api/src/main/kotlin/madoyomi/api/SidecarHttp.kt` | `GET /health`, the token filter and the WebSocket upgrade check |
 | `api/src/main/kotlin/madoyomi/api/SidecarToken.kt` | token from `MADOYOMI_TOKEN`, constant-time compare |
 | `ext-anime/src/main/kotlin/eu/kanade/tachiyomi/animesource/**`, `ext-anime/src/main/kotlin/mihon/core/common/extensions/JsonObject.kt` | Aniyomi source API, ported from the Phase 0 spike (Apache-2.0, see `ext-anime/NOTICE.md`). Phase 1 only compiles it. |
+| `ext-host/src/main/kotlin/madoyomi/exthost/ExtensionKind.kt` | `ExtensionKind { MANGA, ANIME }`, stored by name in `EXTENSIONSTORE.type` and `EXTENSION.type` |
+| `core/src/main/kotlin/madoyomi/core/repo/RepoIndexFormat.kt` | `RepoIndexFormat { AUTO, JSON, PROTOBUF }` (`EXTENSIONSTORE.format`) |
+| `core/src/main/kotlin/madoyomi/core/extension/TrustedSignatureTable.kt` | `TRUSTED_SIGNATURE` table + `SignatureTrustOrigin { USER, STORE }` |
+| `core/src/main/kotlin/madoyomi/core/anime/model/table/*.kt` | `AnimeSourceTable`, `AnimeTable`, `EpisodeTable`, `AnimeHistoryTable`, `AnimeCategoryTable` |
+| `core/src/main/kotlin/madoyomi/core/database/MadoyomiMigration.kt` | marker interface for Madoyomi migrations (see "Database migrations") |
+| `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0069_MadoyomiExtensionKinds.kt`, `M0070_AnimeTables.kt` | Madoyomi migrations. New files, but in upstream's migration package, because the runner only scans that package. |
+| `core/src/test/kotlin/madoyomi/core/database/MigrationsFromEmptyDbTest.kt` | the migration chain on empty and pre-Madoyomi H2 databases, re-runs, schema and Exposed-table checks |
+
+## Database migrations
+
+How upstream's runner (`com.github.Suwayomi:exposed-migrations`, called from `DBManager.databaseUp`) works, and what follows from it:
+- It instantiates every top-level class in `suwayomi.tachidesk.server.database.migration`, which must all be migrations named `M<number>_<Name>`. So Madoyomi migrations live in that upstream package, and nothing else may be put there.
+- The numbers must be exactly `1..N`, with no gaps.
+- It records each migration it ran in `MIGRATIONS` and on later starts runs only the numbers **above the highest recorded one**. Running it twice is a no-op.
+
+Rules for Madoyomi migrations:
+1. Upstream owns `M0001`–`M0068` (at `7b061be`). Madoyomi's start at `M0069` and are always the highest-numbered ones.
+2. Each carries the `// Madoyomi migration:` marker comment and implements `madoyomi.core.database.MadoyomiMigration`.
+3. Each is idempotent: `ADD COLUMN IF NOT EXISTS`, `SchemaUtils.create` (skips existing tables), `CREATE … IF NOT EXISTS`, and data changes guarded the same way. Use portable SQL (H2 and PostgreSQL), as upstream does. Only H2 is tested.
+
+`MigrationsFromEmptyDbTest` enforces rules 1 and 3.
+
+| Migration | Adds |
+|---|---|
+| `M0069_MadoyomiExtensionKinds` | `EXTENSIONSTORE`: `TYPE` (`MANGA`/`ANIME`, default `MANGA`), `FORMAT` (`AUTO`/`JSON`/`PROTOBUF`, default `AUTO`), `LAST_REFRESHED_AT` (epoch s, default 0), `LAST_ERROR` (nullable), `SIGNING_KEY_TRUSTED` (default false). `EXTENSION`: `TYPE` (default `MANGA`), `SIGNATURE_HASH` (nullable), `IS_TORRENT`, `IS_LOADED` (default false). New `TRUSTED_SIGNATURE`: `HASH` (PK, hex SHA-256), `ORIGIN` (`USER`/`STORE`), `STORE_ID` (nullable FK → `EXTENSIONSTORE`, `ON DELETE CASCADE`: removing a repo revokes its key), `ADDED_AT`. Existing rows become manga, `AUTO`, untrusted. |
+| `M0070_AnimeTables` | `ANIME_SOURCE` (id, name, lang, extension FK, content_warning, base_url), `ANIME` (url, title, artist, author, description, genre, status, thumbnail_url, in_library, initialized, source, added_at, last_fetched_at), `EPISODE` (url, name, episode_number, date_upload, scanlator, watched, bookmark, last_second_seen, total_seconds, source_order, fetched_at, anime FK `CASCADE`), and Phase 6 stubs `ANIME_HISTORY` (episode FK `CASCADE`, unique; last_seen) and `ANIME_CATEGORY` (category FK, anime FK, both `CASCADE`; unique pair) |
+
+Sources are typed by table (manga in `SOURCE`, anime in `ANIME_SOURCE`), and repos and extensions by the `type` column. The reasoning is in the Phase 1 doc (`docs/phases/phase-1-backend-foundation.md`, step 6).
+
+### Numbering collisions on an upstream sync
+
+When the upstream diff adds migrations of its own, say `k` of them, numbered `M0069`…`M00(68+k)`:
+1. Upstream's new migrations keep their numbers.
+2. Rename ours up by `k`, keeping their order and names (`git mv M0069_MadoyomiExtensionKinds.kt M00(69+k)_MadoyomiExtensionKinds.kt` and the class name, and so on). Update the numbers in this file, in `MigrationsFromEmptyDbTest` (`FIRST_MADOYOMI_VERSION`) and in the "Upgrading a pre-Madoyomi database" test.
+3. Databases that already ran ours have them recorded at the old numbers. The runner would treat upstream's new migrations as already done and skip them. So the first sync that renumbers must also add a reconcile step to `DBManager.databaseUp`, just before `runMigrations` (a `// Madoyomi:` edit). It goes through `MIGRATIONS` in version order and finds the first row whose `NAME` is the name of a `MadoyomiMigration` but whose `VERSION` no longer matches that migration's number. It deletes that row and every row after it. The runner then applies upstream's new migrations and re-runs ours, which is safe because they are idempotent. Because it only matches Madoyomi migration names, upstream rows are never re-run.
+4. Until Madoyomi has users with real data, renumbering and deleting the dev data dirs (`tools/dev-data`) is enough. Step 3 can wait until it is needed.
 
 ### Startup contract (what the Tauri shell relies on)
 

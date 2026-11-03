@@ -2,10 +2,13 @@ package suwayomi.tachidesk.graphql.dataLoaders
 
 import com.expediagroup.graphql.dataloader.KotlinDataLoader
 import graphql.GraphQLContext
+import madoyomi.exthost.ExtensionKind
 import org.dataloader.DataLoader
 import org.dataloader.DataLoaderFactory
 import org.jetbrains.exposed.v1.core.Slf4jSqlDebugLogger
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.count
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -29,7 +32,8 @@ class ExtensionStoreDataLoader : KotlinDataLoader<String, ExtensionStoreType> {
                     val extensionStoreByIndexUrl =
                         ExtensionStoreTable
                             .selectAll()
-                            .where { ExtensionStoreTable.indexUrl inList ids }
+                            // Madoyomi: and type = MANGA
+                            .where { (ExtensionStoreTable.indexUrl inList ids) and (ExtensionStoreTable.type eq ExtensionKind.MANGA) }
                             .map { ExtensionStoreType(it) }
                             .associateBy { it.indexUrl }
                     ids.map { extensionStoreByIndexUrl[it] }

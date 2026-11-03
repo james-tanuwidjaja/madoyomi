@@ -11,8 +11,10 @@ import eu.kanade.tachiyomi.source.local.LocalSource
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.statements.BatchUpdateStatement
 import org.jetbrains.exposed.v1.jdbc.batchInsert
@@ -71,7 +73,9 @@ object ExtensionsList {
 
     fun extensionTableAsDataClass() =
         transaction {
-            ExtensionTable.selectAll().filter { it[ExtensionTable.name] != LocalSource.EXTENSION_NAME }.map {
+            // Madoyomi: manga extensions only (upstream: ExtensionTable.selectAll())
+            val mangaExtensions = ExtensionTable.selectAll().where { ExtensionTable.type eq ExtensionKind.MANGA }
+            mangaExtensions.filter { it[ExtensionTable.name] != LocalSource.EXTENSION_NAME }.map {
                 ExtensionDataClass(
                     repo = it[ExtensionTable.storeIndexUrl],
                     apkName = it[ExtensionTable.apkName].orEmpty(),
@@ -103,6 +107,8 @@ object ExtensionsList {
                 val installedExtensions =
                     ExtensionTable
                         .selectAll()
+                        // Madoyomi: manga rows only, so the sync never updates, obsoletes or deletes anime extensions
+                        .where { ExtensionTable.type eq ExtensionKind.MANGA }
                         .toList()
                         .associateBy { it[ExtensionTable.pkgName] }
 
