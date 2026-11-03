@@ -1,0 +1,36 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+*.suo
+*.sw?
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Logs
+*.log
+
+# Node / frontend (see also app/.gitignore)
+node_modules/
+
+# Rust / Tauri
+target/
+
+# Kotlin / Gradle (server)
+.gradle/
+.kotlin/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local tool binaries (dex2jar, jadx, mpv builds, test APKs, jlink output)
+tools/bin/
+tools/apks/
+*.apk
+*.dex
+
+# Local env
+.env
+.env.*
+!.env.example
