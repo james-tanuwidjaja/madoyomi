@@ -47,7 +47,7 @@ Why this split:
 | Shell | Tauri 2 | Window, sidecar lifecycle, auto-update, installer (NSIS/MSI) |
 | UI | Vue 3 + Vite + TS, Pinia, Vue Router, TanStack Query (vue-query) | Virtualized lists for big libraries |
 | Backend | Kotlin/JVM (base on **Suwayomi-Server**, MPL-2.0) | Keep its web framework/DB layer if forking |
-| Extension loading | dex2jar + custom classloader + Android stubs | Already solved for manga in Suwayomi |
+| Extension loading | dex2jar + custom classloader + Android stubs | Already solved for manga in Suwayomi. Madoyomi installs from the APK only, after apksig verifies it, and repairs R8-optimised dex that dex2jar mistranslates (phase-1 §10) |
 | Anime API | Aniyomi `extensions-lib` (`eu.kanade.tachiyomi.animesource.*`) | Match the lib version yuzono builds against (APK names show `v14.x`) |
 | Manga index parsing | `kotlinx.serialization.protobuf` | For `index.pb`; Suwayomi's Mihon DTOs are reused, plus an Aniyomi variant for anime `index.pb` (phase-1 §10) |
 | HTTP | OkHttp (what extensions expect) | Shared client, cookie jar, rate limiting interceptors |
@@ -258,6 +258,7 @@ WS     /ws                                downloads, updates, playback progress 
 | Cloudflare / WebView-dependent extensions | Some sources unusable | Headless browser shim; FlareSolverr as fallback |
 | Video URLs require headers/cookies | 403s in the player | Always pass `Video.headers` to mpv; proxy fallback |
 | Extensions are arbitrary JVM code | Security | Trust prompt by signing cert; only user-added repos; consider a separate JVM process per extension type |
+| R8-optimised APKs that dex2jar mistranslates (e.g. Keiyoushi's removed constructors and merged classes) | Extensions fail to load (`VerifyError`) | A bytecode repair pass after dex2jar (`Dex2jarRepair`: constructors restored, frames recomputed with the APK's class hierarchy); the Phase 2 compat harness should include manga extensions to catch new patterns |
 | Protobuf index schema undocumented | Can't list manga extensions | Reverse-engineer from Mihon's client source; JSON fallback if one exists |
 | License mixing | Suwayomi is MPL-2.0, Aniyomi code is Apache-2.0 | Madoyomi is MPL-2.0; keep upstream headers; add a NOTICE/THIRD_PARTY file |
 

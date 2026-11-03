@@ -17,6 +17,21 @@ enum class ErrorCode {
     REPO_TYPE_MISMATCH,
 
     NOT_FOUND,
+
+    /** An extension APK has no valid signature (apksig), or is not an APK at all. */
+    SIGNATURE_INVALID,
+
+    /** An update is signed by a different, untrusted certificate; the installed version is kept. */
+    SIGNATURE_CHANGED,
+
+    /** The extension's signing certificate is not trusted, so its code may not run. */
+    UNTRUSTED,
+
+    /** An APK is not what the repo listed: another package, version code or extension kind. */
+    PACKAGE_MISMATCH,
+
+    /** An install, update or uninstall could not be done (already installed, no update, no APK URL, …). */
+    INSTALL_FAILED,
 }
 
 /** An error with a [code], a human-readable [message] and optional structured [details]. */

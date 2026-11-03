@@ -18,6 +18,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.github.reactivecircus.cache4k.Cache
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import madoyomi.core.extension.ExtensionLoadGate
 import net.dongliu.apk.parser.ApkFile
 import net.dongliu.apk.parser.ApkParsers
 import org.w3c.dom.Element
@@ -185,6 +186,10 @@ object PackageTools {
         className: String,
     ): Any {
         val jarPath = jar.absolutePathString()
+
+        // Madoyomi: trust gate. Extension code only runs from a jar converted from an APK whose signing certificate is
+        // trusted now (madoyomi.core.extension.ExtensionLoadGate); throws UNTRUSTED otherwise
+        ExtensionLoadGate.check(jar)
 
         try {
             logger.debug { "loading jar with path: $jarPath" }
