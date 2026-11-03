@@ -17,6 +17,12 @@ plugins {
     alias(libs.plugins.shadowjar)
 }
 
+// The integration tests reuse core's test classes (ApplicationTest, TestApks, TestRepo, StubRepoHttp), so core
+// must be configured first.
+evaluationDependsOn(":core")
+
+val coreTest: SourceSet = project(":core").the<SourceSetContainer>()["test"]
+
 dependencies {
     implementation(projects.core)
 
@@ -25,6 +31,18 @@ dependencies {
 
     implementation(libs.bundles.shared)
     implementation(libs.bundles.javalin)
+
+    // Madoyomi's GraphQL additions (madoyomi.api.graphql): schema types, the DB tables they read, ExtensionKind
+    implementation(projects.extHost)
+    implementation(libs.graphql.kotlin.server)
+    implementation(libs.graphql.kotlin.scheme)
+    implementation(libs.bundles.exposed)
+
+    testImplementation(coreTest.output)
+    testImplementation(libs.bundles.sharedTest)
+    testImplementation(libs.exposed.migrations)
+    testImplementation(libs.injekt)
+    testImplementation(projects.extManga)
 }
 
 application {
@@ -36,6 +54,23 @@ application {
 }
 
 tasks {
+    test {
+        useJUnitPlatform()
+        testLogging {
+            // off (core: on): the integration tests log every Jetty and Exposed debug line; the reports keep them
+            showStandardStreams = false
+            events("passed", "skipped", "failed")
+        }
+        // the same data root setup as core's tests, under api/build
+        systemProperty(
+            "madoyomi.config.server.rootDir",
+            layout.buildDirectory
+                .dir("tmp/TestDesk")
+                .get()
+                .asFile.absolutePath,
+        )
+    }
+
     shadowJar {
         isZip64 = true
         manifest {

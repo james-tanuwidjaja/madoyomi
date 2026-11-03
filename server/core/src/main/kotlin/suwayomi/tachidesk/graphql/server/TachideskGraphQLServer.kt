@@ -24,6 +24,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import madoyomi.core.graphql.MadoyomiGraphQLErrors
 import suwayomi.tachidesk.graphql.server.subscriptions.ApolloSubscriptionProtocolHandler
 import suwayomi.tachidesk.server.JavalinSetup.future
 import suwayomi.tachidesk.server.user.ForbiddenException
@@ -54,6 +55,9 @@ class TachideskGraphQLServer(
     companion object {
         private val logger = KotlinLogging.logger {}
 
+        // Madoyomi: unused, MadoyomiGraphQLErrors.exceptionHandler replaces it (errors[].extensions = {code, details},
+        // no stack trace in the message)
+        @Suppress("unused")
         private val exceptionHandler =
             DataFetcherExceptionHandler { handlerParameters ->
                 future {
@@ -83,13 +87,18 @@ class TachideskGraphQLServer(
                 }
             }
 
-        private fun getGraphQLObject(): GraphQL =
-            GraphQL
+        // Madoyomi: public (upstream: private), so api's integration tests run this exact configuration; Madoyomi's
+        // error handler and the instrumentation that gives graphql-java's own errors a code (upstream: exceptionHandler)
+        fun getGraphQLObject(): GraphQL {
+            val exceptionHandler = MadoyomiGraphQLErrors.exceptionHandler
+            return GraphQL
                 .newGraphQL(runBlocking { GraphQLSchemaProvider.getSchema() })
                 .queryExecutionStrategy(AsyncExecutionStrategy(exceptionHandler))
                 .mutationExecutionStrategy(AsyncExecutionStrategy(exceptionHandler))
                 .subscriptionExecutionStrategy(FlowSubscriptionExecutionStrategy(exceptionHandler))
+                .instrumentation(MadoyomiGraphQLErrors.instrumentation)
                 .build()
+        }
 
         fun create(): TachideskGraphQLServer {
             val graphQL = getGraphQLObject()

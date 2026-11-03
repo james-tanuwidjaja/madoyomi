@@ -8,6 +8,7 @@ import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.SwitchPreferenceCompat
 import com.expediagroup.graphql.generator.annotations.GraphQLIgnore
+import madoyomi.core.extension.SourceAccess
 import org.jetbrains.exposed.v1.core.LikePattern
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.and
@@ -31,7 +32,6 @@ import suwayomi.tachidesk.graphql.types.preferenceOf
 import suwayomi.tachidesk.graphql.types.updateFilterList
 import suwayomi.tachidesk.manga.impl.MangaList.insertOrUpdate
 import suwayomi.tachidesk.manga.impl.Source
-import suwayomi.tachidesk.manga.impl.util.source.GetSource
 import suwayomi.tachidesk.manga.model.dataclass.ContentWarning
 import suwayomi.tachidesk.manga.model.table.MangaTable
 import suwayomi.tachidesk.manga.model.table.SourceMetaTable
@@ -312,7 +312,9 @@ class SourceMutation {
             //     throw ForbiddenException()
             // }
 
-            val source = GetSource.getSourceOrNull(sourceId)!!
+            // Madoyomi: says why the source is unavailable (NOT_FOUND, UNTRUSTED) instead of a null pointer
+            // (upstream: GetSource.getSourceOrNull(sourceId)!!)
+            val source = SourceAccess.require(sourceId)
             val mangasPage =
                 when (type) {
                     FetchSourceMangaType.SEARCH -> {

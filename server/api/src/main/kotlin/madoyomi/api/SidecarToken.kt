@@ -21,6 +21,9 @@ class SidecarToken private constructor(
 
         private val logger = KotlinLogging.logger {}
 
+        /** A fixed token (tests). */
+        internal fun of(token: String) = SidecarToken(token.toByteArray(Charsets.UTF_8))
+
         /** Reads [ENV]. Without one, a random token nobody knows is used, so the API is locked rather than open. */
         fun fromEnvironment(): SidecarToken {
             val fromEnv = System.getenv(ENV)?.trim()

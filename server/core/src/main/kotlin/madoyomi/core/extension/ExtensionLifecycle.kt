@@ -9,6 +9,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -92,6 +93,9 @@ class ExtensionLifecycle(
 
     /** The steps of every install and update: `DOWNLOADING → VERIFYING → CONVERTING → INSTALLED | FAILED`. */
     val progress: SharedFlow<ExtensionInstallProgress> = progressFlow.asSharedFlow()
+
+    /** How many collectors [progress] has (tests wait for a subscription with it). */
+    val progressSubscribers: StateFlow<Int> get() = progressFlow.subscriptionCount
 
     /** Installs the listed extension [pkg] of [kind] (an `EXTENSION` row from a repo refresh). */
     suspend fun install(

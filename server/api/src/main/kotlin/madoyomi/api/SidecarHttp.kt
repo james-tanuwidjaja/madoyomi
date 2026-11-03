@@ -12,6 +12,8 @@ import io.javalin.http.HandlerType
 import io.javalin.http.HttpStatus
 import io.javalin.http.UnauthorizedResponse
 import madoyomi.core.MadoyomiBuildInfo
+import madoyomi.core.error.ErrorCode
+import madoyomi.core.error.RestErrors
 
 /** Sidecar-only HTTP: `GET /health` and the token gate in front of every other route. */
 object SidecarHttp {
@@ -64,7 +66,7 @@ object SidecarHttp {
 
         routes.exception(TokenRejected::class.java) { e, ctx ->
             ctx.status(HttpStatus.UNAUTHORIZED)
-            ctx.json(mapOf("code" to "UNAUTHORIZED", "message" to e.message, "details" to null))
+            RestErrors.body(ctx, ErrorCode.UNAUTHORIZED, e.message)
         }
     }
 

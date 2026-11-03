@@ -44,7 +44,8 @@ class JavalinExceptionHandlersTest {
 
     @Test
     fun aSourceAnsweringWithAnErrorIsAFailedDependency() {
-        assertEquals(424 to "HTTP error 404", get("/source-error"))
+        // Madoyomi: the error body is {code, message, details} JSON (upstream: the plain text "HTTP error 404")
+        assertEquals(424 to """{"code":"SOURCE_FAILED","message":"HTTP error 404","details":null}""", get("/source-error"))
     }
 
     @Test

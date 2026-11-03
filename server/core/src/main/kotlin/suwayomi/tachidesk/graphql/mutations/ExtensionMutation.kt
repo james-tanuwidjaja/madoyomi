@@ -5,11 +5,15 @@ package suwayomi.tachidesk.graphql.mutations
 import com.expediagroup.graphql.generator.annotations.GraphQLIgnore
 import eu.kanade.tachiyomi.source.local.LocalSource
 import io.javalin.http.UploadedFile
+import madoyomi.core.error.ErrorCode
+import madoyomi.core.error.MadoyomiException
+import madoyomi.core.extension.ExtensionActions
+import madoyomi.core.repo.RepoService
 import madoyomi.exthost.ExtensionKind
-import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import suwayomi.tachidesk.graphql.directives.RequireAuth
@@ -17,7 +21,6 @@ import suwayomi.tachidesk.graphql.directives.RequirePermissions
 import suwayomi.tachidesk.graphql.types.ExtensionStoreType
 import suwayomi.tachidesk.graphql.types.ExtensionType
 import suwayomi.tachidesk.manga.impl.extension.Extension
-import suwayomi.tachidesk.manga.impl.extension.ExtensionsList
 import suwayomi.tachidesk.manga.model.table.ExtensionStoreTable
 import suwayomi.tachidesk.manga.model.table.ExtensionTable
 import suwayomi.tachidesk.server.JavalinSetup.future
@@ -63,28 +66,49 @@ class ExtensionMutation {
             transaction {
                 ExtensionTable
                     .selectAll()
-                    // Madoyomi: and type = MANGA, these mutations act on manga extensions only
-                    .where { (ExtensionTable.pkgName inList ids) and (ExtensionTable.type eq ExtensionKind.MANGA) }
+                    .where { ExtensionTable.pkgName inList ids }
                     .map { ExtensionType(it) }
             }
 
+        // Madoyomi: both kinds; each action goes to the extension's kind (upstream: Extension.*, manga only)
         if (patch.update == true) {
             extensions.filter { it.hasUpdate }.forEach {
-                Extension.updateExtension(it.pkgName)
+                ExtensionActions.update(it.pkgName, it.type)
             }
         }
 
         if (patch.install == true) {
             extensions.filterNot { it.isInstalled }.forEach {
-                Extension.installExtension(it.pkgName)
+                ExtensionActions.install(it.pkgName, it.type)
             }
         }
 
         if (patch.uninstall == true) {
             extensions.filter { it.isInstalled }.forEach {
-                Extension.uninstallExtension(it.pkgName)
+                ExtensionActions.uninstall(it.pkgName, it.type)
             }
         }
+    }
+
+    // Madoyomi: updateExtension (one id) does what the patch asks or says why not: an unknown id is NOT_FOUND, and
+    // "already installed", "no update" or "not installed" are INSTALL_FAILED from the lifecycle. updateExtensions
+    // keeps upstream's skip-what-doesn't-apply behaviour.
+    private suspend fun updateOne(
+        id: String,
+        patch: UpdateExtensionPatch,
+    ) {
+        val extension =
+            transaction {
+                ExtensionTable
+                    .selectAll()
+                    .where { ExtensionTable.pkgName eq id }
+                    .firstOrNull()
+                    ?.let { ExtensionType(it) }
+            }
+                ?: throw MadoyomiException(ErrorCode.NOT_FOUND, "No extension $id", mapOf("pkgName" to id))
+        if (patch.update == true) ExtensionActions.update(id, extension.type)
+        if (patch.install == true) ExtensionActions.install(id, extension.type)
+        if (patch.uninstall == true) ExtensionActions.uninstall(id, extension.type)
     }
 
     private fun checkUpdatePermissions(
@@ -111,7 +135,7 @@ class ExtensionMutation {
         checkUpdatePermissions(permissions, patch)
 
         return future {
-            updateExtensions(listOf(id), patch)
+            updateOne(id, patch) // Madoyomi (upstream: updateExtensions(listOf(id), patch))
 
             val extension =
                 transaction {
@@ -159,6 +183,8 @@ class ExtensionMutation {
 
     data class FetchExtensionsInput(
         val clientMutationId: String? = null,
+        // Madoyomi: refresh only the repos of this kind (omitted: both kinds); the payload lists that kind
+        val type: ExtensionKind? = null,
     )
 
     data class FetchExtensionsPayload(
@@ -173,18 +199,19 @@ class ExtensionMutation {
         permissions: List<UserPermission>,
         input: FetchExtensionsInput,
     ): CompletableFuture<FetchExtensionsPayload?> {
-        val (clientMutationId) = input
+        val (clientMutationId, type) = input
 
         return future {
-            ExtensionsList.fetchExtensions()
+            // Madoyomi: the repos of [type], or of both kinds (upstream: ExtensionsList.fetchExtensions(), manga only)
+            RepoService.default.refreshAll(type)
 
             val extensions =
                 transaction {
                     val query =
                         ExtensionTable
                             .selectAll()
-                            // Madoyomi: and type = MANGA
-                            .where { (ExtensionTable.name neq LocalSource.EXTENSION_NAME) and (ExtensionTable.type eq ExtensionKind.MANGA) }
+                            .where { ExtensionTable.name neq LocalSource.EXTENSION_NAME }
+                    type?.let { query.andWhere { ExtensionTable.type eq it } } // Madoyomi
 
                     // hide NSFW extensions from users without the NSFW permission
                     // if (!permissions.hasPermission(UserPermission.ACCESS_NSFW)) {
@@ -196,11 +223,10 @@ class ExtensionMutation {
 
             val extensionStores =
                 transaction {
-                    ExtensionStoreTable
-                        .selectAll()
-                        // Madoyomi: manga stores only
-                        .where { ExtensionStoreTable.type eq ExtensionKind.MANGA }
-                        .map { ExtensionStoreType(it) }
+                    // Madoyomi: the stores of [type], or all (upstream: all, which were manga only)
+                    val stores = ExtensionStoreTable.selectAll()
+                    type?.let { stores.where { ExtensionStoreTable.type eq it } }
+                    stores.map { ExtensionStoreType(it) }
                 }
 
             FetchExtensionsPayload(

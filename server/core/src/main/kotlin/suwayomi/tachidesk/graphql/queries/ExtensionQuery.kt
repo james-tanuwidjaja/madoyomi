@@ -16,8 +16,6 @@ import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
-import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.neq
@@ -131,6 +129,8 @@ class ExtensionQuery {
         val isInstalled: Boolean? = null,
         val hasUpdate: Boolean? = null,
         val isObsolete: Boolean? = null,
+        // Madoyomi: the extension kind (omitted: both kinds)
+        val type: ExtensionKind? = null,
     ) : HasGetOp<Any?> {
         override fun getOp(value: Any?): Op<Boolean>? {
             val opAnd = OpAnd()
@@ -154,6 +154,7 @@ class ExtensionQuery {
             opAnd.eq(isInstalled, ExtensionTable.isInstalled)
             opAnd.eq(hasUpdate, ExtensionTable.hasUpdate)
             opAnd.eq(isObsolete, ExtensionTable.isObsolete)
+            opAnd.eq(type, ExtensionTable.type) // Madoyomi
 
             return opAnd.op
         }
@@ -234,9 +235,8 @@ class ExtensionQuery {
             transaction {
                 val res = ExtensionTable.selectAll()
 
-                // Madoyomi: and type = MANGA (adjustWhere replaces the WHERE, so both conditions go here)
                 res.adjustWhere {
-                    (ExtensionTable.name neq LocalSource.EXTENSION_NAME) and (ExtensionTable.type eq ExtensionKind.MANGA)
+                    ExtensionTable.name neq LocalSource.EXTENSION_NAME
                 }
 
                 res.applyOps(null, condition, filter)

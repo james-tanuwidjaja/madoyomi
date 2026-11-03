@@ -36,6 +36,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import madoyomi.core.MadoyomiFeatures
+import madoyomi.core.error.ErrorClassifier
+import madoyomi.core.error.ErrorCode
+import madoyomi.core.error.MadoyomiException
+import madoyomi.core.error.RestErrors
 import org.eclipse.jetty.ee10.servlet.SessionHandler
 import org.eclipse.jetty.http.HttpCookie
 import org.eclipse.jetty.server.ServerConnector
@@ -376,10 +380,13 @@ object JavalinSetup {
         exception(NullPointerException::class.java) { e, ctx ->
             logger.error(e) { "NullPointerException while handling the request" }
             ctx.status(404)
+            // Madoyomi: JSON error body {code, message, details} (upstream: status only), here and in the handlers below
+            RestErrors.body(ctx, ErrorCode.NOT_FOUND, e.message)
         }
         exception(NoSuchElementException::class.java) { e, ctx ->
             logger.error(e) { "NoSuchElementException while handling the request" }
             ctx.status(404)
+            RestErrors.body(ctx, ErrorCode.NOT_FOUND, e.message) // Madoyomi
         }
         exception(IOException::class.java) { e, ctx ->
             if (e.isHostUnreachable()) {
@@ -391,7 +398,7 @@ object JavalinSetup {
 
             logger.error(e) { "IOException while handling the request" }
             ctx.status(500)
-            ctx.result(e.message ?: "Internal Server Error")
+            RestErrors.body(ctx, ErrorCode.INTERNAL, e.message ?: "Internal Server Error") // Madoyomi (upstream: ctx.result)
         }
 
         exception(HttpException::class.java) { e, ctx ->
@@ -403,19 +410,19 @@ object JavalinSetup {
         exception(IllegalArgumentException::class.java) { e, ctx ->
             logger.error(e) { "IllegalArgumentException while handling the request" }
             ctx.status(400)
-            ctx.result(e.message ?: "Bad Request")
+            RestErrors.body(ctx, ErrorCode.BAD_REQUEST, e.message ?: "Bad Request") // Madoyomi (upstream: ctx.result)
         }
 
         exception(UnauthorizedException::class.java) { e, ctx ->
             logger.error(e) { "UnauthorizedException while handling the request" }
             ctx.status(HttpStatus.UNAUTHORIZED)
-            ctx.result(e.message ?: "Unauthorized")
+            RestErrors.body(ctx, ErrorCode.UNAUTHORIZED, e.message ?: "Unauthorized") // Madoyomi (upstream: ctx.result)
         }
 
         exception(ForbiddenException::class.java) { e, ctx ->
             logger.error(e) { "ForbiddenException while handling the request" }
             ctx.status(HttpStatus.FORBIDDEN)
-            ctx.result(e.message ?: "Forbidden")
+            RestErrors.body(ctx, ErrorCode.FORBIDDEN, e.message ?: "Forbidden") // Madoyomi (upstream: ctx.result)
         }
 
         exception(ServletException::class.java) { e, ctx ->
@@ -423,10 +430,27 @@ object JavalinSetup {
             val rootCause = e.rootCause
             if (rootCause is JettyHttpException) {
                 ctx.status(rootCause.code)
-                ctx.result(rootCause.reason ?: "Forbidden")
+                RestErrors.body(ctx, RestErrors.codeFor(rootCause.code), rootCause.reason ?: "Forbidden") // Madoyomi (upstream: ctx.result)
             } else {
                 ctx.status(500)
+                RestErrors.body(ctx, ErrorCode.INTERNAL, e.message) // Madoyomi
             }
+        }
+
+        // Madoyomi: Madoyomi's own errors keep their code; anything else no handler above matches is INTERNAL, with
+        // the stack trace in the log only (upstream: Javalin's default 500 page)
+        exception(MadoyomiException::class.java) { e, ctx ->
+            logger.debug { "${e.code} while handling ${ctx.path()}: ${e.message}" }
+            RestErrors.respond(ctx, ErrorClassifier.classify(e))
+        }
+        exception(Exception::class.java) { e, ctx ->
+            val error = ErrorClassifier.classify(e)
+            if (error.expected) {
+                logger.debug { "${error.code} while handling ${ctx.path()}: ${error.message}" }
+            } else {
+                logger.error(e) { "Error while handling the request" }
+            }
+            RestErrors.respond(ctx, error)
         }
     }
 
@@ -457,7 +481,7 @@ object JavalinSetup {
     // 424 rather than 502: clients and proxies read 502 to 504 as the server being down
     private fun Context.sourceFailed(message: String?) {
         status(HttpStatus.FAILED_DEPENDENCY)
-        result(message ?: "Source request failed")
+        RestErrors.body(this, ErrorCode.SOURCE_FAILED, message ?: "Source request failed") // Madoyomi (upstream: result)
     }
 
     private fun <T : Any> Context.setAttribute(

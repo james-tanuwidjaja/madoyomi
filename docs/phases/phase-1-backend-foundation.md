@@ -23,7 +23,7 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 - Anime domain: tables and entities for anime, episodes, anime sources and anime extensions.
 - Repo manager: JSON (anime) and protobuf (manga) parsers, plus add/remove/refresh.
 - Extension lifecycle: install, update, uninstall, trust by signing-cert hash.
-- API endpoints: `/api/repos`, `/api/extensions`, `/api/extensions/{pkg}/install|trust|uninstall|update`, `/health`.
+- API: the repo, extension, trust and source operations in Suwayomi's GraphQL API at `/api/graphql` (subscriptions over `graphql-transport-ws`), mapped from the PLAN.md §5 REST sketch in step 17; `/health` stays plain HTTP.
 - `NOTICE` / `THIRD_PARTY.md` with Suwayomi (MPL-2.0) and Aniyomi/Mihon (Apache-2.0) attribution.
 
 ## 4. Detailed steps
@@ -53,9 +53,22 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 16. Anime extensions: install/trust/list only. Instantiating sources comes in Phase 2.
 
 ### API
-17. Implement the repo and extension endpoints from PLAN.md §5 in the API style chosen in Phase 0.
-18. WebSocket `/ws`: emit `extension.installProgress` and `repo.refreshed` events.
-19. Error model: `{ code, message, details }`, used the same way on every endpoint.
+17. Implement the repo and extension endpoints from PLAN.md §5 in the API style chosen in Phase 0: Suwayomi's GraphQL API, extended. Everything is at `/api/graphql`; subscriptions use the `graphql-transport-ws` protocol on the same path.
+
+    | PLAN.md §5 REST sketch | GraphQL |
+    |---|---|
+    | `GET /api/repos` | `extensionStores(condition: {type})` (existing query; the type gains `type`, `format`, `signingKeyTrusted`, `lastRefreshedAt`, `lastError`) |
+    | `POST /api/repos` | `addExtensionStore(input: {indexUrl, type, format})` → store + signing key (extends the existing mutation) |
+    | `DELETE /api/repos` | `removeExtensionStore(input: {indexUrl})` (existing) |
+    | refresh | `fetchExtensions(input: {type})` (existing, made type-aware) |
+    | `GET /api/extensions?type=` | `extensions(condition: {type})`; `ExtensionType` gains `type`, `signatureHash`, `isTrusted`, `isLoaded`, `isTorrent` |
+    | `POST …/install\|update\|uninstall` | `updateExtension(input: {id, patch: {install\|update\|uninstall}})` (existing, type-aware) |
+    | `POST …/trust` | new: `trustExtension(input: {pkgName})` and `trustSignature`/`untrustSignature(input: {hash})`; query `trustedSignatures` |
+    | `GET /api/sources?type=` | `sources` (manga, existing) + new `animeSources(condition)` → `AnimeSourceType` (id, name, lang, extension, baseUrl) |
+    | `/ws` events | subscriptions `extensionInstallProgress(pkgName?)` and `extensionStoreRefreshed(type?)` |
+    | `/health` | plain HTTP, no token |
+18. Events are GraphQL subscriptions, not a separate `/ws`: `extensionInstallProgress` (from the lifecycle's progress flow) and `extensionStoreRefreshed` (one event per refreshed repo).
+19. Error model: every GraphQL error carries `extensions = {code, details}` (no stack traces in messages; they go to the log; unknown failures are `INTERNAL`), and REST/binary endpoints answer errors with the JSON body `{code, message, details}`.
 
 ### Tests & tooling
 20. Unit tests for both index parsers, using fixture files in `server/*/src/test/resources`.
@@ -73,7 +86,7 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 - [x] Random port + `MADOYOMI_PORT` handshake + auth token (plus `--data-dir`, loopback-only bind, Tauri-only CORS, stdin watchdog, `GET /health`)
 
 ### Domain & DB
-- [x] `type` discriminator on repos/extensions; sources typed by table (see step 6). Migration `M0069_MadoyomiExtensionKinds`; upstream manga queries filter on `type = MANGA` (`server/UPSTREAM.md`, "Domain & DB")
+- [x] `type` discriminator on repos/extensions; sources typed by table (see step 6). Migration `M0069_MadoyomiExtensionKinds`; upstream manga queries filter on `type = MANGA` (`server/UPSTREAM.md`, "Domain & DB"; the GraphQL API takes a `type` since Stage 7)
 - [x] Anime tables + migrations (`M0070_AnimeTables`: `ANIME_SOURCE`, `ANIME`, `EPISODE`, plus `ANIME_HISTORY` and `ANIME_CATEGORY` stubs; `TRUSTED_SIGNATURE` in `M0069`). Numbering and the upstream-collision rule are in `server/UPSTREAM.md`, "Database migrations"
 - [x] Migration test from an empty DB (`MigrationsFromEmptyDbTest`: empty DB, second run is a no-op, upgrade from a pre-Madoyomi DB, Madoyomi migrations re-runnable, Exposed tables match the schema)
 
@@ -85,22 +98,24 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 
 ### Extension lifecycle
 - [x] Install (download, verify, cert hash, dex2jar, store): `madoyomi.core.extension.ExtensionLifecycle`, APK-only with apksig (`madoyomi.exthost.ApkInspector`), the `Dex2jarRepair` post-pass, `extensions/{manga|anime}/{pkg}/`; progress flow for Stage 7 (see §9, §10)
-- [x] Trust prompt flow: untrusted extensions are not loaded (one gate in front of upstream's loader, `ExtensionLoadGate`; USER trust via `trustSignature`/`trustExtension`, which loads them; the GraphQL operations are Stage 7)
+- [x] Trust prompt flow: untrusted extensions are not loaded (one gate in front of upstream's loader, `ExtensionLoadGate`; USER trust via `trustSignature`/`trustExtension`, which loads them; in GraphQL since Stage 7)
 - [x] Update detection + update (upstream `hasUpdate`; an untrusted new certificate is refused with `SIGNATURE_CHANGED`)
 - [x] Uninstall (unload + delete, `SOURCE`/`ANIME_SOURCE` rows, upstream's delete-on-next-start fallback)
 - [x] Works for both anime and manga APKs (real AnimeGG/AnimePahe/MangaPill in the tests; live installs from yuzono and Keiyoushi)
 
 ### API
-- [ ] `GET/POST/DELETE /api/repos`
-- [ ] `GET /api/extensions?type=`
-- [ ] `POST /api/extensions/{pkg}/install|update|uninstall|trust`
-- [ ] `GET /api/sources?type=` (manga sources work; anime list may be empty)
-- [ ] `/ws` progress events
-- [ ] Uniform error model
+Mapped from the REST sketch to GraphQL (step 17).
+- [x] Repos: `extensionStores(condition: {type})`, `addExtensionStore(input: {indexUrl, type, format})`, `removeExtensionStore`, `fetchExtensions(input: {type})`
+- [x] Extensions: `extensions(condition: {type})` with `type`, `signatureHash`, `isTrusted`, `isLoaded`, `isTorrent`
+- [x] `updateExtension(input: {id, patch: {install|update|uninstall}})` for both kinds (single id: says what it can't do; batch `updateExtensions` keeps upstream's skip semantics)
+- [x] Trust: `trustExtension`, `trustSignature`/`untrustSignature`, `trustedSignatures`
+- [x] Sources: `sources` (manga) + `animeSources(condition)` (anime sources from the listing)
+- [x] Subscriptions over `graphql-transport-ws`: `extensionInstallProgress(pkgName?)`, `extensionStoreRefreshed(type?)`
+- [x] Uniform error model (GraphQL `errors[].extensions = {code, details}`, REST `{code, message, details}`)
 
 ### Tests
 - [x] Parser unit tests with fixtures (`core/src/test/kotlin/madoyomi/core/repo/`, text fixtures in `core/src/test/resources/repo/`; protobuf stored as base64 of the gzipped bytes)
-- [ ] Install → trust → list integration test
+- [x] Install → trust → list integration test (`api`: `ExtensionApiIntegrationTest`, both kinds, real APKs from a loopback repo; see §9)
 - [ ] `./gradlew build` passes
 
 ## 6. Exit criteria
@@ -122,7 +137,7 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 
 ## 9. Decision record
 
-Repo manager (Stage 5) and extension lifecycle (Stage 6). The rest of the phase's decisions are added at the end of the phase.
+Repo manager (Stage 5), extension lifecycle (Stage 6) and API (Stage 7). The rest of the phase's decisions are added at the end of the phase.
 
 | Decision | Why |
 |---|---|
@@ -149,6 +164,18 @@ Extension lifecycle (Stage 6):
 | Upstream-layout installs (no `signature_hash`) are untrusted and never loaded; uninstall + install, or an update, replaces them. Repos added before Stage 5 have no trust row, so their installs come out untrusted. | The converted jar has no signature left to check, and a refresh never grants trust. |
 | User trust is a USER row; trusting a key a repo vouches for detaches its row from the repo. Untrusting only withdraws USER trust. Re-adding a repo also loads the installed extensions its key now covers. | `hash` is the primary key; the user's choice must outlive the repo, and the repo's must outlive an untrust. |
 | Jars live in `<data>/extensions/{manga|anime}/{pkg}/{pkg}-v{versionName}.jar`; icons stay in upstream's `extensions/icon/` cache. | Upstream's icon endpoint serves that cache; pkg names of the two kinds never collide. |
+
+API (Stage 7):
+
+| Decision | Why |
+|---|---|
+| Madoyomi's GraphQL operations live in `api` and reach upstream's schema through one hook in `TachideskGraphQLSchema.kt`, which finds them with `ServiceLoader` (`GraphQLSchemaContribution`), not Koin. | Schema generation starts (`GraphQLSchemaProvider.init()`, async) before `applicationSetup()` starts Koin, as in upstream's `Main`; ServiceLoader has no ordering dependency, and shadowJar already merges service files. |
+| A null `type` in a condition or input means "both kinds" (`extensions`, `extensionStores`, `fetchExtensions`); in `addExtensionStore` it means `MANGA`, and a null `format` means `AUTO`. | Usual GraphQL condition semantics; an add needs one kind, and `MANGA` keeps upstream's input valid. |
+| Single-id `updateExtension` reports what it can't do (`NOT_FOUND`, `INSTALL_FAILED` for "already installed", "no update", "not installed"); batch `updateExtensions` keeps upstream's skip-what-doesn't-apply behaviour. | A client asking for one action should hear why it didn't happen; upstream's batch semantics are relied on (its `PermissionsTest` sends an unknown id and expects no error). |
+| Every GraphQL error carries `extensions = {code, details}`, messages carry no stack traces, graphql-java's own errors are `BAD_REQUEST`, unknown failures `INTERNAL`; REST/binary errors are `{code, message, details}` with upstream's statuses. Added codes: `SOURCE_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `INTERNAL`. One classifier (`ErrorClassifier`) serves both. | Clients branch on a stable code, never on message text; one mapping keeps GraphQL and REST in step. |
+| A source that can't be loaded is diagnosed (`SourceAccess`: `NOT_FOUND`, or `UNTRUSTED` with the hash) instead of surfacing as upstream's null pointer or "Source not installed". | `GetSource.getSourceOrNull` swallows the reason; the trust prompt needs it. |
+| Events are GraphQL subscriptions (`extensionInstallProgress`, `extensionStoreRefreshed`) on upstream's `graphql-transport-ws` endpoint, with no replay. | The protocol and endpoint already exist; a client subscribes before it starts the operation. |
+| The integration tests run in `api` on the production singletons and network stack, against a loopback JDK `HttpServer` that serves `core`'s `TestRepo` fixtures and the real APKs; `api`'s tests use `core`'s test classes through the test source set's output. | No new dependency (okhttp `MockWebServer`) and the real HTTP path is covered; the resolvers use the `default` instances, which can't be swapped; one copy of the test helpers. |
 
 ## 10. Findings log
 
@@ -198,3 +225,13 @@ Extension lifecycle (Stage 6):
 - **Sidecar smoke** (the existing `updateExtension(install)` mutation, real Keiyoushi):
   - On a fresh data dir, MangaPill installs to `extensions/manga/<pkg>/…-v1.6.1.jar` with `signature_hash` = the Keiyoushi key, trusted (STORE row), `is_loaded = true`, live `SOURCE` row `8448310129093543312`, and popular browses (10 mangas).
   - On a data dir made with the Stage 5 jar, which installed MangaPill upstream's way (Keiyoushi `jarUrl`, flat `extensions/` layout, no hash), the new jar refuses to load it (`UNTRUSTED`, so popular fails). Uninstall deletes the flat jar, and a reinstall gives the same result as on the fresh dir.
+
+**2026-11-03: API (Stage 7).**
+- **Sidecar smoke** (`smoke7`: the new jar against the real Keiyoushi and yuzono repos, over HTTP and `graphql-transport-ws`):
+  - Fresh data dir: `addExtensionStore` with `type: MANGA` (Keiyoushi) and `type: ANIME` (yuzono) resolve to their `index.pb` (`format: AUTO`), both `signingKeyTrusted`; yuzono as `MANGA` is refused with `REPO_TYPE_MISMATCH`. `fetchExtensions` per type: 1454 manga, 247 anime (1701 without a type).
+  - `updateExtension(install)` for MangaPill and AnimeGG: both trusted by their repo's key, MangaPill `isLoaded = true`, AnimeGG `isLoaded = false`; `extensionInstallProgress` delivered `DOWNLOADING → VERIFYING → CONVERTING → INSTALLED` for each over the WebSocket. `animeSources` lists AnimeGG (`2247987965040486818`), popular MangaPill browses (10 mangas), installing it again gives `errors[0].extensions.code = INSTALL_FAILED`, and `trustedSignatures` shows the two STORE keys with their repos and extensions. Closing stdin exits with code 0; the H2 rows (`EXTENSION`, `ANIME_SOURCE`, `SOURCE`, `TRUSTED_SIGNATURE`, `EXTENSIONSTORE`) and the jars under `extensions/{manga,anime}/<pkg>/` are as expected.
+  - Data dir made with the Stage 6 jar (Keiyoushi + MangaPill installed): no migration is needed; MangaPill stays installed and loaded and browses, re-adding Keiyoushi and adding yuzono work, AnimeGG installs.
+- graphql-java's own errors (syntax, validation) don't reach a `DataFetcherExceptionHandler`, but they do pass through an instrumentation's `instrumentExecutionResult`, which is where they get `code = BAD_REQUEST`. In graphql-java 26.1 that method's `parameters` argument is non-null in Kotlin.
+- The server selects no WebSocket subprotocol (nothing in upstream or Madoyomi negotiates one). The smoke's .NET `ClientWebSocket` connects without requesting one (it worked); a client that requires `graphql-transport-ws` to be echoed back would reject the handshake (.NET does when a requested subprotocol isn't echoed; not tried here, worth checking with the Phase 3 client). PowerShell 5.1's `Invoke-WebRequest` also decodes the JSON as Latin-1 (the response has no charset), so the smoke prints yuzono's name `Yūzōnō` garbled; the server sends UTF-8.
+- `ApplicationTest.databaseSetup` leaves its in-memory database as `TransactionManager.defaultDatabase`, so a test that connects a scratch database must set it as the default itself (core's `ExtensionLifecycleTest` doesn't extend `ApplicationTest` and never hit this).
+- Upstream's `JavalinExceptionHandlersTest` asserted the plain-text 424 body; it now expects the JSON error body (a `// Madoyomi:` edit). Upstream's `CefTest` downloads a JBR from GitHub and failed once on a DNS error; it passes on a rerun.
