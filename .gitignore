@@ -24,6 +24,13 @@ target/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 
+# Upstream binary assets (fonts, test images): not committed, restored by
+# tools/fetch-upstream-assets.ps1 from Suwayomi-Server at the pinned commit (see server/UPSTREAM.md)
+server/AndroidCompat/src/main/resources/font/**/*.ttf
+server/**/src/test/resources/*.heif
+server/**/src/test/resources/*.avif
+server/**/src/test/resources/*.jxl
+
 # Local tool binaries (dex2jar, jadx, mpv builds, test APKs, jlink output)
 tools/bin/
 tools/apks/
