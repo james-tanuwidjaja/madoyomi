@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes) is done and **Phase 1 (backend foundation)** is in progress. So far there is the Tauri + Vue app shell, the throwaway spikes, and the backend in `server/`: a Suwayomi-Server fork rebranded as Madoyomi-Server, which runs as a local sidecar (loopback only, random port, API token), is split into modules, has the database groundwork for anime (anime tables, a manga/anime `type` on repos and extensions, a trusted-signature table), and has a repo manager that reads both index formats (JSON and protobuf, for Aniyomi and Mihon repos), trusts a repo's signing key when it is added, and keeps the last good list when a refresh fails. Next comes extension install with trust. The app doesn't use the real backend yet. See the [Roadmap](#roadmap).
+> **Early development. Not usable yet.** Phase 0 (spikes) is done and **Phase 1 (backend foundation)** is in progress. So far there is the Tauri + Vue app shell, the throwaway spikes, and the backend in `server/`: a Suwayomi-Server fork rebranded as Madoyomi-Server, which runs as a local sidecar (loopback only, random port, API token), is split into modules, has the database groundwork for anime (anime tables, a manga/anime `type` on repos and extensions, a trusted-signature table), and has a repo manager that reads both index formats (JSON and protobuf, for Aniyomi and Mihon repos), trusts a repo's signing key when it is added, and keeps the last good list when a refresh fails. Extensions of both kinds install from their APKs only after the APK's signature checks out, and only extensions whose signing certificate is trusted get loaded (anime extensions are installed but not run yet). Updates and uninstalls work too. Next comes the API for all of this (GraphQL, error codes). The app doesn't use the real backend yet. See the [Roadmap](#roadmap).
 
 ---
 
@@ -59,10 +59,10 @@ The backend in `server/` is a Gradle multi-module project:
 | Module | What |
 |---|---|
 | `api` | Entry point (`madoyomi.api.MainKt`), `/health`, the API-token filter. Builds the server jar. |
-| `core` | DB and migrations (manga and anime tables), the repo manager (JSON and protobuf indexes, repo trust), manga domain, settings, GraphQL API, the Javalin web server, startup |
+| `core` | DB and migrations (manga and anime tables), the repo manager (JSON and protobuf indexes, repo trust), extension install/update/uninstall with the signing-certificate trust gate, manga domain, settings, GraphQL API, the Javalin web server, startup |
 | `ext-manga` | Mihon manga source API (`eu.kanade.tachiyomi.source`) |
 | `ext-anime` | Aniyomi anime source API (`eu.kanade.tachiyomi.animesource`), ported from Aniyomi. It only compiles for now; anime sources run in Phase 2. |
-| `ext-host` | What extensions run on: OkHttp network stack, helpers, the dex2jar bytecode fixer, the extension classloader |
+| `ext-host` | What extensions run on: OkHttp network stack, helpers, the dex2jar bytecode fixers (including a repair for R8-optimised APKs), the extension classloader, APK inspection and signature verification (apksig) |
 | `AndroidCompat` | Android API stubs that extensions call |
 | `server-config`, `server-config-generate`, `i18n` | Settings, generated settings code, translations |
 

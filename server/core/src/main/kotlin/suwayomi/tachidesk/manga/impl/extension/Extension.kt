@@ -17,13 +17,13 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import eu.kanade.tachiyomi.source.local.LocalSource
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.core.extension.ExtensionLifecycle
 import madoyomi.exthost.ExtensionKind
 import net.dongliu.apk.parser.ApkFile
 import net.dongliu.apk.parser.bean.Icon
 import okhttp3.CacheControl
 import org.apache.commons.compress.archivers.zip.ZipFile
 import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
@@ -47,7 +47,6 @@ import suwayomi.tachidesk.manga.impl.util.PackageTools.METADATA_NAME
 import suwayomi.tachidesk.manga.impl.util.PackageTools.METADATA_NSFW
 import suwayomi.tachidesk.manga.impl.util.PackageTools.METADATA_SOURCE_CLASS
 import suwayomi.tachidesk.manga.impl.util.PackageTools.dex2jar
-import suwayomi.tachidesk.manga.impl.util.PackageTools.getPackageInfo
 import suwayomi.tachidesk.manga.impl.util.ResourceArscIconParser
 import suwayomi.tachidesk.manga.impl.util.network.await
 import suwayomi.tachidesk.manga.impl.util.source.GetSource
@@ -106,38 +105,12 @@ object Extension {
         isUpdate: Boolean = false,
     ): String {
         logger.debug { "Installing $pkgName" }
-        val extension =
-            transaction {
-                ExtensionTable
-                    .select(ExtensionTable.apkUrl, ExtensionTable.jarUrl)
-                    // Madoyomi: and type = MANGA, the manga loader never installs other kinds
-                    .where { (ExtensionTable.pkgName eq pkgName) and (ExtensionTable.type eq ExtensionKind.MANGA) }
-                    .firstOrNull()
-            } ?: throw NullPointerException("Could not find extension for $pkgName")
-        val jarUrl = extension[ExtensionTable.jarUrl]
-        val apkUrl = extension[ExtensionTable.apkUrl]
-
-        return when {
-            jarUrl != null -> {
-                installExtension(isUpdate = isUpdate) {
-                    val jar = fetchExtensionFile(jarUrl)
-                    val manifest = extractAndParseAndroidManifest(jar)
-                    ExtensionPackage.Jar(jar, manifest)
-                }
-            }
-
-            apkUrl != null -> {
-                installExtension(isUpdate = isUpdate) {
-                    val apk = fetchExtensionFile(apkUrl)
-                    val packageInfo = getPackageInfo(apk)
-                    ExtensionPackage.Apk(apk, packageInfo)
-                }
-            }
-
-            else -> {
-                throw NullPointerException("Could not find extension url for $pkgName")
-            }
-        }
+        // Madoyomi: a verified, APK-only install behind the trust gate (madoyomi.core.extension.ExtensionLifecycle;
+        // Keiyoushi's jarUrl is ignored, an untrusted extension is never instantiated). Upstream: download jarUrl or
+        // apkUrl, then installExtension(isUpdate = isUpdate) { ExtensionPackage.Jar/Apk(...) }
+        val lifecycle = ExtensionLifecycle.default
+        val result = if (isUpdate) lifecycle.update(pkgName, ExtensionKind.MANGA) else lifecycle.install(pkgName, ExtensionKind.MANGA)
+        return result.pkgName
     }
 
     private fun copyToExtensionsRoot(
@@ -164,27 +137,9 @@ object Extension {
         inputStream: InputStream,
         extensionName: String,
     ): String =
-        when {
-            extensionName.endsWith(".jar") -> {
-                installExtension(isExternal = true) {
-                    val jar = copyToExtensionsRoot(inputStream, extensionName)
-                    val manifest = extractAndParseAndroidManifest(jar)
-                    ExtensionPackage.Jar(jar, manifest)
-                }
-            }
-
-            extensionName.endsWith(".apk") -> {
-                installExtension(isExternal = true) {
-                    val apk = copyToExtensionsRoot(inputStream, extensionName)
-                    val packageInfo = getPackageInfo(apk)
-                    ExtensionPackage.Apk(apk, packageInfo)
-                }
-            }
-
-            else -> {
-                throw NullPointerException("Could not find extension type for $extensionName")
-            }
-        }
+        // Madoyomi: signed APKs only, verified and behind the trust gate (a jar has no signature to check). Upstream:
+        // .jar -> installExtension(isExternal = true) { ExtensionPackage.Jar(...) }, .apk -> ExtensionPackage.Apk(...)
+        ExtensionLifecycle.default.installExternal(inputStream, extensionName).pkgName
 
     sealed class ExtensionPackage {
         abstract val file: Path
@@ -506,7 +461,8 @@ object Extension {
         }
     }
 
-    private fun setupJar(
+    // Madoyomi: internal (upstream: private), also used by madoyomi.core.extension.ExtensionLifecycle
+    internal fun setupJar(
         extensionMainClassInstance: Any,
         className: String,
         extensionName: String,
@@ -596,7 +552,8 @@ object Extension {
         }
     }
 
-    private fun extractAndCacheApkIcon(
+    // Madoyomi: internal (upstream: private), also used by madoyomi.core.extension.ExtensionLifecycle
+    internal fun extractAndCacheApkIcon(
         apkFile: Path,
         pkgName: String,
     ) {
@@ -629,8 +586,9 @@ object Extension {
         saveImage("$iconCacheDir/$pkgName", inputStream, null)
     }
 
+    // Madoyomi: internal (upstream: private), also used by madoyomi.core.extension.ExtensionLifecycle
     @OptIn(ExperimentalPathApi::class)
-    private fun extractAssetsFromApk(
+    internal fun extractAssetsFromApk(
         apkFile: Path,
         jarFile: Path,
     ) {
@@ -722,7 +680,8 @@ object Extension {
         preferences.edit().putStringSet(FILES_TO_DELETE, failedFileDeletions.toSet()).apply()
     }
 
-    private fun tryToDeleteFile(file: Path) {
+    // Madoyomi: internal (upstream: private), also used by madoyomi.core.extension.ExtensionLifecycle
+    internal fun tryToDeleteFile(file: Path) {
         try {
             file.deleteIfExists()
         } catch (e: Exception) {
@@ -732,50 +691,25 @@ object Extension {
         }
     }
 
-    private fun removeDeletionOnStartupRequest(file: Path) {
+    // Madoyomi: internal (upstream: private), also used by madoyomi.core.extension.ExtensionLifecycle
+    internal fun removeDeletionOnStartupRequest(file: Path) {
         filesToDeleteOnStartup.remove(file.toRealPath().absolutePathString())
         preferences.edit().putStringSet(FILES_TO_DELETE, filesToDeleteOnStartup).apply()
     }
 
-    fun uninstallExtension(pkgName: String) {
+    // Madoyomi: suspend (upstream: blocking), delegates to madoyomi.core.extension.ExtensionLifecycle: unload, delete the
+    // SOURCE rows, reset or delete the row, delete the jar (Madoyomi or upstream layout) with upstream's
+    // delete-on-next-start fallback
+    suspend fun uninstallExtension(pkgName: String) {
         logger.debug { "Uninstalling $pkgName" }
 
-        transaction {
-            // Madoyomi: and type = MANGA, the manga path never uninstalls other kinds
-            val extensionRecord =
-                ExtensionTable
-                    .selectAll()
-                    .where { (ExtensionTable.pkgName eq pkgName) and (ExtensionTable.type eq ExtensionKind.MANGA) }
-                    .first()
-            val extensionId = extensionRecord[ExtensionTable.id].value
-
-            val sources = SourceTable.selectAll().where { SourceTable.extension eq extensionId }.map { it[SourceTable.id].value }
-
-            SourceTable.deleteWhere { SourceTable.extension eq extensionId }
-
-            if (extensionRecord[ExtensionTable.isObsolete] || extensionRecord[ExtensionTable.apkUrl] == null) {
-                ExtensionTable.deleteWhere { ExtensionTable.pkgName eq pkgName }
-            } else {
-                ExtensionTable.update({ ExtensionTable.pkgName eq pkgName }) {
-                    it[isInstalled] = false
-                    it[hasUpdate] = false
-                    it[apkName] = null
-                }
-            }
-
-            unload(extensionRecord, sources)
-
-            tryToDeleteFile(getJarPath(extensionRecord))
-        }
+        ExtensionLifecycle.default.uninstall(pkgName, ExtensionKind.MANGA)
     }
 
     suspend fun updateExtension(pkgName: String): String {
-        val targetExtension =
-            checkNotNull(ExtensionsList.updateMap[pkgName]) {
-                "Extension update information for \"$pkgName\" missing. Refetch the extensions"
-            }
-
-        logger.debug { "Updating $pkgName to ${targetExtension.versionName}" }
+        // Madoyomi: the version comes from the repo index, re-fetched by the update (upstream: checkNotNull of the
+        // in-memory ExtensionsList.updateMap entry, which a restart loses)
+        logger.debug { "Updating $pkgName to ${ExtensionsList.updateMap[pkgName]?.versionName ?: "the listed version"}" }
 
         val result = installExtension(pkgName, true)
 

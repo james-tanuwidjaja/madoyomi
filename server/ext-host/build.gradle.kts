@@ -41,9 +41,21 @@ dependencies {
 
     // BytecodeEditor (must match the dex2jar version)
     implementation(libs.asm)
+
+    // ApkInspector: APK signature verification (v1/v2/v3)
+    implementation(libs.apksig)
+
+    testImplementation(libs.bundles.sharedTest)
 }
 
 tasks {
+    test {
+        useJUnitPlatform()
+        testLogging {
+            events("passed", "skipped", "failed")
+        }
+    }
+
     withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile> {
         compilerOptions {
             freeCompilerArgs.add("-opt-in=kotlinx.serialization.ExperimentalSerializationApi")

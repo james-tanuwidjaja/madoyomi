@@ -15,11 +15,11 @@ These are source files copied or forked into the tree. Each keeps its original l
 
 ## Notable libraries
 
-These are dependencies, not copied code. Gradle resolves them and bundles them into the server jar (apksig only from Stage 6; until then it is a compile-only dependency of `AndroidCompat`).
+These are dependencies, not copied code. Gradle resolves them and bundles them into the server jar.
 
 | Library | License | Used for |
 |---|---|---|
-| [apksig](https://android.googlesource.com/platform/tools/apksig/) (`com.android.tools.build:apksig`) | Apache-2.0 | APK signature verification (extension trust, Phase 1 Stage 6) |
+| [apksig](https://android.googlesource.com/platform/tools/apksig/) (`com.android.tools.build:apksig`) | Apache-2.0 | APK signature verification for extension trust (`server/ext-host`, `madoyomi.exthost.ApkInspector`) |
 | [dex2jar](https://github.com/ThexXTURBOXx/dex2jar) | Apache-2.0 | Converting extension APKs to JVM bytecode |
 | [OkHttp](https://github.com/square/okhttp) | Apache-2.0 | HTTP client that extensions expect |
 | [NanoHTTPD](https://github.com/NanoHttpd/nanohttpd) 2.3.1 | BSD-3-Clause | `animesource.model.HttpServer` in `server/ext-anime` |

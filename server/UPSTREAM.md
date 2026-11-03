@@ -96,7 +96,7 @@ Paths below are Madoyomi paths, relative to `server/`.
 | `buildSrc/src/main/kotlin/Constants.kt` | `MainClass = "madoyomi.api.MainKt"`; fixed version `v0.1.0` (must stay numeric `vX.Y.Z`, `AppInfo` derives the version code from it) |
 | `core/build.gradle.kts` | BuildConfig `GITHUB`/`DISCORD`, test system properties use `madoyomi.config.`; **deleted** the `downloadWebUI` and `runElectron` tasks. Module split: no `application`/shadow plugins (moved to `api/build.gradle.kts`, jar vendor `Madoyomi`), depends on `ext-host`/`ext-manga`/`ext-anime`, project paths `:i18n`, `:server-config`, `:server-config-generate` |
 | `server-config-generate/build.gradle.kts` | `generateSettings` targets `:core` (upstream `:server`), with `evaluationDependsOn(":core")` since the two are siblings now; `projects.serverConfig` |
-| `ext-host/`, `ext-manga/`, `ext-anime/`, `api/` `build.gradle.kts` (new) | the new modules |
+| `ext-host/`, `ext-manga/`, `ext-anime/`, `api/` `build.gradle.kts` (new) | the new modules. Since Stage 6 `ext-host` depends on apksig (`implementation`, so it is bundled into the server jar) and has its own JUnit tests |
 
 ### Rebrand (user-visible names only)
 
@@ -153,7 +153,7 @@ Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENS
 | `core/.../manga/model/table/ExtensionStoreTable.kt` | new columns `type`, `format`, `lastRefreshedAt`, `lastError`, `signingKeyTrusted` |
 | `core/.../manga/impl/extension/ExtensionsList.kt` | `type = MANGA` on `extensionTableAsDataClass` and on the installed set of `updateExtensionDatabase` (which drives its updates, obsolete marking and deletes) |
 | `core/.../manga/impl/extension/ExtensionStoreService.kt` | `type = MANGA` on the store sets of `getAndRefresh`, `syncDbToPrefs` and `syncPrefsToDb`, and on the delete in `syncPrefsToDb` (the `extensionStores` setting lists manga stores only) |
-| `core/.../manga/impl/extension/Extension.kt` | `type = MANGA` on the `installExtension(pkgName)` and `uninstallExtension` lookups |
+| `core/.../manga/impl/extension/Extension.kt` | `type = MANGA` on the `installExtension(pkgName)` and `uninstallExtension` lookups (since Stage 6 both delegate to `ExtensionLifecycle` with `ExtensionKind.MANGA`, see "Extension lifecycle" below) |
 | `core/.../manga/impl/util/source/GetSource.kt` | `type = MANGA` on the extension lookup, so the manga loader can never load another kind of jar |
 | `core/.../graphql/queries/ExtensionQuery.kt` | `extensions`: `type = MANGA` in the base query's `adjustWhere` (covers nodes, `totalCount` and page info) |
 | `core/.../graphql/queries/ExtensionStoreQuery.kt` | `extensionStores`: `type = MANGA` on the base query |
@@ -185,10 +185,11 @@ How the repo manager behaves:
   - Every listed pkg must match the kind (`.animeextension.` / `.extension.`).
   - The repo's signing key is trusted: `signing_key_trusted = true`, plus a `TRUSTED_SIGNATURE` row (origin STORE) unless that hash already has one.
   - Re-adding with a new key revokes the old key, unless another repo still vouches for it.
+  - Since Stage 6, installed extensions signed with the trusted key are then loaded (`onTrusted` → `ExtensionLifecycle.reconcileTrust`), e.g. ones installed while the repo was untrusted.
 - **Remove:**
   - The FK cascade drops the repo's trust row. `TRUSTED_SIGNATURE.hash` is the primary key, so a key shared with another trusted repo gets its row re-pointed at that repo, and USER trust is never touched.
   - The repo's uninstalled listings are deleted.
-  - Installed extensions of the repo (or signed with its key) whose hash is no longer trusted get `is_loaded = false` and are unloaded (`ExtensionUnloader`: sources out of `GetSource`'s cache, class loader closed). Until Stage 6 adds the trust gate to `GetSource`, a manga extension unloaded this way can still be reloaded lazily.
+  - Installed extensions of the repo (or signed with its key) whose hash is no longer trusted get `is_loaded = false` and are unloaded (`ExtensionUnloader`: sources out of `GetSource`'s cache, class loader closed, load permit revoked). Since Stage 6 the trust gate keeps `GetSource` from reloading them.
 - **Refresh** (`refreshAll(kind?)`, on demand through `fetchExtensions` and at startup):
   - A failed repo keeps its rows and gets `last_error`; a row it last listed is only replaced by a newer version.
   - Pruning (upstream's delete/obsolete of missing entries) only runs when every repo of that kind fetched.
@@ -199,6 +200,38 @@ How the repo manager behaves:
 - **Persistence.** Anime repos live only in `EXTENSIONSTORE`. Manga repos are also mirrored to the upstream `extensionStores` setting.
 - **Duplicates.** A pkg offered by two repos of the same kind keeps upstream's rule: one row, the highest version code wins.
 - No migration: every column used here exists since `M0069`.
+
+### Extension lifecycle (Phase 1 Stage 6)
+
+Install, update, uninstall and trust of both kinds live in `madoyomi.core.extension.ExtensionLifecycle` (see "New Madoyomi code"). Upstream's entry points delegate to it, and one trust gate sits in front of the only place extension code is loaded.
+
+| File | Change |
+|---|---|
+| `core/.../manga/impl/util/PackageTools.kt` | `loadExtensionSourcesWithLockHeld` (the only `Class.forName` + `newInstance` of extension code, reached from `GetSource` and from install) first calls `ExtensionLoadGate.check(jar)`, which throws `UNTRUSTED` unless the jar has a permit whose hash is in `TRUSTED_SIGNATURE` |
+| `core/.../manga/impl/util/source/GetSource.kt` | the jar path comes from `ExtensionFiles.installedJar(row)` (Madoyomi layout for verified installs, upstream's flat path otherwise), and the row's `signature_hash` is recorded as the jar's permit before loading. An untrusted or unverified jar is refused, so `getSourceOrNull` returns null (and `SourceType`/`getSourceOrStub` behave as for any failing source). The unused `Path` import went |
+| `core/.../manga/impl/extension/Extension.kt` | `installExtension(pkgName, isUpdate)` → `ExtensionLifecycle.install`/`update(pkgName, MANGA)` (upstream: download `jarUrl` or `apkUrl`, then `installExtension(isUpdate) { ExtensionPackage… }`); `installExternalExtension` → `installExternal` (APKs only); `uninstallExtension` is `suspend` (upstream: blocking) and → `uninstall(pkgName, MANGA)`; `updateExtension` no longer requires the in-memory `ExtensionsList.updateMap` entry (the update re-fetches the index), and still clears it. `setupJar`, `extractAssetsFromApk`, `extractAndCacheApkIcon`, `tryToDeleteFile` and `removeDeletionOnStartupRequest` are `internal` (upstream: `private`), for `ExtensionLifecycle`. The generic `installExtension(isExternal, isUpdate, fetchPackage)`, `ExtensionPackage` and the download helpers stay but are no longer called (and their loader is gated) |
+
+How it behaves:
+- **Install** (`install(pkg, kind)`):
+  - The listing is re-read from the repo the row came from (`RepoIndexFetcher`, the store's stored URL and format): it is the authority for the expected package and version code, and it carries the sources, which the DB doesn't store.
+  - Only the APK is downloaded; Keiyoushi's prebuilt `jarUrl` is ignored.
+  - `ApkInspector` (ext-host) verifies it with apksig (v1/v2/v3/v3.1/v4; `SIGNATURE_INVALID` otherwise), and its feature, package and version code must match the repo's kind and listing (`PACKAGE_MISMATCH`). An extensions-lib outside `ExtensionKind.libRange` is only a warning; so is a torrent flag that disagrees with the manifest (the manifest wins).
+  - `signature_hash` = SHA-256 of the first signer certificate, lowercase hex (the format of a repo's `signingKeyFingerprint`).
+  - dex2jar (upstream `PackageTools.dex2jar`, with `BytecodeEditor`), then `Dex2jarRepair` (ext-host, see below), then upstream's asset and icon extraction.
+  - Files: `<data>/extensions/{manga|anime}/{pkg}/{pkg}-v{versionName}.jar`. Icons stay in upstream's cache `<data>/extensions/icon/<pkg>.*`, which upstream's icon endpoint serves.
+  - **Trusted manga:** loaded and recorded by upstream's `setupJar` (live sources reconcile `SOURCE`), plus `signature_hash` and `is_loaded = true`.
+  - **Untrusted manga, and every anime extension:** never instantiated. The row is written the way `setupJar` would, plus `signature_hash`, `is_torrent`, `is_loaded = false`, and the source rows come from the listing (`SOURCE` for manga, `ANIME_SOURCE` for anime).
+  - Progress: `ExtensionLifecycle.progress` emits `DOWNLOADING → VERIFYING → CONVERTING → INSTALLED | FAILED` (with the error code), for the Stage 7 subscription.
+- **Sideloads** (`installExternal`): APKs only (a jar has no signature: `SIGNATURE_INVALID`); the kind comes from the APK's feature; no listing, so no source rows until trusted.
+- **Trust** is `signature_hash ∈ TRUSTED_SIGNATURE` (`SignatureTrust`). `trustSignature`/`trustExtension` add a USER row (or turn the repo's STORE row into USER, so removing the repo no longer revokes it) and load the installed manga extensions signed with it (`reconcileTrust`: `setupJar`, `is_loaded = true`). `untrustSignature` withdraws USER trust only (a key a repo vouches for stays trusted) and unloads what lost trust. Anime: trusted, but never loaded before Phase 2.
+- **Update** (`update(pkg, kind)`): the repo must list a higher version code (upstream's `hasUpdate`, set by the refresh, is the detection). It re-runs install. If the installed version has a hash and the new APK is signed by another one that isn't trusted, the update is refused with `SIGNATURE_CHANGED` before anything is written, and the installed version stays (loaded, if it was). The old jar is deleted with upstream's delete-on-next-start fallback.
+- **Uninstall:** unload (sources out of `GetSource`, `jarLoaderMap.remove(jar)?.close()`, permit revoked), delete the `SOURCE`/`ANIME_SOURCE` rows, upstream's row rule (delete if obsolete or without `apkUrl`, else back to a plain listing) plus `signature_hash = null`, `is_loaded = false`, then the jar (Madoyomi or upstream layout) via `tryToDeleteFile`.
+- **Upstream-layout installs** (no `signature_hash`: dev data, anything installed by upstream or before Stage 6) are never loaded. Uninstall and reinstall them, or update them when the repo lists a newer version.
+- **dex2jar repair.** Keiyoushi's APKs are R8-optimised in two ways that dex2jar 2.4.38 translates into bytecode the JVM rejects (MangaPill v1.6.1: `VerifyError` in 6 of 30 classes). `Dex2jarRepair` (ext-host) fixes both after dex2jar:
+  - *Constructor elision:* some classes lose their no-op constructor, and the dex does `new-instance LT;` + `invoke-direct LS;-><init>` with S an ancestor of T. ART accepts it, the JVM doesn't, and dex2jar makes it `new S`. The pass reads the dex, rewrites those sites back to `new T`/`T.<init>`, and gives T (and any class between T and S) the missing `super`-only constructor. Unmappable sites are skipped and reported as install warnings.
+  - *Frames:* dex2jar computes stack map frames without the APK's own class hierarchy, so a merge of two of its classes (an `a` or a `b`, both extending `c`) is typed `java/lang/Object` and a later use as `c` fails. The pass recomputes the frames of every class with a hierarchy read from the jar and the host classpath.
+  - The yuzono APKs need no constructor repair; their frames are recomputed too, and every class of both kinds' test jars passes the verifier.
+- No migration: every column used here exists since `M0069`/`M0070`.
 
 ### New Madoyomi code
 
@@ -224,8 +257,16 @@ How the repo manager behaves:
 | `core/src/main/kotlin/madoyomi/core/repo/AnimeNetworkExtensionStore.kt` | Aniyomi's `index.pb` schema (reverse-engineered, see the Phase 1 doc §10) |
 | `core/src/main/kotlin/madoyomi/core/repo/RepoIndexFetcher.kt` | format detection/override and redirects over a `RepoHttp` (the default uses `NetworkHelper`'s client) |
 | `core/src/main/kotlin/madoyomi/core/repo/RepoService.kt` | repo add/remove/refresh, trust and the last-good cache (see "Repo manager" above) |
-| `core/src/main/kotlin/madoyomi/core/extension/ExtensionUnloader.kt` | drops a loaded extension's sources and class loader |
-| `core/src/main/kotlin/madoyomi/core/error/MadoyomiException.kt` | `MadoyomiException(code, message, details)` + `ErrorCode` (Stage 7 maps it to GraphQL errors) |
+| `core/src/main/kotlin/madoyomi/core/extension/ExtensionUnloader.kt` | drops a loaded extension's sources and class loader (and, since Stage 6, its load permit; jar path from `ExtensionFiles`) |
+| `core/src/main/kotlin/madoyomi/core/error/MadoyomiException.kt` | `MadoyomiException(code, message, details)` + `ErrorCode` (Stage 7 maps it to GraphQL errors). Stage 6 added `SIGNATURE_INVALID`, `SIGNATURE_CHANGED`, `UNTRUSTED`, `PACKAGE_MISMATCH`, `INSTALL_FAILED` |
+| `ext-host/src/main/kotlin/madoyomi/exthost/ExtensionKind.kt` (Stage 6 additions) | per kind: `feature`, `classKey`, `nsfwKey`, `torrentKey`, `labelPrefix`, `libRange` (manga 1.3–1.6, anime 12–16), `dirName`; shared `NAME_KEY`/`LIB_KEY`/`CONTENT_WARNING_KEY`; `fromFeatures` |
+| `ext-host/src/main/kotlin/madoyomi/exthost/ApkInspector.kt` | manifest (apk-parser, typed values such as Keiyoushi's float `extensionLib` decoded) + apksig verification and signer SHA-256 |
+| `ext-host/src/main/kotlin/madoyomi/exthost/Dex2jarRepair.kt` | the dex2jar post-pass: R8 constructor elision and frames recomputed with the APK's class hierarchy (see "Extension lifecycle") |
+| `core/src/main/kotlin/madoyomi/core/extension/ExtensionLifecycle.kt`, `ExtensionInstallProgress.kt` | install/update/sideload/uninstall/trust, the progress flow and `InstallResult` |
+| `core/src/main/kotlin/madoyomi/core/extension/ExtensionFiles.kt` | the jar layout (Madoyomi and upstream) and the icon dir |
+| `core/src/main/kotlin/madoyomi/core/extension/ExtensionLoadGate.kt` | the trust gate: per-jar permits (the verified hash) checked against `TRUSTED_SIGNATURE` at load time |
+| `core/src/main/kotlin/madoyomi/core/extension/SignatureTrust.kt` | `TRUSTED_SIGNATURE` reads, USER trust/untrust, and the shared-key re-homing (moved from `RepoService`) |
+| `ext-host/src/test/kotlin/madoyomi/exthost/*`, `core/src/test/kotlin/madoyomi/core/extension/*` | `ApkInspectorTest`, `Dex2jarRepairTest`, `ExtensionLifecycleTest`, `SignatureTrustTest` on the real APKs in the gitignored `tools/apks/` (fetched by `tools/fetch-test-apks.ps1`; tests skip without them). `ExtensionLifecycleLiveTest` installs from the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 | `core/src/test/kotlin/madoyomi/core/repo/*`, `core/src/test/resources/repo/*` | parser, fetcher and service tests. Fixtures are text: trimmed real yuzono `index.min.json`/`repo.json`, and trimmed yuzono and Keiyoushi `index.pb` stored as base64 of the gzipped bytes. `RepoServiceLiveTest` hits the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 
 ## Database migrations

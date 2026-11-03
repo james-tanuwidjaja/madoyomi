@@ -11,6 +11,8 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import eu.kanade.tachiyomi.source.online.HttpSource
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.core.extension.ExtensionFiles
+import madoyomi.core.extension.ExtensionLoadGate
 import madoyomi.exthost.ExtensionKind
 import madoyomi.exthost.SourceRegistry
 import org.jetbrains.exposed.v1.core.and
@@ -23,7 +25,6 @@ import suwayomi.tachidesk.manga.model.table.SourceTable
 import suwayomi.tachidesk.server.ApplicationDirs
 import uy.kohesive.injekt.injectLazy
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.io.path.Path
 import kotlin.io.path.div
 
 object GetSource {
@@ -63,8 +64,11 @@ object GetSource {
             extensionRecord[ExtensionTable.apkName]
                 ?: throw NullPointerException("Missing apkName")
         val className = extensionRecord[ExtensionTable.classFQName]
-        val jarName = apkName.substringBefore(".apk") + ".jar"
-        val jarPath = Path(applicationDirs.extensionsRoot) / jarName
+        // Madoyomi: the jar of a verified install is under extensions/manga/<pkg>/ (upstream:
+        // Path(applicationDirs.extensionsRoot) / (apkName.substringBefore(".apk") + ".jar")), and it may only be loaded
+        // with the row's signature hash as its permit: an untrusted or unverified jar is refused (UNTRUSTED)
+        val jarPath = ExtensionFiles.installedJar(extensionRecord) ?: throw NullPointerException("Missing apkName $apkName")
+        ExtensionLoadGate.permit(jarPath, extensionRecord[ExtensionTable.signatureHash])
 
         when (val instance = loadExtensionSources(jarPath, className)) {
             is Source -> listOf(instance)

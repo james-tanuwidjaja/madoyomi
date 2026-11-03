@@ -82,7 +82,8 @@ class RepoServiceTest {
     private val http = StubRepoHttp()
     private val unloaded = mutableListOf<String>()
     private var clock = 1_000L
-    private val service = RepoService(RepoIndexFetcher(http), unloader = { unloaded += it[ExtensionTable.pkgName] }, now = { clock })
+    private val service =
+        RepoService(RepoIndexFetcher(http), unloader = { unloaded += it[ExtensionTable.pkgName] }, now = { clock }, onTrusted = {})
 
     @BeforeEach
     fun setUp() {

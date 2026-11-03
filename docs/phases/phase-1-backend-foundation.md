@@ -84,11 +84,11 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 - [x] Repo add/remove/refresh with last-good cache (`RepoService`: type check, store-key trust, shared-key-safe remove, startup + on-demand refresh, `last_error`; see §9)
 
 ### Extension lifecycle
-- [ ] Install (download, verify, cert hash, dex2jar, store)
-- [ ] Trust prompt flow: untrusted extensions are not loaded
-- [ ] Update detection + update
-- [ ] Uninstall (unload + delete)
-- [ ] Works for both anime and manga APKs
+- [x] Install (download, verify, cert hash, dex2jar, store): `madoyomi.core.extension.ExtensionLifecycle`, APK-only with apksig (`madoyomi.exthost.ApkInspector`), the `Dex2jarRepair` post-pass, `extensions/{manga|anime}/{pkg}/`; progress flow for Stage 7 (see §9, §10)
+- [x] Trust prompt flow: untrusted extensions are not loaded (one gate in front of upstream's loader, `ExtensionLoadGate`; USER trust via `trustSignature`/`trustExtension`, which loads them; the GraphQL operations are Stage 7)
+- [x] Update detection + update (upstream `hasUpdate`; an untrusted new certificate is refused with `SIGNATURE_CHANGED`)
+- [x] Uninstall (unload + delete, `SOURCE`/`ANIME_SOURCE` rows, upstream's delete-on-next-start fallback)
+- [x] Works for both anime and manga APKs (real AnimeGG/AnimePahe/MangaPill in the tests; live installs from yuzono and Keiyoushi)
 
 ### API
 - [ ] `GET/POST/DELETE /api/repos`
@@ -122,7 +122,7 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 
 ## 9. Decision record
 
-Repo manager (Stage 5). The rest of the phase's decisions are added at the end of the phase.
+Repo manager (Stage 5) and extension lifecycle (Stage 6). The rest of the phase's decisions are added at the end of the phase.
 
 | Decision | Why |
 |---|---|
@@ -134,6 +134,21 @@ Repo manager (Stage 5). The rest of the phase's decisions are added at the end o
 | The existing `addExtensionStore`/`removeExtensionStore`/`fetchExtensions` mutations go through `RepoService` (manga). Stage 7 adds `type`/`format`. | They are the only entry points, and they must follow the trust model and the last-good cache. |
 | A refresh never grants trust. Repos added before Stage 5 stay untrusted (`signing_key_trusted = false`) until they are re-added. | Trust is only ever granted by a user action. |
 | Removing a repo revokes per signature: the row of a key shared with another trusted repo moves to that repo, and USER trust is never touched. | `TRUSTED_SIGNATURE.hash` is the primary key (one row per key). |
+
+Extension lifecycle (Stage 6):
+
+| Decision | Why |
+|---|---|
+| Install always downloads the APK and verifies it with apksig; Keiyoushi's `jarUrl` is ignored, and sideloaded jars are refused (`SIGNATURE_INVALID`). | A jar has no signature, so trust by signing certificate needs the APK. |
+| Every converted jar goes through a dex2jar post-pass, `Dex2jarRepair` (user decision 2026-11-03, over loading Keiyoushi's `jarUrl`). | dex2jar turns R8-optimised dex into bytecode the JVM rejects (§10). The repair keeps the code the user trusts the one that runs. |
+| `signature_hash` = SHA-256 of the first signer certificate, lowercase hex. | The same value and format as a repo's `signingKeyFingerprint`, so STORE trust needs no mapping. |
+| The listing (expected pkg/version, sources) is re-fetched from the extension's repo at install time; no cache, nothing persisted. | Always matches the APK being installed and survives restarts; one index download per install; no migration. |
+| One gate in front of upstream's only extension loader (`PackageTools.loadExtensionSourcesWithLockHeld`): a jar loads only with a permit (its verified hash) that is in `TRUSTED_SIGNATURE` at that moment. | Covers `GetSource` (and so GraphQL `SourceType`, browse, the updater), install and any path that bypasses Madoyomi's install. |
+| Untrusted manga and all anime extensions are never instantiated; their source rows come from the listing. Trusted manga loads and reconciles `SOURCE` with the live sources (upstream `setupJar`). | Extensions are arbitrary code (§7). Anime loading is Phase 2. |
+| An update signed by another, untrusted certificate is refused (`SIGNATURE_CHANGED`) before anything is written; the installed version stays as it was. Trusting the new certificate lets the retry through. | "The old version stays loaded, the new one is untrusted" without keeping two versions side by side. |
+| Upstream-layout installs (no `signature_hash`) are untrusted and never loaded; uninstall + install, or an update, replaces them. Repos added before Stage 5 have no trust row, so their installs come out untrusted. | The converted jar has no signature left to check, and a refresh never grants trust. |
+| User trust is a USER row; trusting a key a repo vouches for detaches its row from the repo. Untrusting only withdraws USER trust. Re-adding a repo also loads the installed extensions its key now covers. | `hash` is the primary key; the user's choice must outlive the repo, and the repo's must outlive an untrust. |
+| Jars live in `<data>/extensions/{manga|anime}/{pkg}/{pkg}-v{versionName}.jar`; icons stay in upstream's `extensions/icon/` cache. | Upstream's icon endpoint serves that cache; pkg names of the two kinds never collide. |
 
 ## 10. Findings log
 
@@ -161,3 +176,25 @@ Repo manager (Stage 5). The rest of the phase's decisions are added at the end o
 
   Each repo is trusted as a STORE key and refreshes cleanly.
 - kotlinx-protobuf can fail on truncated input with `IndexOutOfBoundsException`, not only `SerializationException`, so the parser treats any runtime exception as "not this format".
+
+**2026-11-03: extension APKs (Stage 6).** `ApkInspector` (apksig 9.4.1) on the real APKs in `tools/apks/` (`tools/fetch-test-apks.ps1`):
+
+| APK | Schemes that verify | minSdk | Signers | Cert SHA-256 | Repo key |
+|---|---|---|---|---|---|
+| yuzono AnimeGG v14.2 (code 2) | v2 only | 24 | 1 | `cbec121a…c45905` | yuzono `cbec121a…c45905`: **equal** |
+| yuzono AnimePahe v16.56 (code 56) | v2 only | 24 | 1 | `cbec121a…c45905` | equal (one key signs all of yuzono) |
+| Keiyoushi MangaPill v1.6.1 (code 106001) | v2 only | 26 | 1 | `9add655a…4da2` | Keiyoushi `9add655a…4da2`: **equal** |
+
+- None has a v1 (JAR) signature, so apk-parser's `apkSingers`, which upstream's `getPackageInfo` reads, finds no certificate at all: upstream couldn't have checked these signatures even if it tried.
+- The live run (`ExtensionLifecycleLiveTest`) installed AnimeGG from yuzono (`index.pb`) and MangaPill from Keiyoushi: both trusted by the repo key, AnimeGG with its listed `ANIME_SOURCE` (`2247987965040486818`, `https://www.animegg.org`), MangaPill loaded (`8448310129093543312`, `https://mangapill.com`).
+- **Keiyoushi's manifest** (MangaPill): feature `tachiyomi.extension`, class `keiyoushi.source.Generated` (absolute, not `.`-relative), `tachiyomi.extension.nsfw=1`, `tachiyomix.contentWarning=1`, and `tachiyomix.extensionLib` as a binary-XML *float* that apk-parser prints as `{4:1070386381}` (1.6f). `ApkInspector` decodes it. Upstream's `getPackageInfo` would store the raw `{4:…}` text as the lib.
+- **dex2jar mistranslates R8-optimised dex, in two ways.** Without a repair, 6 of MangaPill's 30 classes fail verification (`a`, `b`, `f`, `j`, `k`, `keiyoushi.source.Generated`; found by linking every class of the jar, which the tests now do).
+  - **Constructor elision.** Keiyoushi builds with R8 optimisations that remove no-op constructors. The dex then does `new-instance LT;` + `invoke-direct LS;-><init>` with S an ancestor of T (e.g. `new-instance Lq;` + `Object.<init>()` for a synthetic `Function0` lambda). ART allows this, the JVM doesn't, and dex2jar 2.4.38 turns it into `new S`, so `keiyoushi.source.Generated` failed with `VerifyError` (and the object would have had the wrong class anyway, so turning off verification is no fix).
+  - MangaPill has 12 such sites. `Dex2jarRepair` rewrites them and adds the missing constructors to 9 classes (`a, a0, b, b0, c, j, k, o, q`; `a`/`b` extend `c`, so `c` needs one too).
+  - **Frames without the class hierarchy.** dex2jar computes stack map frames without knowing the APK's own classes, so in `f.intercept` a local holding an `a` or a `b` (both extend `c`) is typed `java/lang/Object`, and its use as `c` fails. This showed up only at runtime (browse): the JVM verifies a class when it is first used. `Dex2jarRepair` recomputes every class's frames with a hierarchy read from the jar and the host classpath. After both fixes, all 30 classes verify, and MangaPill installs, loads and browses.
+  - The yuzono APKs have no elided constructors; their frames are recomputed as well, and all 37 classes of AnimeGG verify.
+  - This is probably why upstream installs Keiyoushi's prebuilt `jarUrl`. That jar is a separate JVM build (different class layout), not the APK's dex, and it is unsigned.
+  - Other R8 patterns may show up in other extensions; the Phase 2 compat harness should cover a manga sample too.
+- **Sidecar smoke** (the existing `updateExtension(install)` mutation, real Keiyoushi):
+  - On a fresh data dir, MangaPill installs to `extensions/manga/<pkg>/…-v1.6.1.jar` with `signature_hash` = the Keiyoushi key, trusted (STORE row), `is_loaded = true`, live `SOURCE` row `8448310129093543312`, and popular browses (10 mangas).
+  - On a data dir made with the Stage 5 jar, which installed MangaPill upstream's way (Keiyoushi `jarUrl`, flat `extensions/` layout, no hash), the new jar refuses to load it (`UNTRUSTED`, so popular fails). Uninstall deletes the flat jar, and a reinstall gives the same result as on the fresh dir.

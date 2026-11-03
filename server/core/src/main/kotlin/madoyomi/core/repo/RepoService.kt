@@ -13,7 +13,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
+import madoyomi.core.extension.ExtensionLifecycle
 import madoyomi.core.extension.ExtensionUnloader
+import madoyomi.core.extension.SignatureTrust
 import madoyomi.core.extension.SignatureTrustOrigin
 import madoyomi.core.extension.TrustedSignatureTable
 import madoyomi.exthost.ExtensionKind
@@ -67,6 +69,8 @@ class RepoService(
     private val fetcher: RepoIndexFetcher,
     private val unloader: ExtensionUnloader = ExtensionUnloader.default,
     private val now: () -> Long = { Instant.now().epochSecond },
+    /** Called with a key once [add] trusts it, to load what it now covers (default: [ExtensionLifecycle.reconcileTrust]). */
+    private val onTrusted: suspend (String) -> Unit = { ExtensionLifecycle.default.reconcileTrust(it) },
 ) {
     private val logger = KotlinLogging.logger {}
     private val mutex = Mutex()
@@ -130,7 +134,8 @@ class RepoService(
                                 id
                             }
                         trustStoreKey(id, fetched.meta)
-                        normalizeSigningKey(existing?.get(ExtensionStoreTable.signingKey))?.let(::rehomeStoreTrust)
+                        val previousKey = normalizeSigningKey(existing?.get(ExtensionStoreTable.signingKey))
+                        previousKey?.let { SignatureTrust.rehomeStoreTrust(it, now()) }
                         id
                     }
 
@@ -142,6 +147,10 @@ class RepoService(
                 transaction { ExtensionStoreTable.selectAll().where { ExtensionStoreTable.id eq storeId }.first() }
             }
         logger.info { "Added ${kind.name.lowercase()} repo ${row[ExtensionStoreTable.name]} (${row[ExtensionStoreTable.indexUrl]})" }
+        // installed extensions signed with the key (e.g. installed while it was untrusted) can load now
+        normalizeSigningKey(row[ExtensionStoreTable.signingKey])
+            ?.takeIf { row[ExtensionStoreTable.signingKeyTrusted] }
+            ?.let { onTrusted(it) }
         if (kind == ExtensionKind.MANGA && syncPrefs) ExtensionStoreService.syncDbToPrefs()
         return row
     }
@@ -162,7 +171,7 @@ class RepoService(
                         val kind = row[ExtensionStoreTable.type]
                         val storeKey = normalizeSigningKey(row[ExtensionStoreTable.signingKey])
                         ExtensionStoreTable.deleteWhere { ExtensionStoreTable.id eq row[ExtensionStoreTable.id].value }
-                        storeKey?.let(::rehomeStoreTrust)
+                        storeKey?.let { SignatureTrust.rehomeStoreTrust(it, now()) }
 
                         ExtensionTable.deleteWhere {
                             (ExtensionTable.storeIndexUrl eq indexUrl) and (ExtensionTable.type eq kind) and
@@ -365,28 +374,6 @@ class RepoService(
                 it[store] = EntityID(storeId, ExtensionStoreTable)
                 it[addedAt] = now()
             }
-        }
-    }
-
-    /**
-     * `TRUSTED_SIGNATURE.hash` is the primary key, so a key shared by several repos has a single row, owned by one of
-     * them. When that row went away (the owner was removed or re-keyed), give it to another repo that still trusts
-     * the key, so removing one repo doesn't revoke the others' trust.
-     */
-    private fun rehomeStoreTrust(hash: String) {
-        if (!TrustedSignatureTable.selectAll().where { TrustedSignatureTable.id eq hash }.empty()) return
-        val heir =
-            ExtensionStoreTable
-                .selectAll()
-                .where { ExtensionStoreTable.signingKeyTrusted eq true }
-                .orderBy(ExtensionStoreTable.id)
-                .firstOrNull { normalizeSigningKey(it[ExtensionStoreTable.signingKey]) == hash }
-                ?: return
-        TrustedSignatureTable.insert {
-            it[id] = hash
-            it[origin] = SignatureTrustOrigin.STORE
-            it[store] = heir[ExtensionStoreTable.id]
-            it[addedAt] = now()
         }
     }
 
