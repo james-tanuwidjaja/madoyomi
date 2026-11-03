@@ -86,7 +86,7 @@ class UserContextTest : GraphQLTest() {
             val tokens = Jwt.generateJwt(userId)
 
             noAuthHeader(ctx)
-            every { ctx.cookie("suwayomi-server-token") } returns tokens.accessToken
+            every { ctx.cookie("madoyomi-server-token") } returns tokens.accessToken
 
             val user = getUserFromContext(ctx)
 
@@ -101,7 +101,7 @@ class UserContextTest : GraphQLTest() {
             val tokens = Jwt.generateJwt(userId)
 
             noAuthHeader(ctx)
-            every { ctx.cookie("suwayomi-server-token") } returns null
+            every { ctx.cookie("madoyomi-server-token") } returns null
             every { ctx.queryParam("token") } returns tokens.accessToken
 
             val user = getUserFromContext(ctx)

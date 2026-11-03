@@ -1,4 +1,3 @@
-import de.undercouch.gradle.tasks.download.Download
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 import java.time.Instant
 
@@ -158,8 +157,9 @@ buildConfig {
 
     buildConfigField("String", "WEBUI_TAG", quoteWrap(webUIRevisionTag))
 
-    buildConfigField("String", "GITHUB", quoteWrap("https://github.com/Suwayomi/Suwayomi-Server"))
-    buildConfigField("String", "DISCORD", quoteWrap("https://discord.gg/DDZdqZWaHA"))
+    // Madoyomi: project links (upstream: Suwayomi GitHub and Discord)
+    buildConfigField("String", "GITHUB", quoteWrap("https://github.com/james-tanuwidjaja/madoyomi"))
+    buildConfigField("String", "DISCORD", quoteWrap(""))
     buildConfigField("String", "JCEF_VERSION", quoteWrap(libs.versions.jcef.get()))
     buildConfigField("String", "JCEF_JBR_RELEASE", quoteWrap(webviewJbrRelease))
 }
@@ -171,7 +171,8 @@ tasks {
             attributes(
                 "Main-Class" to MainClass,
                 "Implementation-Title" to rootProject.name,
-                "Implementation-Vendor" to "The Suwayomi Project",
+                // Madoyomi: vendor (upstream: "The Suwayomi Project")
+                "Implementation-Vendor" to "Madoyomi",
                 "Specification-Version" to getTachideskVersion(),
                 "Implementation-Version" to getTachideskRevision(),
                 "Multi-Release" to true, // needed for polyglot
@@ -208,8 +209,9 @@ tasks {
             events("passed", "skipped", "failed")
         }
         // Set before any test runs, a test may load the config before ApplicationTest sets it
+        // Madoyomi: config property prefix madoyomi.config (upstream: suwayomi.tachidesk.config)
         systemProperty(
-            "suwayomi.tachidesk.config.server.rootDir",
+            "madoyomi.config.server.rootDir",
             layout.buildDirectory
                 .dir("tmp/TestDesk")
                 .get()
@@ -222,7 +224,7 @@ tasks {
             "testDatabasePassword" to "databasePassword",
         ).forEach { (gradleProp, configProp) ->
             project.findProperty(gradleProp)?.let {
-                systemProperty("suwayomi.tachidesk.config.server.$configProp", it)
+                systemProperty("madoyomi.config.server.$configProp", it)
             }
         }
     }
@@ -237,47 +239,10 @@ tasks {
 
     named<Copy>("processResources") {
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
-        mustRunAfter("downloadWebUI")
     }
 
-    register<Download>("downloadWebUI") {
-        src("https://github.com/Suwayomi/Suwayomi-WebUI-preview/releases/download/$webUIRevisionTag/Suwayomi-WebUI-$webUIRevisionTag.zip")
-        dest("src/main/resources/WebUI.zip")
-
-        fun shouldOverwrite(): Boolean {
-            val zipPath = project.projectDir.absolutePath + "/src/main/resources/WebUI.zip"
-            val zipFile = net.lingala.zip4j.ZipFile(zipPath)
-
-            var shouldOverwrite = true
-            if (zipFile.isValidZipFile) {
-                val zipRevision =
-                    zipFile.getInputStream(zipFile.getFileHeader("revision")).bufferedReader().use {
-                        it.readText().trim()
-                    }
-
-                if (zipRevision == webUIRevisionTag) {
-                    shouldOverwrite = false
-                }
-            }
-
-            return shouldOverwrite
-        }
-
-        overwrite(shouldOverwrite())
-    }
-
-    register("runElectron") {
-        group = "application"
-        finalizedBy(run)
-        doFirst {
-            application.applicationDefaultJvmArgs =
-                listOf(
-                    "-Dsuwayomi.tachidesk.config.server.webUIInterface=electron",
-                    // Change this to the installed electron application
-                    "-Dsuwayomi.tachidesk.config.server.electronPath=/usr/bin/electron",
-                )
-        }
-    }
+    // Madoyomi: upstream's downloadWebUI and runElectron tasks are removed. Madoyomi ships no
+    // bundled WebUI and no Electron launcher; the Tauri app is the only client.
 
     runKtlintCheckOverMainSourceSet {
         mustRunAfter(generateJte)

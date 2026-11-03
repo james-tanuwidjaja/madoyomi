@@ -2,6 +2,8 @@
 .gradle
 .idea
 gradle.properties
+# Madoyomi: the root gradle.properties is tracked (build memory settings, see UPSTREAM.md)
+!/gradle.properties
 .fleet
 # But we need these
 !.idea/runConfigurations

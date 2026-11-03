@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import madoyomi.core.MadoyomiFeatures
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.leftJoin
@@ -376,7 +377,10 @@ class Updater : IUpdater {
         automatedUpdate: Boolean,
     ) {
         scope.launch {
-            SyncManager.ensureSync(userId)
+            // Madoyomi: SyncYomi is disabled (MadoyomiFeatures.syncEnabled)
+            if (MadoyomiFeatures.syncEnabled) {
+                SyncManager.ensureSync(userId)
+            }
 
             saveLastUpdateTimestamp()
 

@@ -841,6 +841,18 @@ object WebInterfaceManager {
         currentVersion: String = getLocalVersion(),
         raiseError: Boolean = false,
     ): Pair<String, Boolean> =
+        // Madoyomi: with the WebUI disabled there is nothing to update, so never check or download (no network call)
+        if (!serverConfig.webUIEnabled.value) {
+            Pair("", false)
+        } else {
+            isUpdateAvailableUpstream(flavor, currentVersion, raiseError)
+        }
+
+    private suspend fun isUpdateAvailableUpstream(
+        flavor: WebUIFlavor,
+        currentVersion: String,
+        raiseError: Boolean,
+    ): Pair<String, Boolean> =
         try {
             val isServedWebUIForCurrentFlavor = flavor.uiName == getServedWebUIFlavor().uiName
             val latestCompatibleVersion = getLatestCompatibleVersion(flavor)

@@ -10,6 +10,7 @@ package suwayomi.tachidesk.server.util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.javalin.json.JsonMapper
 import io.javalin.json.fromJsonString
+import madoyomi.core.MadoyomiFeatures
 import okhttp3.OkHttpClient
 import okhttp3.Request.Builder
 import suwayomi.tachidesk.global.impl.AboutDataClass
@@ -73,6 +74,13 @@ object AppMutex {
     }
 
     fun handleAppMutex() {
+        // Madoyomi: disabled (MadoyomiFeatures.appMutexEnabled). Tauri owns the single-instance check, and the
+        // sidecar binds a random port (0), which the probe below could not even build a URL for.
+        if (!MadoyomiFeatures.appMutexEnabled) {
+            logger.debug { "App mutex check is disabled" }
+            return
+        }
+
         when (checkAppMutex()) {
             AppMutexState.Clear -> {
                 logger.info { "Mutex status is clear, Resuming startup." }

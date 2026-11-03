@@ -77,7 +77,7 @@ class NetworkHelper(
                     .callTimeout(2, TimeUnit.MINUTES)
                     .cache(
                         Cache(
-                            directory = Files.createTempDirectory("tachidesk_network_cache").toFile(),
+                            directory = Files.createTempDirectory("madoyomi_network_cache").toFile(), // Madoyomi: temp dir name
                             maxSize = 5L * 1024 * 1024, // 5 MiB
                         ),
                     ).addInterceptor(UncaughtExceptionInterceptor())

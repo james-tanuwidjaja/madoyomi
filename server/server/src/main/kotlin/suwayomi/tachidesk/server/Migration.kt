@@ -51,6 +51,10 @@ private fun migratePreferences(
 }
 
 private fun migratePreferencesToNewXmlFileBasedStorage() {
+    // Madoyomi: skipped. Madoyomi never used the old preferences api, and running this would import and then
+    // delete the Java Preferences node of a separate, old Suwayomi install (HKCU registry on Windows).
+    if (!madoyomiMigrateLegacySuwayomiPrefs) return
+
     // Migrate from old preferences api
     val prefRootNode = "suwayomi/tachidesk"
     val isMigrationRequired = Preferences.userRoot().nodeExists(prefRootNode)
@@ -60,6 +64,9 @@ private fun migratePreferencesToNewXmlFileBasedStorage() {
         preferences.removeNode()
     }
 }
+
+// Madoyomi: see migratePreferencesToNewXmlFileBasedStorage
+private val madoyomiMigrateLegacySuwayomiPrefs = false
 
 private fun migrateMangaDownloadDir(applicationDirs: ApplicationDirs) {
     val oldMangaDownloadDir = File(applicationDirs.downloadsRoot)

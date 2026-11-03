@@ -35,7 +35,8 @@ object GraphQLController {
         if (isFormContentType && serverConfig.authMode.value == AuthMode.BASIC_AUTH &&
             (
                 ctx.sessionAttribute<String>("csrf-token") == null ||
-                    ctx.sessionAttribute<String>("csrf-token") != ctx.cookie("suwayomi-basic-csrf")
+                    // Madoyomi: cookie name (upstream: suwayomi-basic-csrf)
+                    ctx.sessionAttribute<String>("csrf-token") != ctx.cookie("madoyomi-basic-csrf")
             )
         ) {
             // Basic Auth is handled by the browser, also for POST in <form>

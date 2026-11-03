@@ -77,8 +77,8 @@ class ProtoBackupExportTest : ApplicationTest() {
         assertEquals(2, files.size)
 
         // user 1 is seeded with the username "admin"
-        val user1File = files.single { it.name.startsWith("org.suwayomi.tachidesk.auto.admin_") }
-        val user2File = files.single { it.name.startsWith("org.suwayomi.tachidesk.auto.backup_user2_") }
+        val user1File = files.single { it.name.startsWith("app.madoyomi.auto.admin_") }
+        val user2File = files.single { it.name.startsWith("app.madoyomi.auto.backup_user2_") }
 
         val user1Backup = decodeBackup(user1File)
         val user2Backup = decodeBackup(user2File)
@@ -91,11 +91,11 @@ class ProtoBackupExportTest : ApplicationTest() {
     fun cleanupAutomatedBackupsDeletesExpiredPerUserFilesAndKeepsFreshOnes() {
         serverConfig.backupTTL.value = 1
 
-        val expiredFile = File(backupRoot, "org.suwayomi.tachidesk.auto.admin_${dateString()}.tachibk")
+        val expiredFile = File(backupRoot, "app.madoyomi.auto.admin_${dateString()}.tachibk")
         expiredFile.writeText("expired")
         assertTrue(expiredFile.setLastModified(Date().time - 2.days.inWholeMilliseconds))
 
-        val freshFile = File(backupRoot, "org.suwayomi.tachidesk.auto.backup_user2_${dateString()}.tachibk")
+        val freshFile = File(backupRoot, "app.madoyomi.auto.backup_user2_${dateString()}.tachibk")
         freshFile.writeText("fresh")
 
         ProtoBackupExport.cleanupAutomatedBackups()

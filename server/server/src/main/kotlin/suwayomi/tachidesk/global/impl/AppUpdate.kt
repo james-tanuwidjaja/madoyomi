@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import madoyomi.core.MadoyomiFeatures
 import suwayomi.tachidesk.manga.impl.util.network.await
 import uy.kohesive.injekt.injectLazy
 
@@ -30,6 +31,11 @@ object AppUpdate {
     private val network: NetworkHelper by injectLazy()
 
     suspend fun checkUpdate(): List<UpdateDataClass> {
+        // Madoyomi: never query Suwayomi's releases (MadoyomiFeatures.appUpdateCheckEnabled); the Tauri app updates the backend
+        if (!MadoyomiFeatures.appUpdateCheckEnabled) {
+            return emptyList()
+        }
+
         val stableJson =
             json
                 .parseToJsonElement(
