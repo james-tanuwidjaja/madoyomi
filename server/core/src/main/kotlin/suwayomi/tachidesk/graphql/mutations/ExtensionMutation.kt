@@ -5,6 +5,8 @@ package suwayomi.tachidesk.graphql.mutations
 import com.expediagroup.graphql.generator.annotations.GraphQLIgnore
 import eu.kanade.tachiyomi.source.local.LocalSource
 import io.javalin.http.UploadedFile
+import madoyomi.exthost.ExtensionKind
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.neq
@@ -61,7 +63,8 @@ class ExtensionMutation {
             transaction {
                 ExtensionTable
                     .selectAll()
-                    .where { ExtensionTable.pkgName inList ids }
+                    // Madoyomi: and type = MANGA, these mutations act on manga extensions only
+                    .where { (ExtensionTable.pkgName inList ids) and (ExtensionTable.type eq ExtensionKind.MANGA) }
                     .map { ExtensionType(it) }
             }
 
@@ -180,7 +183,8 @@ class ExtensionMutation {
                     val query =
                         ExtensionTable
                             .selectAll()
-                            .where { ExtensionTable.name neq LocalSource.EXTENSION_NAME }
+                            // Madoyomi: and type = MANGA
+                            .where { (ExtensionTable.name neq LocalSource.EXTENSION_NAME) and (ExtensionTable.type eq ExtensionKind.MANGA) }
 
                     // hide NSFW extensions from users without the NSFW permission
                     // if (!permissions.hasPermission(UserPermission.ACCESS_NSFW)) {
@@ -194,6 +198,8 @@ class ExtensionMutation {
                 transaction {
                     ExtensionStoreTable
                         .selectAll()
+                        // Madoyomi: manga stores only
+                        .where { ExtensionStoreTable.type eq ExtensionKind.MANGA }
                         .map { ExtensionStoreType(it) }
                 }
 

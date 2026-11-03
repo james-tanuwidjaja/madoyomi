@@ -17,11 +17,13 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import eu.kanade.tachiyomi.source.local.LocalSource
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.exthost.ExtensionKind
 import net.dongliu.apk.parser.ApkFile
 import net.dongliu.apk.parser.bean.Icon
 import okhttp3.CacheControl
 import org.apache.commons.compress.archivers.zip.ZipFile
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
@@ -108,7 +110,8 @@ object Extension {
             transaction {
                 ExtensionTable
                     .select(ExtensionTable.apkUrl, ExtensionTable.jarUrl)
-                    .where { ExtensionTable.pkgName eq pkgName }
+                    // Madoyomi: and type = MANGA, the manga loader never installs other kinds
+                    .where { (ExtensionTable.pkgName eq pkgName) and (ExtensionTable.type eq ExtensionKind.MANGA) }
                     .firstOrNull()
             } ?: throw NullPointerException("Could not find extension for $pkgName")
         val jarUrl = extension[ExtensionTable.jarUrl]
@@ -738,7 +741,12 @@ object Extension {
         logger.debug { "Uninstalling $pkgName" }
 
         transaction {
-            val extensionRecord = ExtensionTable.selectAll().where { ExtensionTable.pkgName eq pkgName }.first()
+            // Madoyomi: and type = MANGA, the manga path never uninstalls other kinds
+            val extensionRecord =
+                ExtensionTable
+                    .selectAll()
+                    .where { (ExtensionTable.pkgName eq pkgName) and (ExtensionTable.type eq ExtensionKind.MANGA) }
+                    .first()
             val extensionId = extensionRecord[ExtensionTable.id].value
 
             val sources = SourceTable.selectAll().where { SourceTable.extension eq extensionId }.map { it[SourceTable.id].value }

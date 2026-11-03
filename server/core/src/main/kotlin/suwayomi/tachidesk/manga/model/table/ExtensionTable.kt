@@ -7,6 +7,7 @@ package suwayomi.tachidesk.manga.model.table
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 
 object ExtensionTable : IntIdTable() {
@@ -36,4 +37,10 @@ object ExtensionTable : IntIdTable() {
     val isObsolete = bool("is_obsolete").default(false)
 
     val classFQName = varchar("class_name", 1024).default("") // fully qualified name
+
+    // Madoyomi: extension kind, signing-cert hash, torrent flag and load state (migration M0069)
+    val type = enumerationByName("type", 16, ExtensionKind::class).default(ExtensionKind.MANGA)
+    val signatureHash = varchar("signature_hash", 128).nullable()
+    val isTorrent = bool("is_torrent").default(false)
+    val isLoaded = bool("is_loaded").default(false)
 }

@@ -11,7 +11,9 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import eu.kanade.tachiyomi.source.online.HttpSource
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.exthost.ExtensionKind
 import madoyomi.exthost.SourceRegistry
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -50,7 +52,11 @@ object GetSource {
         val extensionId = sourceRecord[SourceTable.extension]
         val extensionRecord =
             transaction {
-                ExtensionTable.selectAll().where { ExtensionTable.id eq extensionId }.first()
+                // Madoyomi: and type = MANGA, so this manga loader can never load another kind of extension
+                ExtensionTable
+                    .selectAll()
+                    .where { (ExtensionTable.id eq extensionId) and (ExtensionTable.type eq ExtensionKind.MANGA) }
+                    .first()
             }
 
         val apkName =

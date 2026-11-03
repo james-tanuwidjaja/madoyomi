@@ -15,9 +15,11 @@ import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.okio.decodeFromBufferedSource
 import kotlinx.serialization.protobuf.ProtoBuf
+import madoyomi.exthost.ExtensionKind
 import okio.BufferedSource
 import okio.buffer
 import okio.gzip
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -127,7 +129,8 @@ object ExtensionStoreService {
     suspend fun getAndRefresh(): List<ExtensionStore> {
         val stores =
             transaction {
-                ExtensionStoreTable.selectAll().toList()
+                // Madoyomi: manga stores only (upstream: ExtensionStoreTable.selectAll().toList())
+                ExtensionStoreTable.selectAll().where { ExtensionStoreTable.type eq ExtensionKind.MANGA }.toList()
             }
         var needsPrefUpdate = false
         val updateStores =
@@ -158,6 +161,8 @@ object ExtensionStoreService {
             transaction {
                 ExtensionStoreTable
                     .selectAll()
+                    // Madoyomi: the extensionStores setting lists manga stores only
+                    .where { ExtensionStoreTable.type eq ExtensionKind.MANGA }
                     .map { it[ExtensionStoreTable.indexUrl] }
                     .toSet()
             }
@@ -180,7 +185,11 @@ object ExtensionStoreService {
 
         val dbStores =
             transaction {
-                ExtensionStoreTable.selectAll().associateBy { it[ExtensionStoreTable.indexUrl] }
+                // Madoyomi: manga stores only, so stores of other types are never removed here
+                ExtensionStoreTable
+                    .selectAll()
+                    .where { ExtensionStoreTable.type eq ExtensionKind.MANGA }
+                    .associateBy { it[ExtensionStoreTable.indexUrl] }
             }
 
         val toAdd = prefUrls - dbStores.keys
@@ -205,7 +214,10 @@ object ExtensionStoreService {
 
         if (toRemove.isNotEmpty()) {
             transaction {
-                ExtensionStoreTable.deleteWhere { ExtensionStoreTable.indexUrl inList toRemove.toList() }
+                // Madoyomi: and type = MANGA
+                ExtensionStoreTable.deleteWhere {
+                    (ExtensionStoreTable.indexUrl inList toRemove.toList()) and (ExtensionStoreTable.type eq ExtensionKind.MANGA)
+                }
             }
         }
         if (needsPrefUpdate) {

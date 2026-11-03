@@ -9,9 +9,12 @@ package suwayomi.tachidesk.graphql.dataLoaders
 
 import com.expediagroup.graphql.dataloader.KotlinDataLoader
 import graphql.GraphQLContext
+import madoyomi.exthost.ExtensionKind
 import org.dataloader.DataLoader
 import org.dataloader.DataLoaderFactory
 import org.jetbrains.exposed.v1.core.Slf4jSqlDebugLogger
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -32,7 +35,8 @@ class ExtensionDataLoader : KotlinDataLoader<String, ExtensionType> {
                     val extensions =
                         ExtensionTable
                             .selectAll()
-                            .where { ExtensionTable.pkgName inList ids }
+                            // Madoyomi: and type = MANGA
+                            .where { (ExtensionTable.pkgName inList ids) and (ExtensionTable.type eq ExtensionKind.MANGA) }
                             .map { ExtensionType(it) }
                             .associateBy { it.pkgName }
                     ids.map { extensions[it] }

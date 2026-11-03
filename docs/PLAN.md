@@ -115,7 +115,7 @@ Details: [phase-1-backend-foundation.md](phases/phase-1-backend-foundation.md)
 
 Milestones:
 - [x] `server/` fork rebranded with module layout and attribution
-- [ ] Anime domain tables + migrations
+- [x] Anime domain tables + migrations
 - [ ] Repo manager parses JSON and protobuf indexes
 - [ ] Install / update / uninstall / trust for both types via the API
 - [ ] Tests pass in `./gradlew build`

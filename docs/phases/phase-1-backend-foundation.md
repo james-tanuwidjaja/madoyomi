@@ -36,7 +36,7 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 5. Startup: bind `127.0.0.1:0`, print `MADOYOMI_PORT=<port>`, and accept a `--data-dir` argument plus a shared auth token passed in by Tauri (reject requests without it).
 
 ### Backend — domain & DB
-6. Add a `type` discriminator (`anime` | `manga`) to repos, extensions and sources.
+6. Add a `type` discriminator (`MANGA` | `ANIME`) to repos and extensions. **Design note:** repos and extensions share upstream's `EXTENSIONSTORE` and `EXTENSION` tables, with a `type` column, because their lifecycle code (refresh, install, update, trust, uninstall) is shared. Sources are typed by table instead: manga in `SOURCE`, anime in `ANIME_SOURCE`. That keeps upstream's manga-only `SOURCE` queries untouched. Upstream queries on the shared tables that assume manga filter on `type = MANGA` (listed in `server/UPSTREAM.md`, "Domain & DB").
 7. Add anime tables: `anime`, `episode`, `anime_source`, plus `anime_history` and `anime_category` stubs for Phase 6. Keep them separate from the manga tables.
 8. Write migrations for the new tables, and test that upgrading from an empty DB works.
 
@@ -73,9 +73,9 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 - [x] Random port + `MADOYOMI_PORT` handshake + auth token (plus `--data-dir`, loopback-only bind, Tauri-only CORS, stdin watchdog, `GET /health`)
 
 ### Domain & DB
-- [ ] `type` discriminator on repos/extensions/sources
-- [ ] Anime tables + migrations
-- [ ] Migration test from an empty DB
+- [x] `type` discriminator on repos/extensions; sources typed by table (see step 6). Migration `M0069_MadoyomiExtensionKinds`; upstream manga queries filter on `type = MANGA` (`server/UPSTREAM.md`, "Domain & DB")
+- [x] Anime tables + migrations (`M0070_AnimeTables`: `ANIME_SOURCE`, `ANIME`, `EPISODE`, plus `ANIME_HISTORY` and `ANIME_CATEGORY` stubs; `TRUSTED_SIGNATURE` in `M0069`). Numbering and the upstream-collision rule are in `server/UPSTREAM.md`, "Database migrations"
+- [x] Migration test from an empty DB (`MigrationsFromEmptyDbTest`: empty DB, second run is a no-op, upgrade from a pre-Madoyomi DB, Madoyomi migrations re-runnable, Exposed tables match the schema)
 
 ### Repo manager
 - [ ] `JsonIndexParser` (anime)
