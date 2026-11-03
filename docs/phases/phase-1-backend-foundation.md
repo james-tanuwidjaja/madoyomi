@@ -116,13 +116,14 @@ Mapped from the REST sketch to GraphQL (step 17).
 ### Tests
 - [x] Parser unit tests with fixtures (`core/src/test/kotlin/madoyomi/core/repo/`, text fixtures in `core/src/test/resources/repo/`; protobuf stored as base64 of the gzipped bytes)
 - [x] Install → trust → list integration test (`api`: `ExtensionApiIntegrationTest`, both kinds, real APKs from a loopback repo; see §9)
-- [ ] `./gradlew build` passes
+- [x] `./gradlew build` passes (ktlint + 543 tests: `core` 515 with 5 live tests skipped, `AndroidCompat` 5, `ext-host` 8, `api` 15; masstests excluded)
 
 ## 6. Exit criteria
 
-- [ ] From the API alone (curl/HTTPie), a user can add the yuzono and Keiyoushi repos, list available extensions of both types, install one of each, trust them, and see them as installed.
-- [ ] Manga sources from installed extensions still browse and read (no regression from Suwayomi).
-- [ ] All tests pass in `./gradlew build`.
+Verified on 2026-11-03 by `tools/smoke-api.ps1` against the real repos on a fresh data dir (§10), over GraphQL only.
+- [x] From the API alone (curl/HTTPie), a user can add the yuzono and Keiyoushi repos, list available extensions of both types, install one of each, trust them, and see them as installed. (Steps 1–4 and 6 of the smoke: both repos added with their keys trusted, 247 anime and 1454 manga extensions listed, AnimeGG and MangaPill installed and trusted by their repo's key, `animeSources` lists AnimeGG.)
+- [x] Manga sources from installed extensions still browse and read (no regression from Suwayomi). (Step 5: MangaPill popular → details → chapters → pages → page image, `image/jpeg` from the source and from the cache.)
+- [x] All tests pass in `./gradlew build`.
 
 ## 7. Risks & notes
 
@@ -133,11 +134,27 @@ Mapped from the REST sketch to GraphQL (step 17).
 ## 8. Decisions closed here
 
 - One JVM process for both extension types, or isolated processes? (final answer; PLAN.md §7)
+  **One JVM, final.** Anime and manga extensions run in the same process as the backend and share its network stack, DI and Android stubs. Crash isolation is deferred: an extension that misbehaves in-process can't be contained without a separate JVM anyway, so the containment in Phase 1 is the trust gate (nothing untrusted is ever loaded). Revisit if Phase 2's compat harness shows hard crashes (JVM aborts, runaway threads or memory) (§9).
 - DB choice confirmed (Suwayomi's existing DB vs. SQLite).
+  **H2, Suwayomi's existing DB**, with upstream's migrations continued from M0069 (§9; numbering in `server/UPSTREAM.md`, "Database migrations").
 
 ## 9. Decision record
 
-Repo manager (Stage 5), extension lifecycle (Stage 6) and API (Stage 7). The rest of the phase's decisions are added at the end of the phase.
+Phase-wide decisions first, then the decisions of the repo manager (Stage 5), extension lifecycle (Stage 6) and API (Stage 7).
+
+Phase-wide:
+
+| Decision | Why |
+|---|---|
+| **One JVM** for the backend and both extension kinds (final; PLAN.md §7). Crash isolation is deferred; revisit if Phase 2's compat harness shows hard crashes. | One shared network/DI/stub layer, as Phase 0 assumed. A separate process per kind would only help with crashes, and an in-process extension can't be contained without one anyway, so in Phase 1 the trust gate does the containing: untrusted code never loads. |
+| Keep **H2**, Suwayomi's database (user decision 2026-11-03). Madoyomi's migrations continue upstream's numbering (M0069+), are idempotent, and implement `MadoyomiMigration`. | No data-layer rewrite, and upstream's Exposed queries and tests keep working. The numbering-collision rule for upstream syncs is in `server/UPSTREAM.md`. |
+| `server/` is a **plain copy** of Suwayomi-Server at `7b061be`, first committed unmodified. **Upstream packages keep their names** (`suwayomi.tachidesk.*`, `eu.kanade.tachiyomi.*`), new code goes under `madoyomi.*`, every edit inside an upstream file carries a `// Madoyomi:` comment and is listed in `server/UPSTREAM.md` (user decisions 2026-11-03). | Keeps upstream merges a 3-way diff with a short, known list of touched files. |
+| **Mihon trust model:** adding a repo trusts its signing key, removing it revokes the key, any other certificate needs an explicit trust, and untrusted extensions are installed but never loaded (user decision 2026-11-03). | Extensions are arbitrary code (§7); the model users already know from Mihon/Aniyomi. |
+| **APK-only installs**, verified with apksig; see the first Stage 6 row. | Trust by signing certificate needs the signed APK. |
+| **Module deviation from §3:** GraphQL, Javalin and `PackageTools` stay in `core`; `api` holds the entry point, the sidecar HTTP layer and Madoyomi's API additions (Fork & structure checklist; `server/UPSTREAM.md`, "Moved paths"). | About 30 non-GraphQL upstream files import GraphQL types, so splitting it out would need a deep refactor of upstream code. |
+| **Typed source tables:** repos and extensions share upstream's `EXTENSIONSTORE`/`EXTENSION` with a `type` column; manga sources stay in `SOURCE`, anime sources get `ANIME_SOURCE` (step 6). | The lifecycle code is shared, while upstream's manga-only `SOURCE` queries stay untouched. |
+
+Repo manager (Stage 5):
 
 | Decision | Why |
 |---|---|
@@ -235,3 +252,26 @@ API (Stage 7):
 - The server selects no WebSocket subprotocol (nothing in upstream or Madoyomi negotiates one). The smoke's .NET `ClientWebSocket` connects without requesting one (it worked); a client that requires `graphql-transport-ws` to be echoed back would reject the handshake (.NET does when a requested subprotocol isn't echoed; not tried here, worth checking with the Phase 3 client). PowerShell 5.1's `Invoke-WebRequest` also decodes the JSON as Latin-1 (the response has no charset), so the smoke prints yuzono's name `Yūzōnō` garbled; the server sends UTF-8.
 - `ApplicationTest.databaseSetup` leaves its in-memory database as `TransactionManager.defaultDatabase`, so a test that connects a scratch database must set it as the default itself (core's `ExtensionLifecycleTest` doesn't extend `ApplicationTest` and never hit this).
 - Upstream's `JavalinExceptionHandlersTest` asserted the plain-text 424 body; it now expects the JSON error body (a `// Madoyomi:` edit). Upstream's `CefTest` downloads a JBR from GitHub and failed once on a DNS error; it passes on a rerun.
+
+**2026-11-03: exit run (Stage 8).**
+- **`tools/smoke-api.ps1`** (tracked) runs the exit flow against the real repos: the jar as the Tauri shell starts it, a fresh data dir under `%TEMP%`, GraphQL over HTTP and `graphql-transport-ws` only. All 18 steps pass:
+  - `/health` 200 without a token; GraphQL 401 `UNAUTHORIZED` without it.
+  - `addExtensionStore` with the PLAN.md URLs:
+    - yuzono's `index.min.json` (`ANIME`) resolves to its `index.pb` (`AUTO`).
+    - **Keiyoushi's `index.pb` URL given directly** (`MANGA`; smoke7 used `index.min.json`) is read as protobuf with `AUTO`.
+    - Both have `signingKeyTrusted` and no `lastError`.
+  - `fetchExtensions`: 247 anime and 1454 manga, each equal to `extensions(condition: {type}).totalCount`.
+  - AnimeGG v14.2 and MangaPill v1.6.1 install in about 2 s each, with `DOWNLOADING → VERIFYING → CONVERTING → INSTALLED` over the subscription. Both are trusted by their repo's key (`signatureHash` = the store's `signingKey`); MangaPill `isLoaded = true`, AnimeGG `false`; `trustedSignatures` shows the two STORE keys.
+  - MangaPill chain: popular (10 mangas) → `fetchMangaAndChapters` on "Berserk" (405 chapters; upstream's `fetchManga`/`fetchChapters` are deprecated in its favour) → `fetchChapterPages` (92 pages, `/api/v1/manga/1/chapter/1/page/0`) → page 0 as `image/jpeg`, 164,210 bytes, the same from the source (Authorization header) and from the cache (`?token=`).
+  - `animeSources` lists AnimeGG `2247987965040486818`.
+  - Closing stdin exits with code 0. `MADOYOMI_PORT` arrived 6.7–8.6 s after spawn on a fresh data dir (all 70 migrations).
+- **Upstream bug: a cached image's `Content-Type` was `image/jpg`.**
+  - The first run failed only at the page image. The first GET of a page (fetched from the source) was `image/jpeg`, but every later GET (served from the page cache) was the unregistered `image/jpg`.
+  - The cause is upstream's `ImageResponse.getCachedImageResponse`, which returns `"image/" + <file extension>`, while `saveImage` names JPEGs `.jpg`. Cached thumbnails (`ThumbnailFileProvider`) have the same bug. Browsers' `<img>` sniff the bytes and don't mind; strict clients (a `Blob` type, mpv, the smoke) do.
+  - Fixed with a `// Madoyomi:` edit (user decision 2026-11-03): the extension maps back through `ImageUtil.ImageType`, then `MimeUtils`, then upstream's fallback. Tested in `CachedImageTypeTest`; listed in `server/UPSTREAM.md`, "Exit run".
+- **The Tauri shell's 20 s handshake timeout is too short for the real server** (Phase 3, "Tauri sidecar lifecycle").
+  - `MADOYOMI_SIDECAR_JAR=<server jar>; pnpm tauri dev` starts the jar with the repo's JDK, and the server comes up and answers `/health` on 127.0.0.1. But the home screen showed "Backend: error (backend did not report a port within 20s)" twice: the port line arrived after 67 s and 60 s.
+  - The machine was at 88 % CPU load, mostly from other apps. Started directly, without Tauri, the same jar took 55 s (DB present) and 58 s (fresh dir) then, against 6.7–8.6 s the night before. About 11 s pass before the JVM's first log line (loading the 178 MB jar).
+  - The shell gives up for good at the timeout, even though the port line comes later. Its job object did stop the JVM when the app was closed.
+  - Phase 3 needs a much longer timeout, or a "starting" state that keeps waiting for the port line, plus the token and `--data-dir` (the shell passes neither yet, so the server used `%APPDATA%\Madoyomi`). It may also be worth a look at startup time (the jar size, migrations on an existing DB).
+- `tools/run-server.ps1` is unchanged and still works: the port line, `/health` 200 without a token, GraphQL 401 without the token and 200 with the printed one, the data dir created where `-DataDir` points, exit code 0 when stdin closes, no JVM left.

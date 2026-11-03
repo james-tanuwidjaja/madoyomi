@@ -24,7 +24,7 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 ## 4. Detailed steps
 
 ### Shell & sidecar
-1. Move the sidecar logic into `sidecar.rs`: start the backend (dev: `java -jar` from `server/` build output; prod: bundled JRE in Phase 7), pass `--data-dir` and a random auth token, then wait for `MADOYOMI_PORT`.
+1. Move the sidecar logic into `sidecar.rs`: start the backend (dev: `java -jar` from `server/` build output; prod: bundled JRE in Phase 7), pass `--data-dir` and a random auth token, then wait for `MADOYOMI_PORT`. The current 20 s handshake timeout is too short: the real server took 7–9 s to start on an idle machine and about 60 s under heavy CPU load, and the shell gives up for good at the timeout (phase-1 §10, "exit run"). Wait much longer, and keep showing "starting" rather than failing while the JVM is alive.
 2. Health-check loop. On backend exit, emit a Tauri event and restart with backoff.
 3. `get_backend_info` → `{ baseUrl, token }`. Vue calls it once at boot.
 4. Splash/"starting backend…" state in `App.vue` until the backend is healthy, with an error screen and log path if it never comes up.

@@ -5,7 +5,9 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes) is done and **Phase 1 (backend foundation)** is in progress. So far there is the Tauri + Vue app shell, the throwaway spikes, and the backend in `server/`: a Suwayomi-Server fork rebranded as Madoyomi-Server, which runs as a local sidecar (loopback only, random port, API token), is split into modules, has the database groundwork for anime (anime tables, a manga/anime `type` on repos and extensions, a trusted-signature table), and has a repo manager that reads both index formats (JSON and protobuf, for Aniyomi and Mihon repos), trusts a repo's signing key when it is added, and keeps the last good list when a refresh fails. Extensions of both kinds install from their APKs only after the APK's signature checks out, and only extensions whose signing certificate is trusted get loaded (anime extensions are installed but not run yet). Updates and uninstalls work too. All of this is reachable through the GraphQL API for both kinds: repos, extensions, trust decisions, anime sources, install-progress and repo-refresh events, and stable error codes. Next is the Phase 1 exit run. The app doesn't use the real backend yet. See the [Roadmap](#roadmap).
+> **Early development. Not usable yet.** Phase 0 (spikes) and **Phase 1 (backend foundation)** are done; **Phase 2 (anime sources)** is next.
+>
+> The backend in `server/` is a Suwayomi-Server fork, rebranded as Madoyomi-Server. It runs as a local sidecar (loopback only, random port, API token). From its GraphQL API you can add Aniyomi and Mihon repos (JSON and protobuf indexes), list their extensions, and install, update, trust and uninstall extensions of both kinds. Extensions install from their signed APKs only, and only trusted ones get loaded. Manga sources browse and read as in Suwayomi. Anime extensions are installed but don't run yet (Phase 2). The app doesn't use the real backend yet (Phase 3). See the [Roadmap](#roadmap).
 
 ---
 
@@ -48,10 +50,10 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 | Path | What | Status |
 |---|---|---|
 | [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`) + Vue 3 UI (`src/`) | Scaffolded |
-| [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | In progress (Phase 1) |
+| [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phase 1 done |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
-| [`tools/`](tools/) | Dev scripts (tracked), such as `fetch-upstream-assets.ps1`. Local binaries (`tools/bin/`), test APKs (`tools/apks/`) and upstream checkouts (`tools/upstream/`) are gitignored. | Active |
+| [`tools/`](tools/) | Dev scripts (tracked): `fetch-upstream-assets.ps1`, `fetch-test-apks.ps1`, `run-server.ps1`, and `smoke-api.ps1` (the end-to-end API test against real repos). Local binaries (`tools/bin/`), test APKs (`tools/apks/`) and upstream checkouts (`tools/upstream/`) are gitignored. | Active |
 | [`docs/`](docs/) | Project plan and per-phase checklists | Active |
 
 The backend in `server/` is a Gradle multi-module project:
@@ -153,8 +155,17 @@ Run it locally the way the app will start it:
 
 The script generates an API token, starts the server with a dev data dir in `tools/dev-data/` (gitignored), and prints the token. Once the server prints `MADOYOMI_PORT=<port>`, the script prints the base URL and example requests. Every request except `GET /health` needs `Authorization: Bearer <token>`. Stop it with Ctrl+C. The full startup contract (arguments, environment, endpoints) is in [server/UPSTREAM.md](server/UPSTREAM.md#startup-contract-what-the-tauri-shell-relies-on).
 
+End-to-end smoke test against the real repos (needs internet access):
+
+```powershell
+.\tools\smoke-api.ps1            # builds the jar, then runs the test
+.\tools\smoke-api.ps1 -NoBuild   # tests the last built jar
+```
+
+The script starts the jar the way the app does, on a throwaway data dir under `%TEMP%`, and drives it over GraphQL only. It adds yuzono (anime) and Keiyoushi (manga), lists both kinds' extensions, and installs and checks AnimeGG and MangaPill while a WebSocket subscription follows the installs. It then reads a MangaPill chapter down to a page image and lists the anime sources. It prints PASS/FAIL per step and exits non-zero if any step fails. `Get-Help .\tools\smoke-api.ps1 -Detailed` lists the options (another jar, data dir or repo URLs).
+
 > [!NOTE]
-> `pnpm tauri dev` also starts a JVM sidecar. For now it is the Phase 0 dummy backend (`spikes/sidecar`), not the real server. The app switches to the real server, with the token, in Phase 3. Build the dummy once with `cd spikes; .\gradlew :sidecar:shadowJar` (needs JDK 21 in `tools/bin/jdk-21`, or set `MADOYOMI_JAVA`). Without it the app still opens, and the home screen shows "Backend: error". See [spikes/README.md](spikes/README.md).
+> `pnpm tauri dev` also starts a JVM sidecar. For now it is the Phase 0 dummy backend (`spikes/sidecar`), not the real server. The app switches to the real server, with the token, in Phase 3. Build the dummy once with `cd spikes; .\gradlew :sidecar:shadowJar` (needs JDK 21 in `tools/bin/jdk-21`, or set `MADOYOMI_JAVA`). Without it the app still opens, and the home screen shows "Backend: error". See [spikes/README.md](spikes/README.md). To start the real server instead, set `$env:MADOYOMI_SIDECAR_JAR` to `server\api\build\Madoyomi-Server-v0.1.0.jar` before `pnpm tauri dev`. The shell starts it and the server answers `/health`, but the shell still waits only 20 s for the port line. The real server can take longer than that on a busy machine (about 7 s when idle, about 60 s under heavy load), and the home screen then shows "did not report a port within 20s". The rest of the API stays locked, because the shell doesn't pass a token or `--data-dir` yet (the server uses `%APPDATA%\Madoyomi`). Phase 3 fixes all three.
 
 ## Common commands
 
@@ -182,7 +193,9 @@ Backend commands. Run the Gradle ones from `server/`, with `JAVA_HOME` set to `t
 | `.\gradlew.bat :api:shadowJar` | Build `server/api/build/Madoyomi-Server-v0.1.0.jar` |
 | `.\gradlew.bat ktlintFormat` | Reformat Kotlin sources |
 | `.\tools\run-server.ps1` (from the repo root) | Build and run the server with a dev data dir and a fresh token |
+| `.\tools\smoke-api.ps1` (from the repo root) | End-to-end API test against the real yuzono and Keiyoushi repos |
 | `.\tools\fetch-upstream-assets.ps1` (from the repo root) | Restore the upstream fonts and test images |
+| `.\tools\fetch-test-apks.ps1` (from the repo root) | Download the extension APKs the tests use into `tools/apks/` |
 
 ## Roadmap
 
@@ -191,7 +204,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 | Phase | Focus | Status | Details |
 |---|---|---|---|
 | 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
-| 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | 🟡 In progress | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
+| 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ⚪ Not started | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
 | 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | ⚪ Not started | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
 | 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
@@ -210,9 +223,9 @@ Decided in Phase 0 (see [phase-0-spikes.md §9](docs/phases/phase-0-spikes.md)):
 
 - **Fork Suwayomi-Server** rather than writing a fresh backend.
 - **Extend Suwayomi's GraphQL API**, keeping REST only for binary endpoints (images, pages).
-- **One JVM process** for both extension types to start with. The final call is made in Phase 1.
+Decided in Phase 1 (see [phase-1-backend-foundation.md §8 and §9](docs/phases/phase-1-backend-foundation.md#9-decision-record)):
 
-Decided at the start of Phase 1 (to be recorded in [phase-1-backend-foundation.md §8](docs/phases/phase-1-backend-foundation.md)):
+- **One JVM process** for the backend and both extension types (final). Crash isolation is deferred, and the trust gate keeps untrusted code from loading at all. This gets revisited if Phase 2's compatibility tests show hard crashes.
 
 - **Plain copy of upstream** into `server/`, first committed unmodified as a baseline, with the upstream commit recorded in [server/UPSTREAM.md](server/UPSTREAM.md).
 - **Keep upstream package names** (`suwayomi.tachidesk.*`). New code goes under `madoyomi.*`, which keeps upstream merges manageable.

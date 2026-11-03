@@ -118,7 +118,7 @@ Milestones:
 - [x] Anime domain tables + migrations
 - [x] Repo manager parses JSON and protobuf indexes
 - [x] Install / update / uninstall / trust for both types via the API
-- [ ] Tests pass in `./gradlew build`
+- [x] Tests pass in `./gradlew build`
 
 ### Phase 2 — Anime source support
 Details: [phase-2-anime-sources.md](phases/phase-2-anime-sources.md)
@@ -245,7 +245,7 @@ GET    /api/image?src=&sourceId=          image proxy
 WS     /ws                                downloads, updates, playback progress events
 ```
 
-**Decided in Phase 0: keep Suwayomi's GraphQL API and add anime types to it.** The endpoints above map to GraphQL queries and mutations. REST stays only for binaries (`/api/image`, page bytes, later a video proxy).
+**Decided in Phase 0: keep Suwayomi's GraphQL API and add anime types to it.** The endpoints above map to GraphQL queries and mutations. REST stays only for binaries (`/api/image`, page bytes, later a video proxy). The mapping of the repo, extension, trust, source and event endpoints is in [phase-1 step 17](phases/phase-1-backend-foundation.md#api); the anime browse/details/episodes/videos endpoints are mapped in Phase 2.
 
 ---
 
@@ -269,7 +269,7 @@ WS     /ws                                downloads, updates, playback progress 
 - [x] Fork Suwayomi-Server, or write a fresh backend reusing its extension-host code? **Fork** (phase-0 §9; confirmed by the S1 run and the S3 harness running on Suwayomi's runtime unchanged).
 - [x] REST, or extend Suwayomi's GraphQL? **Extend GraphQL**, keep REST for binary endpoints (phase-0 §9).
 - [ ] mpv in a separate window (MVP) vs. embedded (later): confirm UX priority
-- [ ] One JVM process for both extension types, or isolated processes? _Initial answer: one JVM (shared network/DI/stub layer); final call in Phase 1._
+- [x] One JVM process for both extension types, or isolated processes? **One JVM** (shared network/DI/stub layer). Crash isolation is deferred: an in-process extension can't be contained without a separate JVM anyway, so the trust gate is the containment. Revisit if Phase 2's compat harness shows hard crashes (phase-1 §8, §9).
 - [x] Name: Madoyomi · License: MPL-2.0
 - [ ] Windows-only, or keep macOS/Linux possible (the architecture already allows it)?
 
@@ -277,7 +277,7 @@ WS     /ws                                downloads, updates, playback progress 
 
 ## 8. First tasks (start here)
 
-These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** Next up is [Phase 1](phases/phase-1-backend-foundation.md).
+These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) is done too; next up is [Phase 2](phases/phase-2-anime-sources.md).
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

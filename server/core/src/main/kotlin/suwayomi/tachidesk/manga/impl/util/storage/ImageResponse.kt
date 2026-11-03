@@ -37,9 +37,17 @@ object ImageResponse {
         filePath: String,
     ): Pair<InputStream, String> {
         val fileType = cachedFile.substringAfter("$filePath.")
+        // Madoyomi: map the cached file's extension back to its MIME type (upstream: "image/$fileType", which gave
+        // the unregistered "image/jpg" for every cached JPEG, since saveImage names them ".jpg")
+        val mimeType =
+            ImageUtil.ImageType.entries
+                .find { it.extension == fileType.lowercase() }
+                ?.mime
+                ?: MimeUtils.guessMimeTypeFromExtension(fileType.lowercase())?.takeIf { it.startsWith("image/") }
+                ?: "image/$fileType"
         return Pair(
             pathToInputStream(cachedFile),
-            "image/$fileType",
+            mimeType,
         )
     }
 
