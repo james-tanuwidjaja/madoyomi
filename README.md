@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** The project is in **Phase 0 (spikes)**. Only the Tauri + Vue app shell and throwaway spikes exist so far. See the [Roadmap](#roadmap).
+> **Early development. Not usable yet.** Phase 0 (spikes) is done and **Phase 1 (backend foundation)** is next. Only the Tauri + Vue app shell and throwaway spikes exist so far. See the [Roadmap](#roadmap).
 
 ---
 
@@ -50,6 +50,7 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 | [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`) + Vue 3 UI (`src/`) | Scaffolded |
 | `server/` | Kotlin/JVM backend: extension host, API, DB | Planned (Phase 1) |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
+| [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
 | `tools/` | Local dev binaries (`tools/bin/`) and test APKs (`tools/apks/`). Gitignored. | Local only |
 | [`docs/`](docs/) | Project plan and per-phase checklists | Active |
 
@@ -73,7 +74,7 @@ The full list is in Tauri's guide: [Tauri prerequisites for Windows](https://v2.
 
 | Tool | Notes |
 |---|---|
-| JDK 17 or newer ([Temurin](https://adoptium.net/)) | Runs the Kotlin backend and the extension harness |
+| JDK 21 ([Temurin](https://adoptium.net/)) | Runs the Kotlin backend and the spikes. The spikes expect it in `tools/bin/jdk-21` |
 | [IntelliJ IDEA](https://www.jetbrains.com/idea/) | Recommended IDE for `server/` (Community edition is enough) |
 | [dex2jar](https://github.com/ThexXTURBOXx/dex2jar), [jadx](https://github.com/skylot/jadx) | Convert and inspect extension APKs |
 | [mpv](https://mpv.io/installation/) | Video playback |
@@ -135,7 +136,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 
 | Phase | Focus | Status | Details |
 |---|---|---|---|
-| 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | 🟡 In progress (S2 index, S5 sidecar, mpv IPC done; S1 + S3 runs pending) | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
+| 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ⚪ Not started | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ⚪ Not started | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
 | 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | ⚪ Not started | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
@@ -149,12 +150,17 @@ The checklists in each phase document are the source of truth. This table is a s
 
 ### Open decisions
 
-These are tracked in [docs/PLAN.md §7](docs/PLAN.md#7-open-decisions). Most will be settled after Phase 0.
+These are tracked in [docs/PLAN.md §7](docs/PLAN.md#7-open-decisions).
 
-- Fork Suwayomi-Server, or write a fresh backend that reuses its extension-host code?
-- REST API, or extend Suwayomi's GraphQL API?
+Decided in Phase 0 (see [phase-0-spikes.md §9](docs/phases/phase-0-spikes.md)):
+
+- **Fork Suwayomi-Server** rather than writing a fresh backend.
+- **Extend Suwayomi's GraphQL API**, keeping REST only for binary endpoints (images, pages).
+- **One JVM process** for both extension types to start with. The final call is made in Phase 1.
+
+Still open:
+
 - mpv in a separate window (MVP) or embedded in the app window?
-- One JVM process for both extension types, or separate processes?
 - Windows-only, or keep macOS/Linux possible?
 
 ## Contributing
