@@ -7,6 +7,8 @@ package suwayomi.tachidesk.graphql.mutations
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import com.expediagroup.graphql.generator.annotations.GraphQLDescription
+import madoyomi.core.repo.RepoIndexFormat
 import madoyomi.core.repo.RepoService
 import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.eq
@@ -25,6 +27,11 @@ class ExtensionStoreMutation {
     data class AddExtensionStoreInput(
         val clientMutationId: String? = null,
         val indexUrl: String,
+        // Madoyomi: the repo kind (null: MANGA, as upstream) and the index format (null: AUTO, upstream's sniffing)
+        @GraphQLDescription("The repo kind; MANGA when omitted")
+        val type: ExtensionKind? = null,
+        @GraphQLDescription("How to read the index; AUTO (detect, follow repo.json index_v2) when omitted")
+        val format: RepoIndexFormat? = null,
     )
 
     data class AddExtensionStorePayload(
@@ -35,11 +42,11 @@ class ExtensionStoreMutation {
     @RequireAuth
     @RequirePermissions(UserPermission.MANAGE_EXTENSION_STORES)
     fun addExtensionStore(input: AddExtensionStoreInput): CompletableFuture<AddExtensionStorePayload?> {
-        val (clientMutationId, indexUrl) = input
+        val (clientMutationId, indexUrl, type, format) = input
         return future {
-            // Madoyomi: added as a manga repo through RepoService, which trusts its signing key, lists its
-            // extensions and syncs the setting (upstream: fetch + upsert + syncDbToPrefs + re-select). Stage 7 adds type/format
-            val row = RepoService.default.add(indexUrl, ExtensionKind.MANGA)
+            // Madoyomi: added through RepoService, which checks the packages against the kind, trusts its signing key,
+            // lists its extensions and syncs the setting (upstream: fetch + upsert + syncDbToPrefs + re-select)
+            val row = RepoService.default.add(indexUrl, type ?: ExtensionKind.MANGA, format ?: RepoIndexFormat.AUTO)
 
             AddExtensionStorePayload(
                 clientMutationId = clientMutationId,
@@ -82,19 +89,8 @@ class ExtensionStoreMutation {
 
             RemoveExtensionStorePayload(
                 clientMutationId = clientMutationId,
-                extensionStore =
-                    store?.let {
-                        ExtensionStoreType(
-                            name = it.name,
-                            badgeLabel = it.badgeLabel,
-                            signingKey = it.signingKey,
-                            contactWebsite = it.contactWebsite,
-                            contactDiscord = it.contactDiscord,
-                            indexUrl = it.indexUrl,
-                            isLegacy = it.isLegacy,
-                            extensionListUrl = it.extensionListUrl,
-                        )
-                    },
+                // Madoyomi: the store as it was (upstream copies it field by field, which would miss Madoyomi's fields)
+                extensionStore = store,
             )
         }
     }

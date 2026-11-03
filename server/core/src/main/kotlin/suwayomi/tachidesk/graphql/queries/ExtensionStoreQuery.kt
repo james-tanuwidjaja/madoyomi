@@ -13,7 +13,6 @@ import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.Column
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import suwayomi.tachidesk.graphql.directives.RequireAuth
@@ -83,12 +82,15 @@ class ExtensionStoreQuery {
         val id: Int? = null,
         val indexUrl: String? = null,
         val name: String? = null,
+        // Madoyomi: the repo kind (omitted: both kinds)
+        val type: ExtensionKind? = null,
     ) : HasGetOp<Any?> {
         override fun getOp(value: Any?): Op<Boolean>? {
             val opAnd = OpAnd()
             opAnd.eq(id, ExtensionStoreTable.id)
             opAnd.eq(indexUrl, ExtensionStoreTable.indexUrl)
             opAnd.eq(name, ExtensionStoreTable.name)
+            opAnd.eq(type, ExtensionStoreTable.type) // Madoyomi
 
             return opAnd.op
         }
@@ -122,8 +124,7 @@ class ExtensionStoreQuery {
     ): ExtensionStoreNodeList {
         val queryResults =
             transaction {
-                // Madoyomi: manga stores only (upstream: ExtensionStoreTable.selectAll())
-                val res = ExtensionStoreTable.selectAll().where { ExtensionStoreTable.type eq ExtensionKind.MANGA }
+                val res = ExtensionStoreTable.selectAll()
 
                 res.applyOps(null, condition, filter)
 

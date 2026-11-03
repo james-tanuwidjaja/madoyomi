@@ -117,7 +117,7 @@ Milestones:
 - [x] `server/` fork rebranded with module layout and attribution
 - [x] Anime domain tables + migrations
 - [x] Repo manager parses JSON and protobuf indexes
-- [ ] Install / update / uninstall / trust for both types via the API
+- [x] Install / update / uninstall / trust for both types via the API
 - [ ] Tests pass in `./gradlew build`
 
 ### Phase 2 — Anime source support

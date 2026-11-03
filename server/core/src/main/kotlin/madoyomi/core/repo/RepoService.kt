@@ -8,6 +8,11 @@ package madoyomi.core.repo
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -75,6 +80,15 @@ class RepoService(
     private val logger = KotlinLogging.logger {}
     private val mutex = Mutex()
     private val startupRefreshDone = AtomicBoolean(false)
+
+    private val refreshedFlow =
+        MutableSharedFlow<RepoRefreshResult>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** One result per repo each time it is refreshed (on demand or at startup), after the DB is updated. */
+    val refreshed: SharedFlow<RepoRefreshResult> = refreshedFlow.asSharedFlow()
+
+    /** How many collectors [refreshed] has (tests wait for a subscription with it). */
+    val refreshedSubscribers: StateFlow<Int> get() = refreshedFlow.subscriptionCount
 
     /**
      * Adds (or re-adds) the repo at [indexUrl] as a [kind] repo and returns its `EXTENSIONSTORE` row. The stored URL
@@ -219,6 +233,7 @@ class RepoService(
             val (results, urlChanged) = refreshKind(k)
             // a manga repo that moved (e.g. it gained index_v2) must move in upstream's extensionStores setting too
             if (k == ExtensionKind.MANGA && urlChanged) ExtensionStoreService.syncDbToPrefs()
+            results.forEach { refreshedFlow.tryEmit(it) }
             results
         }
 

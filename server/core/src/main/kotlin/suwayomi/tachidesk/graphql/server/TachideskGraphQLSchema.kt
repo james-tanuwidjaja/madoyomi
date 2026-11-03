@@ -19,6 +19,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import madoyomi.core.graphql.MadoyomiSchemaContributions
 import suwayomi.tachidesk.graphql.directives.RequireAuthDirectiveWiring
 import suwayomi.tachidesk.graphql.directives.RequirePermissionsDirectiveWiring
 import suwayomi.tachidesk.graphql.mutations.BackupMutation
@@ -103,7 +104,8 @@ object GraphQLSchemaProvider {
             toSchema(
                 config =
                     SchemaGeneratorConfig(
-                        supportedPackages = listOf("suwayomi.tachidesk.graphql"),
+                        // Madoyomi: + "madoyomi" (Madoyomi's GraphQL types and enums, e.g. ExtensionKind)
+                        supportedPackages = listOf("suwayomi.tachidesk.graphql", "madoyomi"),
                         introspectionEnabled = true,
                         hooks = CustomSchemaGeneratorHooks(),
                     ),
@@ -126,7 +128,9 @@ object GraphQLSchemaProvider {
                         TopLevelObject(UpdateQuery()),
                         TopLevelObject(UserQuery()),
                         TopLevelObject(UserSettingsQuery()),
-                    ),
+                    ) +
+                        // Madoyomi: the api module's queries (GraphQLSchemaContribution, via ServiceLoader)
+                        MadoyomiSchemaContributions.queries(),
                 mutations =
                     listOf(
                         TopLevelObject(BackupMutation()),
@@ -148,14 +152,18 @@ object GraphQLSchemaProvider {
                         TopLevelObject(UserMutation()),
                         TopLevelObject(UserSettingsMutation()),
                         TopLevelObject(WebviewMutation()),
-                    ),
+                    ) +
+                        // Madoyomi: the api module's mutations
+                        MadoyomiSchemaContributions.mutations(),
                 subscriptions =
                     listOf(
                         TopLevelObject(DownloadSubscription()),
                         TopLevelObject(InfoSubscription()),
                         TopLevelObject(SyncSubscription()),
                         TopLevelObject(UpdateSubscription()),
-                    ),
+                    ) +
+                        // Madoyomi: the api module's subscriptions
+                        MadoyomiSchemaContributions.subscriptions(),
             )
         }
 

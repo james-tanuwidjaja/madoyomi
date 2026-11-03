@@ -8,6 +8,8 @@ package suwayomi.tachidesk.graphql.types
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import graphql.schema.DataFetchingEnvironment
+import madoyomi.core.repo.RepoIndexFormat
+import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.ResultRow
 import suwayomi.tachidesk.graphql.server.primitives.Cursor
 import suwayomi.tachidesk.graphql.server.primitives.Edge
@@ -28,6 +30,13 @@ class ExtensionStoreType(
     val indexUrl: String,
     val isLegacy: Boolean,
     val extensionListUrl: String?,
+    // Madoyomi: the repo kind and index format, whether its signing key is trusted (Mihon model: adding a repo trusts
+    // its key), and the last refresh (epoch seconds) and its error, if it failed (EXTENSIONSTORE columns from M0069)
+    val type: ExtensionKind,
+    val format: RepoIndexFormat,
+    val signingKeyTrusted: Boolean,
+    val lastRefreshedAt: Long,
+    val lastError: String?,
 ) : Node {
     constructor(row: ResultRow) : this(
         name = row[ExtensionStoreTable.name],
@@ -38,6 +47,11 @@ class ExtensionStoreType(
         indexUrl = row[ExtensionStoreTable.indexUrl],
         isLegacy = row[ExtensionStoreTable.isLegacy],
         extensionListUrl = row[ExtensionStoreTable.extensionListUrl],
+        type = row[ExtensionStoreTable.type], // Madoyomi: the five fields above
+        format = row[ExtensionStoreTable.format],
+        signingKeyTrusted = row[ExtensionStoreTable.signingKeyTrusted],
+        lastRefreshedAt = row[ExtensionStoreTable.lastRefreshedAt],
+        lastError = row[ExtensionStoreTable.lastError],
     )
 
     fun extensions(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<ExtensionNodeList> =

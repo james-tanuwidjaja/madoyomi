@@ -11,6 +11,8 @@ import com.expediagroup.graphql.generator.annotations.GraphQLDeprecated
 import com.expediagroup.graphql.generator.annotations.GraphQLDescription
 import com.expediagroup.graphql.server.extensions.getValueFromDataLoader
 import graphql.schema.DataFetchingEnvironment
+import madoyomi.core.extension.SignatureTrust
+import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.ResultRow
 import suwayomi.tachidesk.graphql.server.primitives.Cursor
 import suwayomi.tachidesk.graphql.server.primitives.Edge
@@ -48,6 +50,12 @@ class ExtensionType(
     val isInstalled: Boolean,
     val hasUpdate: Boolean,
     val isObsolete: Boolean,
+    // Madoyomi: the kind, the verified signing-certificate hash (null for an uninstalled or unverified extension),
+    // whether its code is loaded, and the torrent flag (EXTENSION columns from M0069)
+    val type: ExtensionKind,
+    val signatureHash: String?,
+    val isLoaded: Boolean,
+    val isTorrent: Boolean,
 ) : Node {
     constructor(row: ResultRow) : this(
         storeIndexUrl = row[ExtensionTable.storeIndexUrl],
@@ -68,7 +76,15 @@ class ExtensionType(
         isInstalled = row[ExtensionTable.isInstalled],
         hasUpdate = row[ExtensionTable.hasUpdate],
         isObsolete = row[ExtensionTable.isObsolete],
+        type = row[ExtensionTable.type], // Madoyomi: the four fields above
+        signatureHash = row[ExtensionTable.signatureHash],
+        isLoaded = row[ExtensionTable.isLoaded],
+        isTorrent = row[ExtensionTable.isTorrent],
     )
+
+    // Madoyomi: whether signatureHash is in TRUSTED_SIGNATURE (only an extension with a trusted hash is ever loaded)
+    @GraphQLDescription("The signing certificate (signatureHash) is trusted. Only trusted extensions are loaded.")
+    fun isTrusted(): Boolean = SignatureTrust.isTrusted(signatureHash)
 
     fun source(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<SourceNodeList> =
         dataFetchingEnvironment.getValueFromDataLoader<String, SourceNodeList>("SourcesForExtensionDataLoader", pkgName)

@@ -43,7 +43,8 @@ server/
   ext-anime/   Aniyomi source API (eu.kanade.tachiyomi.animesource), ported, Apache-2.0 (see its NOTICE.md)
   core/        the rest of upstream's server module: DB, migrations, manga domain, settings, GraphQL,
                Javalin, startup. A library (no application/shadow plugins)
-  api/         madoyomi.api.* (entry point, sidecar HTTP) and the shadowJar -> api/build/Madoyomi-Server-<ver>.jar
+  api/         madoyomi.api.* (entry point, sidecar HTTP, Madoyomi's GraphQL operations) and the shadowJar
+               -> api/build/Madoyomi-Server-<ver>.jar
 ```
 
 Dependencies: `api → core → {ext-manga, ext-anime} → ext-host → {AndroidCompat, server-config}`.
@@ -96,7 +97,7 @@ Paths below are Madoyomi paths, relative to `server/`.
 | `buildSrc/src/main/kotlin/Constants.kt` | `MainClass = "madoyomi.api.MainKt"`; fixed version `v0.1.0` (must stay numeric `vX.Y.Z`, `AppInfo` derives the version code from it) |
 | `core/build.gradle.kts` | BuildConfig `GITHUB`/`DISCORD`, test system properties use `madoyomi.config.`; **deleted** the `downloadWebUI` and `runElectron` tasks. Module split: no `application`/shadow plugins (moved to `api/build.gradle.kts`, jar vendor `Madoyomi`), depends on `ext-host`/`ext-manga`/`ext-anime`, project paths `:i18n`, `:server-config`, `:server-config-generate` |
 | `server-config-generate/build.gradle.kts` | `generateSettings` targets `:core` (upstream `:server`), with `evaluationDependsOn(":core")` since the two are siblings now; `projects.serverConfig` |
-| `ext-host/`, `ext-manga/`, `ext-anime/`, `api/` `build.gradle.kts` (new) | the new modules. Since Stage 6 `ext-host` depends on apksig (`implementation`, so it is bundled into the server jar) and has its own JUnit tests |
+| `ext-host/`, `ext-manga/`, `ext-anime/`, `api/` `build.gradle.kts` (new) | the new modules. Since Stage 6 `ext-host` depends on apksig (`implementation`, so it is bundled into the server jar) and has its own JUnit tests. Since Stage 7 `api` compiles against graphql-kotlin, Exposed and `ext-host` (its GraphQL additions), and its tests reuse `core`'s test classes (`testImplementation` of `core`'s test source set output, hence `evaluationDependsOn(":core")`), with their data root in `api/build/tmp/TestDesk` |
 
 ### Rebrand (user-visible names only)
 
@@ -145,7 +146,9 @@ Upstream code that would have referenced a higher module, or an `internal` symbo
 
 ### Domain & DB (Phase 1 Stage 4)
 
-Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENSION` tables, told apart by a new `type` column (see "Database migrations" below). Upstream's code is manga-only, so every query of it that reads a *set* of these rows, or acts on a row the client names, now also requires `type = MANGA`. Lookups that reach `EXTENSION` through `SOURCE` (manga-only by construction), inserts (the column defaults to `MANGA`) and `removeExtensionStore`/`ExtensionStoreService.upsert` (keyed by the unique `index_url`) are unchanged. Since Stage 5 `removeExtensionStore` goes through `RepoService` (see "Repo manager" below); Stage 7 adds `type` to the GraphQL inputs.
+Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENSION` tables, told apart by a new `type` column (see "Database migrations" below). Upstream's code is manga-only, so every query of it that reads a *set* of these rows, or acts on a row the client names, now also requires `type = MANGA`. Lookups that reach `EXTENSION` through `SOURCE` (manga-only by construction), inserts (the column defaults to `MANGA`) and `removeExtensionStore`/`ExtensionStoreService.upsert` (keyed by the unique `index_url`) are unchanged. Since Stage 5 `removeExtensionStore` goes through `RepoService` (see "Repo manager" below).
+
+**Since Stage 7 the GraphQL rows of this table are superseded** (see "API (Phase 1 Stage 7)"): the GraphQL API is type-aware, so `extensions`, `extensionStores`, the extension mutations and `fetchExtensions` take a `type` instead of assuming manga, and the two data loaders are upstream's code again. The non-GraphQL rows (`ExtensionsList`, `ExtensionStoreService`, `Extension`, `GetSource`) still apply.
 
 | File | Change |
 |---|---|
@@ -155,11 +158,11 @@ Repos and extensions of both kinds share upstream's `EXTENSIONSTORE` and `EXTENS
 | `core/.../manga/impl/extension/ExtensionStoreService.kt` | `type = MANGA` on the store sets of `getAndRefresh`, `syncDbToPrefs` and `syncPrefsToDb`, and on the delete in `syncPrefsToDb` (the `extensionStores` setting lists manga stores only) |
 | `core/.../manga/impl/extension/Extension.kt` | `type = MANGA` on the `installExtension(pkgName)` and `uninstallExtension` lookups (since Stage 6 both delegate to `ExtensionLifecycle` with `ExtensionKind.MANGA`, see "Extension lifecycle" below) |
 | `core/.../manga/impl/util/source/GetSource.kt` | `type = MANGA` on the extension lookup, so the manga loader can never load another kind of jar |
-| `core/.../graphql/queries/ExtensionQuery.kt` | `extensions`: `type = MANGA` in the base query's `adjustWhere` (covers nodes, `totalCount` and page info) |
-| `core/.../graphql/queries/ExtensionStoreQuery.kt` | `extensionStores`: `type = MANGA` on the base query |
-| `core/.../graphql/dataLoaders/ExtensionDataLoader.kt` | `ExtensionDataLoader` (`extension(pkgName)`): `type = MANGA` |
-| `core/.../graphql/dataLoaders/ExtensionStoreDataLoader.kt` | `ExtensionStoreDataLoader` (`extensionStore(indexUrl)`): `type = MANGA` |
-| `core/.../graphql/mutations/ExtensionMutation.kt` | `type = MANGA` on the `updateExtension(s)` lookup and the two `fetchExtensions` payload lists |
+| `core/.../graphql/queries/ExtensionQuery.kt` | `extensions`: `type = MANGA` in the base query's `adjustWhere` (covers nodes, `totalCount` and page info). *Stage 7: removed; `condition: {type}` instead* |
+| `core/.../graphql/queries/ExtensionStoreQuery.kt` | `extensionStores`: `type = MANGA` on the base query. *Stage 7: removed; `condition: {type}` instead* |
+| `core/.../graphql/dataLoaders/ExtensionDataLoader.kt` | `ExtensionDataLoader` (`extension(pkgName)`): `type = MANGA`. *Stage 7: reverted, the file is upstream's again (`pkg_name` is unique, so both kinds resolve)* |
+| `core/.../graphql/dataLoaders/ExtensionStoreDataLoader.kt` | `ExtensionStoreDataLoader` (`extensionStore(indexUrl)`): `type = MANGA`. *Stage 7: reverted, the file is upstream's again (`index_url` is unique)* |
+| `core/.../graphql/mutations/ExtensionMutation.kt` | `type = MANGA` on the `updateExtension(s)` lookup and the two `fetchExtensions` payload lists. *Stage 7: replaced by the type-aware version* |
 
 ### Repo manager (Phase 1 Stage 5)
 
@@ -171,7 +174,7 @@ The repo manager lives in `madoyomi.core.repo` (see "New Madoyomi code"). Upstre
 | `core/.../manga/impl/extension/ExtensionsList.kt` | `fetchExtensions` calls `RepoService.refreshAll(MANGA)` (last-good cache). `updateExtensionDatabase` is `internal` (upstream: `private`), takes `kind` (the set of rows it syncs; new rows get `type = kind`) and `prune` (without it nothing counts as missing), and writes `is_torrent` |
 | `core/.../manga/impl/extension/github/NetworkLegacyExtension.kt` | `torrent: Int = 0` (Aniyomi's legacy index; upstream's `ignoreUnknownKeys` dropped it) |
 | `core/.../manga/model/dataclass/ExtensionInfo.kt` | `isTorrent: Boolean = false`, carried into `EXTENSION.is_torrent` |
-| `core/.../graphql/mutations/ExtensionStoreMutation.kt` | `addExtensionStore` → `RepoService.add(indexUrl, MANGA)`; `removeExtensionStore` → `RepoService.remove(indexUrl)`. Inputs and payloads are unchanged (Stage 7 adds `type`/`format`) |
+| `core/.../graphql/mutations/ExtensionStoreMutation.kt` | `addExtensionStore` → `RepoService.add(indexUrl, MANGA)`; `removeExtensionStore` → `RepoService.remove(indexUrl)`. Inputs and payloads are unchanged (Stage 7 adds `type`/`format`, see "API") |
 | `core/.../server/ServerSetup.kt` | after the startup `syncPrefsToDb()`, `RepoService.refreshOnStartup()` refreshes every repo of both kinds once, in the background |
 
 How the repo manager behaves:
@@ -233,6 +236,36 @@ How it behaves:
   - The yuzono APKs need no constructor repair; their frames are recomputed too, and every class of both kinds' test jars passes the verifier.
 - No migration: every column used here exists since `M0069`/`M0070`.
 
+### API (Phase 1 Stage 7)
+
+The GraphQL API (`/api/graphql`, subscriptions over `graphql-transport-ws` on the same path) is type-aware for both kinds, has the trust and anime-source operations, and every error carries a stable code. The mapping from the PLAN.md §5 REST sketch is step 17 of the Phase 1 doc. Upstream's operations were extended in place; the new ones live in `api` (`madoyomi.api.graphql`) and reach the schema through one hook.
+
+| File | Change |
+|---|---|
+| `core/.../graphql/server/TachideskGraphQLSchema.kt` | `supportedPackages` + `"madoyomi"`; the query, mutation and subscription lists get `+ MadoyomiSchemaContributions.queries()/mutations()/subscriptions()`, the top-level objects of every `madoyomi.core.graphql.GraphQLSchemaContribution` found with `ServiceLoader` (`api` registers `madoyomi.api.graphql.MadoyomiSchema` in `META-INF/services`) |
+| `core/.../graphql/server/TachideskGraphQLServer.kt` | `getGraphQLObject()` is public (upstream: private), so `api`'s tests run the production configuration; it uses `MadoyomiGraphQLErrors.exceptionHandler` (upstream's handler, which appended the stack trace to the message, stays but is unused) and `.instrumentation(MadoyomiGraphQLErrors.instrumentation)` |
+| `core/.../server/JavalinSetup.kt` | `defineExceptionHandlers`: every upstream handler keeps its status and logging but writes the `{code, message, details}` JSON body (`RestErrors.body`; upstream: a text body or none); new handlers for `MadoyomiException` (its code and status) and a fallback for `Exception` (`ErrorClassifier`, 500 `INTERNAL` for anything unknown, stack trace in the log only); `sourceFailed` writes `SOURCE_FAILED` |
+| `core/src/test/.../server/JavalinExceptionHandlersTest.kt` | expects the JSON error body `{"code":"SOURCE_FAILED","message":"HTTP error 404","details":null}` (upstream: the text `HTTP error 404`) |
+| `core/.../graphql/mutations/SourceMutation.kt` | `fetchSourceManga`: `SourceAccess.require(sourceId)` (upstream: `GetSource.getSourceOrNull(sourceId)!!`, a null pointer for a missing or untrusted source) |
+| `core/.../graphql/types/ExtensionType.kt` | new fields `type`, `signatureHash`, `isLoaded`, `isTorrent` (from the row) and the resolver `isTrusted()` (`SignatureTrust.isTrusted(signatureHash)`, only queried when asked for) |
+| `core/.../graphql/types/ExtensionStoreType.kt` | new fields `type`, `format`, `signingKeyTrusted`, `lastRefreshedAt`, `lastError` |
+| `core/.../graphql/queries/ExtensionQuery.kt` | `extensions`: no `type = MANGA` (back to upstream's `adjustWhere`); `ExtensionCondition.type` (omitted: both kinds) |
+| `core/.../graphql/queries/ExtensionStoreQuery.kt` | `extensionStores`: no `type = MANGA` (back to upstream's `selectAll()`); `ExtensionStoreCondition.type` |
+| `core/.../graphql/dataLoaders/ExtensionDataLoader.kt`, `ExtensionStoreDataLoader.kt` | the Stage 4 `type = MANGA` filters reverted: both files are identical to upstream again |
+| `core/.../graphql/mutations/ExtensionStoreMutation.kt` | `AddExtensionStoreInput` gains `type` (null: `MANGA`) and `format` (null: `AUTO`), passed to `RepoService.add`; `removeExtensionStore`'s payload is the store as read before removal (upstream re-builds it field by field) |
+| `core/.../graphql/mutations/ExtensionMutation.kt` | both kinds: the `updateExtensions` lookup has no type filter and each action goes to `ExtensionActions` by the row's type (manga → upstream's `Extension.*`, anime → `ExtensionLifecycle`); single-id `updateExtension` goes through `updateOne`, which reports what it can't do (`NOT_FOUND` for an unknown id, the lifecycle's `INSTALL_FAILED` for "already installed", "no update", "not installed") while the batch `updateExtensions` keeps upstream's skip semantics; `FetchExtensionsInput.type` → `RepoService.refreshAll(type)` (omitted: both kinds) and the payload lists that kind |
+
+New operations (`api`, `madoyomi.api.graphql`):
+- Queries: `trustedSignatures` (`hash`, `origin`, `addedAt`, `extensionStore`, `extensions`); `animeSources(condition: {id, name, lang, extensionPkgName})` → `AnimeSourceNodeList` of `AnimeSourceType` (`id`, `name`, `lang`, `contentWarning`, `baseUrl`, `extension`).
+- Mutations (`INSTALL_EXTENSIONS` permission): `trustExtension(input: {pkgName})` (either kind), `trustSignature(input: {hash})`, `untrustSignature(input: {hash})` (its `isTrusted` says whether a repo still vouches for the key).
+- Subscriptions: `extensionInstallProgress(pkgName?)` (`ExtensionLifecycle.progress`: `pkgName`, `type`, `state`, `errorCode`, `message`) and `extensionStoreRefreshed(type?)` (`RepoService.refreshed`, one event per refreshed repo: `indexUrl`, `type`, `ok`, `error`, `extensionCount`, `extensionStore`). Nothing is replayed, so a client subscribes before it starts the operation.
+
+The error model:
+- `ErrorCode` (with an HTTP status each): Stage 5/6's codes plus `SOURCE_FAILED` (a source's HTTP error or unreachable host), `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN` and `INTERNAL`.
+- `ErrorClassifier` maps any exception, for GraphQL and REST alike: a `MadoyomiException` anywhere in the cause chain (after unwrapping `CompletionException`/`ExecutionException`/`InvocationTargetException`) keeps its code and details; upstream's `UnauthorizedException`/`ForbiddenException`, `HttpException`, unreachable-host `IOException`s and `IllegalArgumentException` get their codes; upstream's `StubSource.SourceNotInstalledException` (what `getSourceOrStub` callers throw) is diagnosed by `SourceAccess` (`NOT_FOUND`, or `UNTRUSTED` with the hash); anything else is `INTERNAL`, with the exception's message (never a stack trace) and the stack trace in the log.
+- GraphQL: `errors[].extensions = {code, details}`; graphql-java's own errors (syntax, validation) get `BAD_REQUEST` from the instrumentation.
+- REST and binary endpoints: the JSON body `{code, message, details}` (the token filter's 401 included).
+
 ### New Madoyomi code
 
 | Path | What |
@@ -258,7 +291,7 @@ How it behaves:
 | `core/src/main/kotlin/madoyomi/core/repo/RepoIndexFetcher.kt` | format detection/override and redirects over a `RepoHttp` (the default uses `NetworkHelper`'s client) |
 | `core/src/main/kotlin/madoyomi/core/repo/RepoService.kt` | repo add/remove/refresh, trust and the last-good cache (see "Repo manager" above) |
 | `core/src/main/kotlin/madoyomi/core/extension/ExtensionUnloader.kt` | drops a loaded extension's sources and class loader (and, since Stage 6, its load permit; jar path from `ExtensionFiles`) |
-| `core/src/main/kotlin/madoyomi/core/error/MadoyomiException.kt` | `MadoyomiException(code, message, details)` + `ErrorCode` (Stage 7 maps it to GraphQL errors). Stage 6 added `SIGNATURE_INVALID`, `SIGNATURE_CHANGED`, `UNTRUSTED`, `PACKAGE_MISMATCH`, `INSTALL_FAILED` |
+| `core/src/main/kotlin/madoyomi/core/error/MadoyomiException.kt` | `MadoyomiException(code, message, details)` + `ErrorCode`. Stage 6 added `SIGNATURE_INVALID`, `SIGNATURE_CHANGED`, `UNTRUSTED`, `PACKAGE_MISMATCH`, `INSTALL_FAILED`; Stage 7 an HTTP status per code and `SOURCE_FAILED`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `INTERNAL` (see "API") |
 | `ext-host/src/main/kotlin/madoyomi/exthost/ExtensionKind.kt` (Stage 6 additions) | per kind: `feature`, `classKey`, `nsfwKey`, `torrentKey`, `labelPrefix`, `libRange` (manga 1.3–1.6, anime 12–16), `dirName`; shared `NAME_KEY`/`LIB_KEY`/`CONTENT_WARNING_KEY`; `fromFeatures` |
 | `ext-host/src/main/kotlin/madoyomi/exthost/ApkInspector.kt` | manifest (apk-parser, typed values such as Keiyoushi's float `extensionLib` decoded) + apksig verification and signer SHA-256 |
 | `ext-host/src/main/kotlin/madoyomi/exthost/Dex2jarRepair.kt` | the dex2jar post-pass: R8 constructor elision and frames recomputed with the APK's class hierarchy (see "Extension lifecycle") |
@@ -266,6 +299,14 @@ How it behaves:
 | `core/src/main/kotlin/madoyomi/core/extension/ExtensionFiles.kt` | the jar layout (Madoyomi and upstream) and the icon dir |
 | `core/src/main/kotlin/madoyomi/core/extension/ExtensionLoadGate.kt` | the trust gate: per-jar permits (the verified hash) checked against `TRUSTED_SIGNATURE` at load time |
 | `core/src/main/kotlin/madoyomi/core/extension/SignatureTrust.kt` | `TRUSTED_SIGNATURE` reads, USER trust/untrust, and the shared-key re-homing (moved from `RepoService`) |
+| `core/src/main/kotlin/madoyomi/core/error/ErrorClassifier.kt`, `RestErrors.kt` | the error model shared by GraphQL and REST (see "API") |
+| `core/src/main/kotlin/madoyomi/core/graphql/GraphQLSchemaContribution.kt` | the schema hook: `GraphQLSchemaContribution` + `MadoyomiSchemaContributions` (ServiceLoader; Koin would start too late, after schema generation) |
+| `core/src/main/kotlin/madoyomi/core/graphql/MadoyomiGraphQLErrors.kt` | the GraphQL `DataFetcherExceptionHandler` and the instrumentation that gives graphql-java's own errors a code |
+| `core/src/main/kotlin/madoyomi/core/extension/SourceAccess.kt` | why a manga source can't be used (`NOT_FOUND`, `UNTRUSTED`, `INTERNAL`), which upstream's `GetSource.getSourceOrNull` swallows |
+| `core/src/main/kotlin/madoyomi/core/extension/ExtensionActions.kt` | install/update/uninstall by kind for the GraphQL mutations |
+| `core/.../madoyomi/core/repo/RepoService.kt`, `extension/ExtensionLifecycle.kt` (Stage 7 additions) | `RepoService.refreshed` (one `RepoRefreshResult` per refreshed repo, for `extensionStoreRefreshed`); `refreshedSubscribers`/`progressSubscribers` (subscriber counts, so tests can wait for a subscription); `ExtensionLoadGate.clear()` is public for `api`'s tests |
+| `api/src/main/kotlin/madoyomi/api/graphql/*`, `api/src/main/resources/META-INF/services/madoyomi.core.graphql.GraphQLSchemaContribution` | Madoyomi's GraphQL operations and types (see "API") and their registration |
+| `api/src/test/kotlin/madoyomi/api/*` | `ApiGraphQLTest` (the production `GraphQL` object, a scratch H2 per test, a loopback `HttpServer` serving `core`'s `TestRepo` fixtures and the real APKs to the production network stack), `ExtensionApiIntegrationTest` (repos, install, trust, update, uninstall and both subscriptions for both kinds), `ErrorModelTest`, `SidecarHttpTest` (token gate, `/health`, WebSocket upgrade, REST error bodies on a bare Javalin) |
 | `ext-host/src/test/kotlin/madoyomi/exthost/*`, `core/src/test/kotlin/madoyomi/core/extension/*` | `ApkInspectorTest`, `Dex2jarRepairTest`, `ExtensionLifecycleTest`, `SignatureTrustTest` on the real APKs in the gitignored `tools/apks/` (fetched by `tools/fetch-test-apks.ps1`; tests skip without them). `ExtensionLifecycleLiveTest` installs from the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 | `core/src/test/kotlin/madoyomi/core/repo/*`, `core/src/test/resources/repo/*` | parser, fetcher and service tests. Fixtures are text: trimmed real yuzono `index.min.json`/`repo.json`, and trimmed yuzono and Keiyoushi `index.pb` stored as base64 of the gzipped bytes. `RepoServiceLiveTest` hits the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 
@@ -303,7 +344,8 @@ When the upstream diff adds migrations of its own, say `k` of them, numbered `M0
 - `java -jar api/build/Madoyomi-Server-v0.1.0.jar [--data-dir <path>]` (built by `.\gradlew.bat :api:shadowJar`). Unknown arguments exit with code 2.
 - Env `MADOYOMI_TOKEN`: the API token. If unset, a random one is used and the API is effectively locked.
 - Binds `127.0.0.1` on a random free port and prints exactly one line `MADOYOMI_PORT=<port>` on stdout once listening (other stdout lines are logs).
-- Every request needs `Authorization: Bearer <token>`, except `GET /health` and CORS preflights. `GET` requests and WebSocket upgrades may pass `?token=<token>` instead. A rejected request gets `401 {"code":"UNAUTHORIZED","message":…}`.
+- Every request needs `Authorization: Bearer <token>`, except `GET /health` and CORS preflights. `GET` requests and WebSocket upgrades may pass `?token=<token>` instead. A rejected request gets `401 {"code":"UNAUTHORIZED","message":…,"details":null}`.
+- The API is GraphQL at `POST /api/graphql`; subscriptions use `graphql-transport-ws` on `ws://127.0.0.1:<port>/api/graphql?token=<token>` (the server negotiates no subprotocol, so a client must not require one to be echoed). GraphQL errors carry `extensions: {code, details}`; REST/binary errors are the body `{code, message, details}` (see "API (Phase 1 Stage 7)").
 - Upstream `authMode` is forced to `NONE` (every request is the built-in admin), so the token is the only gate.
 - `GET /health` → `{"status":"ok","name","version","pid","uptimeMs"}`.
 - CORS: `http://localhost:1420`, `http://tauri.localhost`, `https://tauri.localhost`.

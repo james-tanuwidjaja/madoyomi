@@ -55,6 +55,6 @@ object ExtensionLoadGate {
         }
     }
 
-    /** For tests. */
-    internal fun clear() = permits.clear()
+    /** For tests (core's and api's). */
+    fun clear() = permits.clear()
 }
