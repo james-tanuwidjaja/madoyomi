@@ -10,7 +10,8 @@ package suwayomi.tachidesk.server.util
 import okhttp3.HttpUrl
 import suwayomi.tachidesk.server.serverConfig
 
-internal fun buildSocksProxyUrl(): String? {
+// Madoyomi: public, it is used from core (CEFManager, SocksProxyTest) across the module split (upstream: internal)
+fun buildSocksProxyUrl(): String? {
     if (!serverConfig.socksProxyEnabled.value) return null
 
     val version = serverConfig.socksProxyVersion.value

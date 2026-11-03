@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
 import eu.kanade.tachiyomi.source.online.HttpSource
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.exthost.SourceRegistry
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -28,6 +29,12 @@ object GetSource {
 
     private val sourceCache = ConcurrentHashMap<Long, Source>()
     private val applicationDirs: ApplicationDirs by injectLazy()
+
+    // Madoyomi: NetworkHelper (ext-host) can no longer call GetSource directly; it goes through
+    // SourceRegistry. The cache only exists once this object is initialised, so registering here is enough.
+    init {
+        SourceRegistry.onUnregisterAll(::unregisterAllSources)
+    }
 
     private suspend fun getSource(sourceId: Long): Source? {
         val cachedResult: Source? = sourceCache[sourceId]

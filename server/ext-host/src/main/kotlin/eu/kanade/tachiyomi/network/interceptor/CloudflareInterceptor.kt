@@ -280,7 +280,8 @@ object CFClearance {
         val postData: String? = null, // only used with cmd 'request.post'
     )
 
-    internal fun FlareSolverRequest.withRequestProxy(proxyUrl: String?): FlareSolverRequest =
+    // Madoyomi: public, SocksProxyTest in core calls it across the module split (upstream: internal)
+    fun FlareSolverRequest.withRequestProxy(proxyUrl: String?): FlareSolverRequest =
         proxyUrl?.let { copy(session = null, sessionTtlMinutes = null, proxy = FlareSolverProxy(it)) } ?: this
 
     @Serializable

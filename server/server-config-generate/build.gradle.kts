@@ -24,8 +24,13 @@ dependencies {
     implementation(libs.serialization.protobuf)
     
     // Depend on server-config module for access to ServerConfig and SettingsRegistry
-    implementation(projects.server.serverConfig)
+    // Madoyomi: server-config is a top-level module now (upstream: projects.server.serverConfig)
+    implementation(projects.serverConfig)
 }
+
+// Madoyomi: :core is a sibling now (upstream: the parent, which Gradle always configured first), and
+// generateSettings reads its source sets below
+evaluationDependsOn(":core")
 
 tasks {
     register<JavaExec>("generateSettings") {
@@ -40,7 +45,8 @@ tasks {
         mainClass.set("suwayomi.tachidesk.server.settings.generation.SettingsGeneratorKt")
 
         // Get reference to server project for file paths
-        val serverProject = project(":server")
+        // Madoyomi: the upstream server module is :core (upstream: project(":server")); see evaluationDependsOn above
+        val serverProject = project(":core")
         
         // Set working directory to the server module directory
         workingDir = serverProject.projectDir

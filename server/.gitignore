@@ -11,11 +11,12 @@ gradle.properties
 
 # Ignore Gradle build output directory
 build
-server/out
+# Madoyomi: the upstream server module is core/ (upstream: server/out, server/src/main/resources/WebUI.zip)
+core/out
 AndroidCompat/out
 
 # WebUI is either to be downloaded on-demand or is a dynamic build asset
-server/src/main/resources/WebUI.zip
+core/src/main/resources/WebUI.zip
 
 # bundling stage downlaoded assets
 scripts/OpenJDK*

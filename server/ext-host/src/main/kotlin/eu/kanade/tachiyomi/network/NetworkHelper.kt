@@ -19,10 +19,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import madoyomi.exthost.SourceRegistry
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import suwayomi.tachidesk.manga.impl.util.source.GetSource
 import java.net.CookieHandler
 import java.net.CookieManager
 import java.net.CookiePolicy
@@ -62,7 +62,8 @@ class NetworkHelper(
         userAgent
             .drop(1)
             .onEach {
-                GetSource.unregisterAllSources() // need to reset the headers
+                // Madoyomi: via SourceRegistry, GetSource lives in core above ext-host (upstream: GetSource.unregisterAllSources())
+                SourceRegistry.unregisterAllSources() // need to reset the headers
             }.launchIn(GlobalScope)
     }
 

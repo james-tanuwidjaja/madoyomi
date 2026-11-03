@@ -65,12 +65,14 @@ madoyomi/
 /app            Tauri + Vue 3 frontend
   /src-tauri    Rust shell: sidecar spawn, port handshake, updater
   /src          Vue app
-/server         Kotlin backend (Suwayomi fork or module)
-  /core         DB, library, downloads, settings
-  /ext-host     APK loading, classloader, Android stubs
-  /ext-manga    Mihon source adapter (from Suwayomi)
-  /ext-anime    Aniyomi animesource adapter (new)
-  /api          REST/GraphQL + WebSocket
+/server         Kotlin backend (Suwayomi-Server fork, see server/UPSTREAM.md)
+  /core         DB, library, downloads, settings, GraphQL + Javalin (kept here, see phase 1)
+  /ext-host     network stack, dex2jar bytecode fixer, extension classloader
+  /ext-manga    Mihon source API (from Suwayomi)
+  /ext-anime    Aniyomi animesource API (ported from Aniyomi)
+  /api          entry point, sidecar HTTP (/health, token), Madoyomi API additions; builds the jar
+  /AndroidCompat  Android API stubs (from Suwayomi)
+  /server-config, /server-config-generate, /i18n   settings + generated code, translations (from Suwayomi)
 /player         mpv config, scripts (e.g. uosc), IPC client contract
 /tools          jlink script, packaging, test-extension fetcher
 ```
@@ -112,7 +114,7 @@ Details: [phase-1-backend-foundation.md](phases/phase-1-backend-foundation.md)
 - Exit: install and list extensions for both types from the API.
 
 Milestones:
-- [ ] `server/` fork rebranded with module layout and attribution
+- [x] `server/` fork rebranded with module layout and attribution
 - [ ] Anime domain tables + migrations
 - [ ] Repo manager parses JSON and protobuf indexes
 - [ ] Install / update / uninstall / trust for both types via the API

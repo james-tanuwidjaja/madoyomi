@@ -11,7 +11,7 @@ import io.javalin.http.Context
 import io.javalin.http.HandlerType
 import io.javalin.http.HttpStatus
 import io.javalin.http.UnauthorizedResponse
-import suwayomi.tachidesk.server.generated.BuildConfig
+import madoyomi.core.MadoyomiBuildInfo
 
 /** Sidecar-only HTTP: `GET /health` and the token gate in front of every other route. */
 object SidecarHttp {
@@ -32,8 +32,8 @@ object SidecarHttp {
             ctx.json(
                 mapOf(
                     "status" to "ok",
-                    "name" to BuildConfig.NAME,
-                    "version" to BuildConfig.VERSION,
+                    "name" to MadoyomiBuildInfo.name,
+                    "version" to MadoyomiBuildInfo.version,
                     "pid" to ProcessHandle.current().pid(),
                     "uptimeMs" to System.currentTimeMillis() - startedAt,
                 ),

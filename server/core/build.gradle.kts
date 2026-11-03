@@ -17,8 +17,7 @@ plugins {
             .get()
             .pluginId,
     )
-    application
-    alias(libs.plugins.shadowjar)
+    // Madoyomi: core is a library now; the application and shadow plugins moved to :api (upstream: application, shadowjar)
     id(
         libs.plugins.buildconfig
             .get()
@@ -86,15 +85,22 @@ dependencies {
     // AES/CBC/PKCS7Padding Cypher provider for zh.copymanga
     implementation(libs.bouncycastle)
 
+    // Madoyomi: modules split out of the upstream server module (see UPSTREAM.md "Moved paths")
+    implementation(projects.extHost)
+    implementation(projects.extManga)
+    implementation(projects.extAnime)
+
     // AndroidCompat
     implementation(projects.androidCompat)
     implementation(projects.androidCompat.config)
 
     // i18n
-    implementation(projects.server.i18n)
+    // Madoyomi: top-level module now (upstream: projects.server.i18n)
+    implementation(projects.i18n)
 
     // Settings module
-    implementation(projects.server.serverConfig)
+    // Madoyomi: top-level module now (upstream: projects.server.serverConfig)
+    implementation(projects.serverConfig)
 
     // uncomment to test extensions directly
 //    implementation(fileTree("lib/"))
@@ -116,13 +122,7 @@ jte {
     generate()
 }
 
-application {
-    applicationDefaultJvmArgs =
-        listOf(
-            "-Djunrar.extractor.thread-keep-alive-seconds=30",
-        )
-    mainClass.set(MainClass)
-}
+// Madoyomi: the application block (main class, default JVM args) moved to :api.
 
 sourceSets {
     main {
@@ -165,38 +165,7 @@ buildConfig {
 }
 
 tasks {
-    shadowJar {
-        isZip64 = true
-        manifest {
-            attributes(
-                "Main-Class" to MainClass,
-                "Implementation-Title" to rootProject.name,
-                // Madoyomi: vendor (upstream: "The Suwayomi Project")
-                "Implementation-Vendor" to "Madoyomi",
-                "Specification-Version" to getTachideskVersion(),
-                "Implementation-Version" to getTachideskRevision(),
-                "Multi-Release" to true, // needed for polyglot
-                "X-JBR-Release" to webviewJbrRelease,
-            )
-        }
-        archiveBaseName.set(rootProject.name)
-        archiveVersion.set(getTachideskVersion())
-        archiveClassifier.set("")
-        destinationDirectory.set(File("$rootDir/server/build"))
-        duplicatesStrategy = DuplicatesStrategy.INCLUDE
-        mergeServiceFiles("META-INF/services")
-        dependencies {
-            // The deprecated GraalVM js-community POM chain declares `<type>pom</type>`
-            // dependencies, which puts literal .pom artifacts on the resolved classpath.
-            // Shadow 9 expands every classpath file with zipTree() and fails with
-            // "Cannot expand ZIP" on them (GradleUp/shadow#1716). Excluding the
-            // POM-only metapackages drops just those .pom files; the actual jars
-            // (js-language, truffle-runtime) are still shadowed and their
-            // META-INF/services files are still merged by mergeServiceFiles.
-            exclude(dependency("org.graalvm.js:js-community:.*"))
-            exclude(dependency("org.graalvm.js:js:.*"))
-        }
-    }
+    // Madoyomi: the shadowJar task moved to :api (api/build.gradle.kts), which builds the server jar.
 
     test {
         useJUnitPlatform {
@@ -244,20 +213,21 @@ tasks {
     // Madoyomi: upstream's downloadWebUI and runElectron tasks are removed. Madoyomi ships no
     // bundled WebUI and no Electron launcher; the Tauri app is the only client.
 
+    // Madoyomi: generateSettings is :server-config-generate (upstream: :server:server-config-generate) here and below
     runKtlintCheckOverMainSourceSet {
         mustRunAfter(generateJte)
-        mustRunAfter(":server:server-config-generate:generateSettings")
+        mustRunAfter(":server-config-generate:generateSettings")
     }
 
     compileKotlin {
-        dependsOn(":server:server-config-generate:generateSettings")
+        dependsOn(":server-config-generate:generateSettings")
     }
 
     processResources {
-        dependsOn(":server:server-config-generate:generateSettings")
+        dependsOn(":server-config-generate:generateSettings")
     }
 
     processTestResources {
-        dependsOn(":server:server-config-generate:generateSettings")
+        dependsOn(":server-config-generate:generateSettings")
     }
 }

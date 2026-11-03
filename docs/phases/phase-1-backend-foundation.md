@@ -67,8 +67,8 @@ Turn the Phase 0 findings into a real backend in `server/`: a Suwayomi-based Kot
 ### Fork & structure
 - [x] Suwayomi forked into `server/`; upstream commit recorded in `server/UPSTREAM.md`
 - [x] Rebranded (app name, data dir, config prefix, logs, User-Agents, version). Package names are kept upstream by decision; new code goes under `madoyomi.*` (see `server/UPSTREAM.md`)
-- [ ] MPL-2.0 headers kept; `NOTICE` / `THIRD_PARTY.md` added
-- [ ] Modules created: `core`, `ext-host`, `ext-manga`, `ext-anime`, `api`
+- [x] MPL-2.0 headers kept; `NOTICE` / `THIRD_PARTY.md` added (moved upstream files are byte-identical renames except the few `// Madoyomi:` edits; the ported `ext-anime` files carry Apache-2.0 headers and `server/ext-anime/NOTICE.md`)
+- [x] Modules created: `core`, `ext-host`, `ext-manga`, `ext-anime`, `api` (`api → core → {ext-manga, ext-anime} → ext-host → {AndroidCompat, server-config}`). Deviation from §3: GraphQL and Javalin stay in `core`, because about 30 non-GraphQL upstream files import GraphQL types. `api` holds the entry point, the sidecar HTTP layer and, from Stage 7, Madoyomi's API additions. `PackageTools` (dex2jar wrapper, source loading) also stays in `core`, because it needs `ApplicationDirs`. Old → new paths are in `server/UPSTREAM.md` "Moved paths".
 - [x] Unused Suwayomi features removed or disabled (WebUI, tray, browser/Electron launch, KCEF by default, OPDS, SyncYomi/KOReader, update checks, app mutex)
 - [x] Random port + `MADOYOMI_PORT` handshake + auth token (plus `--data-dir`, loopback-only bind, Tauri-only CORS, stdin watchdog, `GET /health`)
 
