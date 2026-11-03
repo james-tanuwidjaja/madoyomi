@@ -266,6 +266,14 @@ The error model:
 - GraphQL: `errors[].extensions = {code, details}`; graphql-java's own errors (syntax, validation) get `BAD_REQUEST` from the instrumentation.
 - REST and binary endpoints: the JSON body `{code, message, details}` (the token filter's 401 included).
 
+### Exit run (Phase 1 Stage 8)
+
+The exit run (`tools/smoke-api.ps1`) found one upstream bug, fixed here (Phase 1 doc §10).
+
+| File | Change |
+|---|---|
+| `core/.../manga/impl/util/storage/ImageResponse.kt` | `getCachedImageResponse` maps the cached file's extension back to a MIME type (`ImageUtil.ImageType`, then `MimeUtils`, then upstream's `"image/<ext>"`). Upstream returns `"image/<ext>"`, so every cached JPEG page or thumbnail (saved as `.jpg`) was served as the unregistered `image/jpg`, while the first, uncached fetch was `image/jpeg`. Test: `core/src/test/kotlin/madoyomi/core/storage/CachedImageTypeTest.kt` |
+
 ### New Madoyomi code
 
 | Path | What |
