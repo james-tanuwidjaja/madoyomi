@@ -47,6 +47,13 @@ enum class ErrorCode(
      */
     LOAD_FAILED(500),
 
+    /**
+     * A loaded extension called an API the host doesn't provide: a missing class or member, an unimplemented abstract
+     * method, or an Android stub that only throws "Stub!" (`details.kind`, `details.missing`, `details.pkgName`; the
+     * issue is recorded in the extension's compat log). 501: the host doesn't implement what the extension needs.
+     */
+    EXTENSION_INCOMPATIBLE(501),
+
     /** The request itself is invalid: a GraphQL syntax or validation error, a bad argument. */
     BAD_REQUEST(400),
 

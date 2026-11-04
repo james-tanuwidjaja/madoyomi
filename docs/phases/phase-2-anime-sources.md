@@ -64,11 +64,11 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 - [x] Suspend and legacy `fetch*` APIs (as needed for the pinned version). One surface, the newest (lib 17), which keeps every lib-14/16 member; it is link-checked against both generations (§9)
 
 ### Android stubs & networking
-- [ ] Anime-specific stubs added (`SharedPreferences`, `Context`, `Uri`, `Base64`, `Log`, …)
-- [ ] Missing class/method logger
-- [ ] Shared OkHttp client, cookie jar, rate limiting
+- [x] Anime-specific stubs added (`SharedPreferences`, `Context`, `Uri`, `Base64`, `Log`, …). The static scan over the top 20 finds no missing class or member. The remaining `"Stub!"`s are in the deep-link `UrlActivity`, one WebView SSL callback (hanime) and `EditTextPreference` binder code: `OnBindEditTextListener` bodies (checked with jadx in AnimePahe and StreamingCommunity) and the `TextWatcher`s they install (the others). Madoyomi never runs any of these (Stage 2, §10). The `androidx.preference` value accessors are implemented; runtime confirmation comes from the Stage 5 harness
+- [x] Missing class/method logger (`ExtensionCompatLog`: class-loader hook, `AnimeSourceCalls` → `EXTENSION_INCOMPATIBLE`, link-check install warnings; Stage 2, §9. GraphQL `compatIssues` is Stage 4)
+- [x] Shared OkHttp client, cookie jar, rate limiting (`AnimeExtensionRuntimeTest`: AnimeGG's client is `NetworkHelper`'s, with its cookie jar shared with `android.webkit.CookieManager` both ways; `rateLimit` keeps the jar)
 - [ ] Cloudflare/WebView shim reachable from anime sources
-- [ ] Injekt/`NetworkHelper` lookups resolved
+- [x] Injekt/`NetworkHelper` lookups resolved (the extension's own `injectLazy<NetworkHelper>()` gets the app's instance; same test)
 
 ### Filters & preferences
 - [ ] Filter → JSON serializer (all filter types)
@@ -114,6 +114,7 @@ Each stage ends in something verifiable and a commit:
    - Missing-class/method logging at runtime (`EXTENSION_INCOMPATIBLE`), exposed as `compatIssues`.
    - Android/`androidx.preference` stubs fixed by frequency.
    - Networking checks.
+   - *Done* (2026-11-04), except the GraphQL `compatIssues` field, which moves to Stage 4 with the other operations (the core API is there: `ExtensionCompatLog`).
 3. **Core anime services**: migration `M0071_AnimeBrowse` (unique `(source, url)` / `(url, anime)`, the missing `SAnime`/`SEpisode` columns).
    - Browse with filters, upserted into `ANIME`.
    - Details plus episodes (reconcile, seasons).
@@ -152,6 +153,22 @@ Stage 1 (loader):
 | `PackageTools` closes a class loader it created when the load fails (a `// Madoyomi:` edit). | Upstream leaked it, and the leaked loader kept the jar open: on Windows that locks the jar against uninstall and update (found by Stage 1's tests). |
 | `ExtensionLinkCheck` (ext-host) checks a jar statically: every external class, method and field is resolved over the host's class files read as bytes (nothing is loaded or initialised), and members whose body only throws `"Stub!"` (android-jar) are reported. | A gap would otherwise surface as a `NoSuchMethodError` deep inside some source call. Static, so it covers code paths the harness never reaches. |
 
+Stage 2 (top 20, compat scan, logging, stubs):
+
+| Decision | Why |
+|---|---|
+| **Top 20:** `tools/compat-test/select-top.ps1` sums jsDelivr's monthly hits per package over every `/apk/` file of yuzono (all versions), excludes torrent, keeps NSFW, and reads each row's content warning from yuzono's `index.pb` with a small PowerShell protobuf reader (`tools/compat-test/lib/Protobuf.ps1`). Ties go by package name. The snapshot (2026-11-04) is `top20.txt`. | The phase-wide decision. The JSON index can't tell MIXED from NSFW (phase-1 §10). |
+| **Manga sample:** 10 Keiyoushi extensions ranked by the GitHub `download_count` of each package's current APK asset (the one `index.pb` points at), per day since its release was published; NSFW included. Snapshot `manga-sample.txt`. | Keiyoushi's APKs are GitHub release assets, not served by jsDelivr: its jsDelivr stats list only the index files and two icons. Its `index.min.json` is a two-entry "Outdated App" placeholder, so the list comes from `index.pb`. Keiyoushi rebuilds everything into a few releases (5 on 2026-11-04) and Mihon auto-updates to each build, so the count approximates the installed base. |
+| **The scan is a JUnit test** (`CompatScanTest`, only with `MADOYOMI_COMPAT_SCAN=1`) driven by `tools/compat-test/scan.ps1`. It writes the generated, committed `docs/research/compat-scan.md`. APKs go to the gitignored `tools/compat-test/apks/`. | The link check needs the host classpath, which Gradle's test runtime has. The report is text and diffable between runs. |
+| **Activity-only issues don't count:** `ExtensionLinkCheck.Report` knows the jar's `android.app.Activity` subclasses. An issue referenced only from them is left out of the warnings, the compat log and the scan's counts (it is listed separately). | Every extension's `UrlActivity` (a deep-link entry point) uses `Activity` stubs, and Madoyomi never starts an activity. |
+| **The link check runs at every install (both kinds) and only warns** (`InstallResult.warnings`, one line per kind with the first 5 targets). Its issues go into the compat log once the install has succeeded, and the log starts over with each new version. | A stub on a path that never runs must not block an install, but the trust/compat UI should see it. |
+| **Runtime logging:** `ChildFirstURLClassLoader` (a `// Madoyomi:` edit) reports classes found nowhere to `ExtensionClassLoadHook`. `ExtensionCompatLog` (core, in memory, at most 200 distinct issues per package) records them as `CLASS_NOT_FOUND`, a kind of its own because it may be a handled probe; known probes are dropped. Each distinct issue is logged once. | Catches missing classes where the extension asks for them. Members can't be seen at load time; the call wrapper catches those. |
+| **`EXTENSION_INCOMPATIBLE` (501)** for an API gap at call time. `AnimeSourceCalls.call`/`callBlocking` wrap every anime source call (from Stage 3): a `NoClassDefFoundError`, `NoSuchMethodError`/`NoSuchFieldError`, `AbstractMethodError` or android-jar `RuntimeException("Stub!")` anywhere in the cause chain is recorded and rethrown with `details.pkgName`, `sourceId`, `operation`, `kind`, `missing`, `cause`. Other failures pass through unchanged. `ErrorClassifier` maps a raw gap that arrives another way (upstream's manga code) to the same code, without a package. Load failures stay `LOAD_FAILED` but are recorded too. | 501 "not implemented": the host lacks what the extension needs, which is neither the site's fault (`SOURCE_FAILED`) nor an unknown server fault (`INTERNAL`). One classifier (`ExtensionIncompatibility`) serves the wrapper, the loader and the error model. |
+| **`androidx.preference` value accessors** (`ListPreference.getValue/setValue/setValueIndex/getEntry`, `MultiSelectListPreference.getValues/setValues/findIndexOfValue`, `TwoStatePreference.isChecked/setChecked`) read and persist through the screen's `SharedPreferences` (`getSharedPreferences()` + `getKey()`), as Android does. Before the preference is on a screen, the value is kept in the object, then `defaultValue` applies. `setOnPreferenceClickListener` stores the listener. | Extensions call these in `setupPreferenceScreen`, which upstream's `"Stub!"` turned into a failure. Persisting on `set*` is Android's behaviour, and upstream's serializer (`getCurrentValue`) reads the same keys. |
+| **An android-jar class is replaced by leaving it out of the android-jar AndroidCompat uses** (`strippedAndroidStubs`, `madoyomiAndroidOverrides`) and implementing it in AndroidCompat. Only `android.os.LocaleList` (on `java.util.Locale`) for now. | Every Keiyoushi extension of the sample calls `LocaleList.getDefault/get/size`. Two copies of a class on the classpath would be resolved by classpath order; upstream's android-jar is built the same way (stripped of what AndroidCompat implements). |
+| **No `android.widget`/`android.view` replacements.** The `TextView`/`View`/`EditText` stubs of 6 top-20 extensions are all in `EditTextPreference.OnBindEditTextListener` bodies and their `TextWatcher`s (checked with jadx in AnimePahe and StreamingCommunity). | Only a UI that binds the edit dialog runs them, and Madoyomi never calls the listener (its preference UI is its own, Phase 3). |
+| **Lib-16 suspend request helpers** `OkHttpClient.get(String\|HttpUrl, …)`/`post(…)` were added to `ext-host`'s `Requests.kt` (a `// Madoyomi:` edit, from Aniyomi's `core/common`). | A gap in the extension API itself (anikoto, kotokai, aniwave call `get$default`), which `ExtensionLinkCheckTest`'s three APKs didn't use. |
+
 ## 10. Findings log
 
 **2026-11-04: loader and link check (Stage 1).** `ExtensionLinkCheck` over the three test APKs (after dex2jar and `Dex2jarRepair`), against the host classpath:
@@ -167,3 +184,35 @@ Stage 1 (loader):
 - MangaPill's `LocaleList` stubs were not known before; nothing has hit them at runtime yet (MangaPill browses and reads). Stage 2 fixes stubs by frequency over the top 20.
 - **Upstream leaked a class loader on every failed load.** `PackageTools.loadExtensionSourcesWithLockHeld` created a `ChildFirstURLClassLoader` and only stored it once `Class.forName` succeeded. A failed load left it open, holding the jar, so on Windows the jar couldn't be deleted (uninstall, update) until restart. Fixed, and covered by `ExtensionLifecycleTest`, which renames the jar after a failed load.
 - AnimeGG installs trusted and loaded with its live source `2247987965040486818` (`https://www.animegg.org`) replacing whatever the listing said.
+
+**2026-11-04: top 20, compat scan, logging, stubs (Stage 2).**
+- **The top 20** (`tools/compat-test/top20.txt`; jsDelivr, last month, 436 APK files with hits): hanime, oppaistream, animepahe, missav, anidb, rule34video, onetwothreeanime, movy, hentaimama, anikoto, kickassanime, kisskh, hentaihaven, reanime, streamingcommunity, kotokai, anizone, javguru, aniwave, animeonsen.
+  - 9 SAFE, 1 MIXED, 10 NSFW. Lib 14 ×6, lib 16 ×14.
+  - The hit counts are small (#1 hanime 1,927, #20 animeonsen 453 a month), so most Aniyomi clients probably fetch from raw GitHub, not jsDelivr. The ranking is relative only.
+- **The manga sample** (`manga-sample.txt`): mangafire, mangadex, kagane, asurascans, comix, webtoons, toonily, mangakakalot, weebcentral, aquamanga (3 SAFE, 7 MIXED), 11k–33k downloads a day.
+- **Static scan** (`docs/research/compat-scan.md`, generated): all 30 APKs convert. Reachable issues per extension, before and after this stage's fixes (Activity-only issues not counted):
+
+  | | Before | After |
+  |---|---|---|
+  | Anime with no reachable issue | 11 of 20 (SAFE 3 of 9) | 14 of 20 (SAFE 6 of 9) |
+  | Manga with no reachable issue and no verify error | 0 of 10 | 6 of 10 |
+  | Missing classes, all 30 | 0 | 0 |
+  | Missing members, all 30 | 6 in 3 anime extensions | 0 |
+
+  What the 20 anime extensions still hit, all in code that only runs with a UI or a WebView error:
+
+  | Class | Extensions | Where |
+  |---|---|---|
+  | `android.view.View` (`findViewById`, `getRootView`, `setEnabled`, `post`) | 4 | `EditTextPreference.OnBindEditTextListener` bodies and their `TextWatcher`s |
+  | `android.widget.TextView` (`addTextChangedListener`, `get/setError`, `setInputType`, `setHint`, `setHorizontallyScrolling`), `android.widget.EditText.selectAll` | 5 | the same |
+  | `android.net.http.SslError.toString`, `android.webkit.SslErrorHandler.cancel` | 1 (hanime) | `WebViewClient.onReceivedSslError` |
+
+- **An extension-API gap, not an Android one:** anikoto, kotokai and aniwave (one multisrc theme, lib 16) call `eu.kanade.tachiyomi.network.RequestsKt.get$default(OkHttpClient, String|HttpUrl, Headers, CacheControl, Continuation, …)`, the suspend `OkHttpClient.get` that Aniyomi's lib 16 added. Suwayomi's `Requests.kt` doesn't have it, so these three would have thrown `NoSuchMethodError` on their first request. Added (with `post`); all three are clean now.
+- **`android.app.Activity`** (`<init>`, `onCreate`, `getIntent`, `finish`): 14 of 30 extensions (5 anime, 9 manga), always from `UrlActivity`, the deep-link activity. Not reachable in Madoyomi; reported separately.
+- **`android.os.LocaleList`** (`getDefault`, `get`, `size`): all 10 manga extensions (a shared Keiyoushi utility; Stage 1 saw it in MangaPill) and no anime one. Implemented on `java.util.Locale`; gone from the scan, and MangaPill now installs with no warnings.
+- **Manga WebView rendering** (not Stage 2's business, recorded for the manga side): mangafire and comix lay out a `WebView` (`View.measure/layout`, `Resources.getDisplayMetrics`, `WebChromeClient` `ConsoleMessage`), and comix renders it into a `VirtualDisplay`/`ImageReader` and sends `MotionEvent`s. That needs a real WebView, not stubs.
+- **New R8 patterns that `Dex2jarRepair` doesn't handle** (manga only; every anime class verifies):
+  - **mangadex** (#2 of the sample): 8 classes fail with `Bad <init> method call … Type 'java/lang/Object' is not assignable to 'f4'`. They are kotlinx-serialization DTOs whose sealed parent lost its no-op constructor to R8, so the subclass constructor calls `Object.<init>` directly (jadx: `f4 extends u`, and `f4.<init>` has no super call). This is the constructor elision of phase-1 §10, but as a *super call inside a constructor* rather than at a `new` site. The repair would rewrite it to the direct superclass and add the missing constructors, as it already does for `new` sites.
+  - **mangafire, comix, mangakakalot**: 1 class each, `Call to wrong <init> method`, with the repair's note `dex has 1 new java/lang/Exception, jar has 0`. A `new` site the repair couldn't map, because dex2jar emitted a different number of them.
+  - Neither pattern was seen before (Phase 1 only ran MangaPill). Both are open (Stage 3 prompt).
+- **Runtime:** AnimePahe's preference screen sets up with no `"Stub!"` (3 `ListPreference`, 2 `SwitchPreferenceCompat`, 1 `EditTextPreference`), and the values round-trip through its `SharedPreferences` (`AnimeExtensionRuntimeTest`). AnimeGG's client is `NetworkHelper`'s, and its cookie jar and `android.webkit.CookieManager` see each other's cookies.

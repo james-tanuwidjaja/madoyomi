@@ -51,8 +51,20 @@ public class Preference {
         this.onChangeListener = onPreferenceChangeListener;
     }
 
+    // Madoyomi: the click listener is stored (upstream: "Stub!", which broke setupPreferenceScreen of extensions that
+    // set one). Nothing clicks a preference in Madoyomi, so it is never called.
+    @JsonIgnore
+    private OnPreferenceClickListener onClickListener;
+
     public void setOnPreferenceClickListener(OnPreferenceClickListener onPreferenceClickListener) {
-        throw new RuntimeException("Stub!");
+        // Madoyomi: stored (upstream: "Stub!")
+        this.onClickListener = onPreferenceClickListener;
+    }
+
+    /** Madoyomi: added (Android API). */
+    @JsonIgnore
+    public OnPreferenceClickListener getOnPreferenceClickListener() {
+        return onClickListener;
     }
 
     public CharSequence getTitle() {

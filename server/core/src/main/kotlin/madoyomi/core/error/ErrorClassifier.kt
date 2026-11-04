@@ -6,6 +6,7 @@ package madoyomi.core.error
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import eu.kanade.tachiyomi.network.HttpException
+import madoyomi.core.extension.ExtensionIncompatibility
 import madoyomi.core.extension.SourceAccess
 import suwayomi.tachidesk.manga.impl.util.network.isHostUnreachable
 import suwayomi.tachidesk.manga.impl.util.source.StubSource
@@ -61,6 +62,18 @@ object ErrorClassifier {
 
             e is IllegalArgumentException -> {
                 expected(ErrorCode.BAD_REQUEST, e.message ?: "Bad request")
+            }
+
+            // an extension reached a gap in the host's API through a path that doesn't go through AnimeSourceCalls
+            // (upstream's manga code); the package isn't known here
+            ExtensionIncompatibility.classify(e) != null -> {
+                val found = ExtensionIncompatibility.classify(e)!!
+                ClassifiedError(
+                    ErrorCode.EXTENSION_INCOMPATIBLE,
+                    "An extension needs an API Madoyomi doesn't provide (${found.kind.name.lowercase()}: ${found.target})",
+                    mapOf("kind" to found.kind.name, "missing" to found.target, "cause" to found.error.javaClass.name),
+                    expected = false,
+                )
             }
 
             else -> {

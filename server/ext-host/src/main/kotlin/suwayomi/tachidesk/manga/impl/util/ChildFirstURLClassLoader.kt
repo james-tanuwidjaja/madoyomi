@@ -36,7 +36,17 @@ class ChildFirstURLClassLoader(
                 try {
                     findClass(name)
                 } catch (_: ClassNotFoundException) {
-                    super.loadClass(name, resolve)
+                    // Madoyomi: a class found nowhere (system, jar, parent) is reported to the compat log
+                    // (madoyomi.exthost.ExtensionClassLoadHook) before the exception propagates
+                    try {
+                        super.loadClass(name, resolve)
+                    } catch (e: ClassNotFoundException) {
+                        if (name != null) {
+                            madoyomi.exthost.ExtensionClassLoadHook
+                                .classNotFound(urLs.firstOrNull(), name)
+                        }
+                        throw e
+                    }
                 }
         }
 

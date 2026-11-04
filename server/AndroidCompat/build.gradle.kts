@@ -16,13 +16,39 @@ plugins {
     )
 }
 
+// Madoyomi: android-jar classes that AndroidCompat implements itself (src/main/java). They are left out of the
+// android-jar the module uses, so there is exactly one copy of each on every classpath and in the server jar
+// (upstream's android-jar is already stripped of the classes upstream implements). See server/UPSTREAM.md.
+val madoyomiAndroidOverrides =
+    listOf(
+        "android/os/LocaleList.class",
+    )
+
+val androidStubsJar: Configuration =
+    configurations.create("androidStubsJar") {
+        isTransitive = false
+    }
+
+val strippedAndroidStubs =
+    tasks.register<Jar>("strippedAndroidStubs") {
+        description = "The android-jar without the classes AndroidCompat implements (Madoyomi)"
+        archiveFileName.set("android-jar-madoyomi.jar")
+        destinationDirectory.set(layout.buildDirectory.dir("android-stubs"))
+        inputs.property("overrides", madoyomiAndroidOverrides)
+        from({ zipTree(androidStubsJar.singleFile) }) {
+            exclude(madoyomiAndroidOverrides)
+        }
+    }
+
 dependencies {
     // Shared
     implementation(libs.bundles.shared)
     testImplementation(libs.bundles.sharedTest)
 
     // Android stub library
-    implementation(libs.android.stubs)
+    // Madoyomi: through strippedAndroidStubs (upstream: implementation(libs.android.stubs))
+    androidStubsJar(libs.android.stubs)
+    implementation(files(strippedAndroidStubs))
 
     // XML
     compileOnly(libs.xmlpull)

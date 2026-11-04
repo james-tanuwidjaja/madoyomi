@@ -8,6 +8,7 @@ package androidx.preference;
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 public class TwoStatePreference extends Preference {
@@ -19,11 +20,27 @@ public class TwoStatePreference extends Preference {
         setDefaultValue(false);
     }
 
-    @JsonIgnore
-    public boolean isChecked() { throw new RuntimeException("Stub!"); }
+    // Madoyomi: isChecked/setChecked are backed by the screen's SharedPreferences, as on Android (upstream: "Stub!").
+    // Before the preference is added to a screen, the state is kept in this object.
+    private Boolean checked;
 
     @JsonIgnore
-    public void setChecked(boolean checked) { throw new RuntimeException("Stub!"); }
+    public boolean isChecked() {
+        // Madoyomi: implemented (upstream: "Stub!")
+        boolean fallback = checked != null ? checked
+                : getDefaultValue() instanceof Boolean ? (Boolean) getDefaultValue() : false;
+        SharedPreferences prefs = getSharedPreferences();
+        if (prefs == null || getKey() == null) return fallback;
+        return prefs.getBoolean(getKey(), fallback);
+    }
+
+    @JsonIgnore
+    public void setChecked(boolean checked) {
+        // Madoyomi: implemented (upstream: "Stub!"); persists like Android's persistBoolean
+        this.checked = checked;
+        SharedPreferences prefs = getSharedPreferences();
+        if (prefs != null && getKey() != null) prefs.edit().putBoolean(getKey(), checked).apply();
+    }
 
     @JsonIgnore
     public CharSequence getSummaryOn() {

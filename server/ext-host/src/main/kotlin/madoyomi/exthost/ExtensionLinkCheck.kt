@@ -52,10 +52,21 @@ object ExtensionLinkCheck {
         val externalClasses: Int,
         /** Distinct methods and fields from outside the jar the jar references. */
         val externalMembers: Int,
+        /**
+         * The jar's classes that extend `android.app.Activity` (dotted names). Extensions declare one for deep links
+         * (`UrlActivity`); Madoyomi never starts an activity, so what only they use never runs.
+         */
+        val activityClasses: Set<String> = emptySet(),
     ) {
         val ok get() = issues.isEmpty()
 
         fun of(kind: Kind) = issues.filter { it.kind == kind }
+
+        /** [issue] is only referenced from [activityClasses], code Madoyomi never runs. */
+        fun onlyFromActivities(issue: Issue) = issue.referencedFrom.isNotEmpty() && issue.referencedFrom.all { it in activityClasses }
+
+        /** The issues that can be reached: everything not [onlyFromActivities]. */
+        val reachable: List<Issue> get() = issues.filterNot(::onlyFromActivities)
     }
 
     /** Checks [jar] against the classes [host] can see (normally the loader extensions are loaded under). */
@@ -104,8 +115,11 @@ object ExtensionLinkCheck {
             issues.sortedWith(compareBy({ it.kind }, { it.target })),
             externalClasses = externalClasses,
             externalMembers = externalMembers,
+            activityClasses = jarClasses.keys.filterTo(sortedSetOf()) { resolver.extends(it, ACTIVITY) }.dotted(),
         )
     }
+
+    private const val ACTIVITY = "android/app/Activity"
 
     private fun Set<String>.dotted() = mapTo(sortedSetOf()) { it.replace('/', '.') }
 
@@ -335,6 +349,20 @@ object ExtensionLinkCheck {
             }
 
             return search(member.owner) ?: Resolution.NotFound
+        }
+
+        /** [className] is [ancestor] or has it among its superclasses. */
+        fun extends(
+            className: String,
+            ancestor: String,
+        ): Boolean {
+            var current: String? = className
+            val seen = mutableSetOf<String>()
+            while (current != null && seen.add(current)) {
+                if (current == ancestor) return true
+                current = info(current)?.superName
+            }
+            return false
         }
 
         private fun readHostClass(name: String): ClassInfo? {

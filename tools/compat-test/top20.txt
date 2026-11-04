@@ -1,0 +1,26 @@
+# Top 20 yuzono anime extensions by jsDelivr hits, snapshot 2026-11-04 (tools/compat-test/select-top.ps1).
+# Method: data.jsdelivr.com stats for gh/yuzono/anime-repo@repo, period=month (436 APK files over 7 pages),
+# hits summed per package across versions; torrent extensions excluded; NSFW included (Phase 2 doc, section 9).
+# Index: https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.pb (247 extensions); warning = index.pb content warning; apk = the current APK.
+# columns: rank	pkg	version	lib	warning	lang	monthly_hits	apk
+1	eu.kanade.tachiyomi.animeextension.en.hanime	16.25	16	NSFW	en	1927	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.hanime-v16.25.apk
+2	eu.kanade.tachiyomi.animeextension.en.oppaistream	16.7	16	NSFW	en	1238	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.oppaistream-v16.7.apk
+3	eu.kanade.tachiyomi.animeextension.en.animepahe	16.56	16	SAFE	en	1050	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.animepahe-v16.56.apk
+4	eu.kanade.tachiyomi.animeextension.all.missav	14.33	14	NSFW	all	1045	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-all.missav-v14.33.apk
+5	eu.kanade.tachiyomi.animeextension.en.anidb	16.9	16	NSFW	en	961	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.anidb-v16.9.apk
+6	eu.kanade.tachiyomi.animeextension.en.rule34video	16.11	16	NSFW	en	833	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.rule34video-v16.11.apk
+7	eu.kanade.tachiyomi.animeextension.en.onetwothreeanime	14.4	14	SAFE	en	818	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.onetwothreeanime-v14.4.apk
+8	eu.kanade.tachiyomi.animeextension.all.movy	16.3	16	NSFW	all	716	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-all.movy-v16.3.apk
+9	eu.kanade.tachiyomi.animeextension.en.hentaimama	16.9	16	NSFW	en	699	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.hentaimama-v16.9.apk
+10	eu.kanade.tachiyomi.animeextension.en.anikoto	16.10	16	SAFE	en	698	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.anikoto-v16.10.apk
+11	eu.kanade.tachiyomi.animeextension.en.kickassanime	14.63	14	SAFE	en	541	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.kickassanime-v14.63.apk
+12	eu.kanade.tachiyomi.animeextension.en.kisskh	16.10	16	NSFW	en	535	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.kisskh-v16.10.apk
+13	eu.kanade.tachiyomi.animeextension.en.hentaihaven	16.9	16	NSFW	en	533	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.hentaihaven-v16.9.apk
+14	eu.kanade.tachiyomi.animeextension.en.reanime	16.14	16	MIXED	en	531	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.reanime-v16.14.apk
+15	eu.kanade.tachiyomi.animeextension.all.streamingcommunity	14.24	14	SAFE	en,it	521	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-all.streamingcommunity-v14.24.apk
+16	eu.kanade.tachiyomi.animeextension.en.kotokai	16.10	16	SAFE	en	498	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.kotokai-v16.10.apk
+17	eu.kanade.tachiyomi.animeextension.all.anizone	16.15	16	SAFE	all	490	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-all.anizone-v16.15.apk
+18	eu.kanade.tachiyomi.animeextension.all.javguru	14.47	14	NSFW	all	471	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-all.javguru-v14.47.apk
+19	eu.kanade.tachiyomi.animeextension.en.aniwave	16.12	16	SAFE	en	455	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.aniwave-v16.12.apk
+20	eu.kanade.tachiyomi.animeextension.all.animeonsen	14.10	14	SAFE	all	453	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-all.animeonsen-v14.10.apk
+# SAFE-only: 9 of 20

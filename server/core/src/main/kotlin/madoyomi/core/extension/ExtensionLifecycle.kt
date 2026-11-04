@@ -178,6 +178,7 @@ class ExtensionLifecycle(
         val jar = ExtensionFiles.installedJar(row)
         unloader.unload(row)
         jar?.let(ExtensionLoadGate::revoke)
+        ExtensionCompatLog.clear(pkg)
 
         val extensionId = row[ExtensionTable.id].value
         dbTransaction {
@@ -513,7 +514,10 @@ class ExtensionLifecycle(
             PackageTools.dex2jar(apk, jar)
             // R8-optimised dex (Keiyoushi) would otherwise leave classes the JVM refuses to verify
             val repair = Dex2jarRepair.repair(apk, jar)
-            val allWarnings = warnings + repair.skipped.map { "not repaired: $it" }
+            // the static link check: API gaps the extension's code would hit, as warnings (the install goes on)
+            val linkCheck = ExtensionCompat.linkCheck(pkg, jar)
+            val allWarnings = warnings + repair.skipped.map { "not repaired: $it" } + linkCheck.warnings
+            linkCheck.warnings.forEach { logger.warn { "$pkg: $it" } }
             Extension.extractAssetsFromApk(apk, jar)
             Extension.extractAndCacheApkIcon(apk, pkg)
             ExtensionLoadGate.permit(jar, hash)
@@ -562,6 +566,7 @@ class ExtensionLifecycle(
             if (oldJar != null && oldJar.exists()) Extension.tryToDeleteFile(oldJar)
             Extension.removeDeletionOnStartupRequest(jar)
             if (oldJar != null) ExtensionLoadGate.revoke(oldJar)
+            ExtensionCompat.commit(pkg, linkCheck)
 
             logger.info {
                 "Installed ${kind.name.lowercase()} extension $pkg v${inspection.versionName} " +
