@@ -81,6 +81,8 @@ class ExtensionLinkCheckTest {
         val report = checkRealExtension(TestApks.MANGAPILL)
         assertEquals(emptyList(), report.of(Kind.MISSING_CLASS))
         assertEquals(emptyList(), report.of(Kind.MISSING_MEMBER))
+        // Stage 1 found android.os.LocaleList stubs here; AndroidCompat implements LocaleList since Stage 2
+        assertEquals(emptyList(), report.of(Kind.STUB))
     }
 
     @Test
@@ -93,6 +95,9 @@ class ExtensionLinkCheckTest {
             out.putNextEntry(JarEntry("t/Child.class"))
             out.write(childClass())
             out.closeEntry()
+            out.putNextEntry(JarEntry("t/Deep.class"))
+            out.write(activityClass())
+            out.closeEntry()
         }
 
         val report = ExtensionLinkCheck.check(jar, host)
@@ -104,7 +109,33 @@ class ExtensionLinkCheckTest {
             listOf("java.lang.String.noSuchMethod()V", "java.lang.System.nope:I"),
             report.of(Kind.MISSING_MEMBER).map { it.target },
         )
-        assertEquals(listOf("android.widget.Button.<init>(Landroid/content/Context;)V"), report.of(Kind.STUB).map { it.target })
+        assertEquals(
+            listOf("android.app.Activity.finish()V", "android.widget.Button.<init>(Landroid/content/Context;)V"),
+            report.of(Kind.STUB).map { it.target },
+        )
+
+        // t.Deep is an Activity (a deep-link entry point Madoyomi never starts): what only it uses isn't reachable
+        assertEquals(setOf("t.Deep"), report.activityClasses)
+        val finish = report.of(Kind.STUB).first()
+        assertTrue(report.onlyFromActivities(finish))
+        assertTrue(finish !in report.reachable)
+        assertEquals(report.issues.size - 1, report.reachable.size)
+    }
+
+    /** `t.Deep extends android.app.Activity` and calls the android-jar stub `finish()`. */
+    private fun activityClass(): ByteArray {
+        val cw = ClassWriter(0)
+        cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "t/Deep", null, "android/app/Activity", null)
+        cw.visitMethod(Opcodes.ACC_PUBLIC, "done", "()V", null, null).apply {
+            visitCode()
+            visitVarInsn(Opcodes.ALOAD, 0)
+            visitMethodInsn(Opcodes.INVOKEVIRTUAL, "t/Deep", "finish", "()V", false)
+            visitInsn(Opcodes.RETURN)
+            visitMaxs(1, 1)
+            visitEnd()
+        }
+        cw.visitEnd()
+        return cw.toByteArray()
     }
 
     /** `t.Probe.run()` uses one of each: a missing class, two missing members, a stub and resolvable references. */

@@ -38,6 +38,8 @@ object ExtensionLoadGate {
 
     /** Throws [ErrorCode.UNTRUSTED] unless [jar] may be loaded now. */
     fun check(jar: Path) {
+        // extension code is about to run: its class loader reports missing classes from here on
+        ExtensionCompatLog.install()
         val path = jar.absolutePathString()
         val hash =
             permits[path]

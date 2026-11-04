@@ -141,6 +141,7 @@ class ExtensionLifecycleTest {
         PackageTools.jarLoaderMap.values.forEach { it.close() }
         PackageTools.jarLoaderMap.clear()
         ExtensionLoadGate.clear()
+        ExtensionCompatLog.clearAll()
         ExtensionKind.entries.forEach { (ExtensionFiles.extensionsRoot / it.dirName).deleteRecursively() }
     }
 
@@ -349,6 +350,31 @@ class ExtensionLifecycleTest {
         assertTrue(jar.startsWith(ExtensionFiles.extensionsRoot / "anime" / apk.pkg))
         assertTrue(loaded(jar))
         assertEquals(emptyList(), TestApks.verifyErrors(jar))
+    }
+
+    @Test
+    fun `the link check's reachable issues are install warnings and the compat log's static issues`() {
+        val pahe = TestApks.apk(TestApks.ANIMEPAHE)
+        addRepo(repo(ExtensionKind.ANIME, pahe.hash), TestRepo.Entry(pahe))
+        val result = run { lifecycle.install(pahe.pkg, ExtensionKind.ANIME) }
+
+        assertTrue(result.loaded, "a warning doesn't stop the install")
+        // AnimePahe's preference dialog binds android.widget views that android-jar only has as stubs (Stage 1, §10)
+        val warning = result.warnings.single { it.startsWith("link check:") }
+        assertTrue("Android stubs" in warning && "android.view.View.findViewById" in warning, warning)
+        val static = ExtensionCompatLog.issues(pahe.pkg).filter { it.origin == ExtensionCompatLog.Origin.STATIC }
+        assertTrue(static.isNotEmpty() && static.all { it.kind == ExtensionCompatLog.IssueKind.STUB }, static.toString())
+        assertNotNull(ExtensionCompatLog.staticReport(pahe.pkg))
+
+        run { lifecycle.uninstall(pahe.pkg, ExtensionKind.ANIME) }
+        assertEquals(emptyList(), ExtensionCompatLog.issues(pahe.pkg), "uninstall drops the log")
+
+        // MangaPill's android.os.LocaleList stubs (Stage 1) are gone: AndroidCompat implements LocaleList now
+        val pill = TestApks.apk(TestApks.MANGAPILL)
+        addRepo(repo(ExtensionKind.MANGA, pill.hash), TestRepo.Entry(pill))
+        val manga = run { lifecycle.install(pill.pkg, ExtensionKind.MANGA) }
+        assertEquals(emptyList(), manga.warnings)
+        assertEquals(emptyList(), ExtensionCompatLog.issues(pill.pkg))
     }
 
     @Test

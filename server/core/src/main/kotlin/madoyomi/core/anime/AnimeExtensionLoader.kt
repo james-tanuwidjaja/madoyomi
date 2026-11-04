@@ -12,7 +12,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import madoyomi.core.anime.model.table.AnimeSourceTable
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
+import madoyomi.core.extension.ExtensionCompatLog
 import madoyomi.core.extension.ExtensionFiles
+import madoyomi.core.extension.ExtensionIncompatibility
 import madoyomi.core.extension.ExtensionLoadGate
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -180,6 +182,9 @@ object AnimeExtensionLoader {
                 else -> null
             }
         logger.error(error) { "Failed to load anime extension $pkg ($className)" }
+        ExtensionIncompatibility.classify(error)?.let {
+            ExtensionCompatLog.record(pkg, it.kind, it.target, ExtensionCompatLog.Origin.RUNTIME, "load")
+        }
         val details = mutableMapOf<String, Any?>("pkgName" to pkg, "className" to className, "cause" to cause.javaClass.name)
         missing?.let { details["missing"] = it }
         return MadoyomiException(

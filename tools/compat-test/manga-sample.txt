@@ -1,0 +1,16 @@
+# Keiyoushi manga sample: top 10 by GitHub release-asset downloads per day, snapshot 2026-11-04 (tools/compat-test/select-top.ps1).
+# Method: Keiyoushi's APKs are not served by jsDelivr; download_count of each package's current APK asset (from index.pb),
+# divided by the days since its release was published (5 releases: 6296017, 726723b-0, 726723b-1, 726723b-2, ee661f5). NSFW included.
+# Index: https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb (1458 extensions); warning = index.pb content warning; apk = the current APK.
+# columns: rank	pkg	version	lib	warning	lang	downloads_per_day	apk
+1	eu.kanade.tachiyomi.extension.all.mangafire	1.6.37	1.6	MIXED	en,es,es-419,fr,ja,pt,+1	32668.9	https://github.com/keiyoushi/extensions/releases/download/726723b-0/tachiyomi-all.mangafire-v1.6.37.apk
+2	eu.kanade.tachiyomi.extension.all.mangadex	1.6.1	1.6	MIXED	af,ar,az,be,bg,bn,+55	25301.7	https://github.com/keiyoushi/extensions/releases/download/726723b-0/tachiyomi-all.mangadex-v1.6.1.apk
+3	eu.kanade.tachiyomi.extension.all.kagane	1.6.41	1.6	MIXED	ar,de,en,es,es-419,fr,+12	18655.3	https://github.com/keiyoushi/extensions/releases/download/726723b-0/tachiyomi-all.kagane-v1.6.41.apk
+4	eu.kanade.tachiyomi.extension.en.asurascans	1.6.71	1.6	SAFE	en	16035.3	https://github.com/keiyoushi/extensions/releases/download/726723b-0/tachiyomi-en.asurascans-v1.6.71.apk
+5	eu.kanade.tachiyomi.extension.en.comix	1.6.62	1.6	MIXED	en	13872	https://github.com/keiyoushi/extensions/releases/download/ee661f5/tachiyomi-en.comix-v1.6.62.apk
+6	eu.kanade.tachiyomi.extension.all.webtoons	1.6.3	1.6	SAFE	de,en,es,fr,id,th,+1	13737.2	https://github.com/keiyoushi/extensions/releases/download/726723b-0/tachiyomi-all.webtoons-v1.6.3.apk
+7	eu.kanade.tachiyomi.extension.en.toonily	1.6.77	1.6	MIXED	en	13595.3	https://github.com/keiyoushi/extensions/releases/download/726723b-1/tachiyomi-en.toonily-v1.6.77.apk
+8	eu.kanade.tachiyomi.extension.en.mangakakalot	1.6.28	1.6	MIXED	en	13292.8	https://github.com/keiyoushi/extensions/releases/download/726723b-0/tachiyomi-en.mangakakalot-v1.6.28.apk
+9	eu.kanade.tachiyomi.extension.en.weebcentral	1.6.26	1.6	MIXED	en	13207.9	https://github.com/keiyoushi/extensions/releases/download/726723b-1/tachiyomi-en.weebcentral-v1.6.26.apk
+10	eu.kanade.tachiyomi.extension.en.aquamanga	1.6.74	1.6	SAFE	en	11448.6	https://github.com/keiyoushi/extensions/releases/download/726723b-0/tachiyomi-en.aquamanga-v1.6.74.apk
+# SAFE-only: 3 of 10

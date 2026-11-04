@@ -48,3 +48,7 @@ spikes/**/out/
 .env
 .env.*
 !.env.example
+
+# Phase 2 compat work: downloaded APKs and scan scratch output (tools/compat-test/select-top.ps1, scan.ps1)
+tools/compat-test/apks/
+tools/compat-test/out/

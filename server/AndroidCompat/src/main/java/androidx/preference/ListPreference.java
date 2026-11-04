@@ -8,6 +8,7 @@ package androidx.preference;
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.text.TextUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
@@ -49,14 +50,42 @@ public class ListPreference extends Preference {
         this.entryValues = entryValues;
     }
 
-    @JsonIgnore
-    public void setValueIndex(int index) { throw new RuntimeException("Stub!"); }
+    // Madoyomi: the value accessors are backed by the screen's SharedPreferences, as on Android (upstream: "Stub!",
+    // which extensions hit in setupPreferenceScreen). Before the preference is added to a screen (no preferences
+    // yet), the value is kept in this object.
+    private String value;
+    private boolean valueSet;
 
     @JsonIgnore
-    public String getValue() { throw new RuntimeException("Stub!"); }
+    public void setValueIndex(int index) {
+        // Madoyomi: implemented (upstream: "Stub!")
+        setValue(entryValues[index].toString());
+    }
 
     @JsonIgnore
-    public void setValue(String value) { throw new RuntimeException("Stub!"); }
+    public String getValue() {
+        // Madoyomi: implemented (upstream: "Stub!")
+        String fallback = valueSet ? value : (getDefaultValue() instanceof String ? (String) getDefaultValue() : null);
+        SharedPreferences prefs = getSharedPreferences();
+        if (prefs == null || getKey() == null) return fallback;
+        return prefs.getString(getKey(), fallback);
+    }
+
+    @JsonIgnore
+    public void setValue(String value) {
+        // Madoyomi: implemented (upstream: "Stub!"); persists like Android's persistString
+        this.value = value;
+        this.valueSet = true;
+        SharedPreferences prefs = getSharedPreferences();
+        if (prefs != null && getKey() != null) prefs.edit().putString(getKey(), value).apply();
+    }
+
+    /** The entry of the current value, or null. Madoyomi: added (Android API, missing upstream). */
+    @JsonIgnore
+    public CharSequence getEntry() {
+        int index = findIndexOfValue(getValue());
+        return index >= 0 && entries != null && index < entries.length ? entries[index] : null;
+    }
 
     /** Tachidesk specific API */
     @Override

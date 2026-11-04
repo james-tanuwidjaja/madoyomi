@@ -8,8 +8,11 @@ package androidx.preference;
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.text.TextUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import java.util.HashSet;
 import java.util.Set;
 
 public class MultiSelectListPreference extends DialogPreference {
@@ -39,18 +42,40 @@ public class MultiSelectListPreference extends DialogPreference {
         return entryValues;
     }
 
+    // Madoyomi: the value accessors are backed by the screen's SharedPreferences, as on Android (upstream: "Stub!").
+    // Before the preference is added to a screen, the values are kept in this object.
+    private Set<String> values;
+
     @JsonIgnore
     public void setValues(Set<String> values) {
-        throw new RuntimeException("Stub!");
+        // Madoyomi: implemented (upstream: "Stub!"); persists like Android's persistStringSet
+        this.values = values == null ? null : new HashSet<>(values);
+        SharedPreferences prefs = getSharedPreferences();
+        if (prefs != null && getKey() != null) prefs.edit().putStringSet(getKey(), this.values).apply();
     }
 
     @JsonIgnore
+    @SuppressWarnings("unchecked")
     public Set<String> getValues() {
-        throw new RuntimeException("Stub!");
+        // Madoyomi: implemented (upstream: "Stub!")
+        Set<String> fallback = values != null ? values
+                : getDefaultValue() instanceof Set ? (Set<String>) getDefaultValue() : new HashSet<>();
+        SharedPreferences prefs = getSharedPreferences();
+        if (prefs == null || getKey() == null) return new HashSet<>(fallback);
+        Set<String> stored = prefs.getStringSet(getKey(), fallback);
+        return stored == null ? new HashSet<>() : new HashSet<>(stored);
     }
 
     public int findIndexOfValue(String value) {
-        throw new RuntimeException("Stub!");
+        // Madoyomi: implemented like ListPreference.findIndexOfValue (upstream: "Stub!")
+        if (value != null && entryValues != null) {
+            for (int i = entryValues.length - 1; i >= 0; i--) {
+                if (TextUtils.equals(entryValues[i].toString(), value)) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     /** Tachidesk specific API */
