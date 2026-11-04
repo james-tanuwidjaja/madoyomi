@@ -32,7 +32,7 @@ object SourceAccess {
             val source = SourceTable.selectAll().where { SourceTable.id eq sourceId }.firstOrNull()
             if (source == null) {
                 val isAnime = !AnimeSourceTable.selectAll().where { AnimeSourceTable.id eq sourceId }.empty()
-                val hint = if (isAnime) " ($sourceId is an anime source; anime sources can't be browsed yet)" else ""
+                val hint = if (isAnime) " ($sourceId is an anime source; use the anime operations)" else ""
                 return@dbTransaction MadoyomiException(ErrorCode.NOT_FOUND, "No manga source $sourceId$hint", details)
             }
             val extension =

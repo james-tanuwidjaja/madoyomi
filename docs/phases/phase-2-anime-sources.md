@@ -56,12 +56,12 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 ## 5. Checklist
 
 ### API surface
-- [ ] Package layout matches `extensions-lib` exactly
+- [x] Package layout matches `extensions-lib` exactly (the Aniyomi app's `source-api`, ported in Phase 1. `ExtensionLinkCheck` resolves every reference into the API of AnimeGG (lib 14) and AnimePahe (lib 16); Stage 1, §10)
 - [ ] `SAnime`, `SEpisode`, `Video`, `Track`, `AnimesPage`
 - [ ] `AnimeSource`, `AnimeCatalogueSource`, `AnimeHttpSource`, `ParsedAnimeHttpSource`
 - [ ] `ConfigurableAnimeSource`, `AnimeSourceFactory`
-- [ ] Source loading + stable source IDs
-- [ ] Suspend and legacy `fetch*` APIs (as needed for the pinned version)
+- [x] Source loading + stable source IDs (trusted extensions load at install, at trust and on first use, behind `ExtensionLoadGate`; `ANIME_SOURCE` is reconciled with the live sources. IDs come from the extension: `AnimeHttpSource.generateId`, MD5 of `name/lang/versionId`, e.g. AnimeGG `2247987965040486818`. Stage 1, §9)
+- [x] Suspend and legacy `fetch*` APIs (as needed for the pinned version). One surface, the newest (lib 17), which keeps every lib-14/16 member; it is link-checked against both generations (§9)
 
 ### Android stubs & networking
 - [ ] Anime-specific stubs added (`SharedPreferences`, `Context`, `Uri`, `Base64`, `Log`, …)
@@ -104,3 +104,66 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 
 - Pinned `extensions-lib` version(s) supported at launch.
 - Whether multiple lib versions must be supported side by side.
+
+### Stage plan (2026-11-04)
+
+Each stage ends in something verifiable and a commit:
+1. **Anime loader behind the trust gate**, plus `ExtensionLinkCheck`. *Done.*
+2. **Top-20 list**: jsDelivr ranking → `tools/compat-test/top20.txt`, plus a manga sample.
+   - Static link-check scan over them.
+   - Missing-class/method logging at runtime (`EXTENSION_INCOMPATIBLE`), exposed as `compatIssues`.
+   - Android/`androidx.preference` stubs fixed by frequency.
+   - Networking checks.
+3. **Core anime services**: migration `M0071_AnimeBrowse` (unique `(source, url)` / `(url, anime)`, the missing `SAnime`/`SEpisode` columns).
+   - Browse with filters, upserted into `ANIME`.
+   - Details plus episodes (reconcile, seasons).
+   - Hosters → videos (not persisted).
+   - Filter and preference mapping.
+4. **GraphQL operations**: `fetchSourceAnime`, `fetchAnimeAndEpisodes`, `fetchEpisodeVideos`, `updateAnimeSourcePreference`, `anime`/`animes`/`episodes`, and `AnimeSourceType.filters`/`preferences`.
+   - The `/api/v1/anime/{id}/thumbnail` route.
+   - The PLAN.md §5 mapping table.
+   - `smoke-api.ps1` anime steps, with the helpers moved to `tools/lib/MadoyomiServer.ps1`.
+5. **Compat harness** `tools/compat-test/run-compat.ps1` and its first run → `docs/research/anime-compat.md`, including process health (JVM aborts, threads, memory).
+   - Then the Cloudflare decision: possibly a KCEF solver stage, 5b.
+6. **Fix round until ≥ 18/20**, filters/preferences round-trip for ≥ 3 extensions, the one-JVM verdict, docs closed.
+
+## 9. Decision record
+
+Phase-wide decisions first (from the Phase 2 plan, 2026-11-04), then the decisions of each stage.
+
+Phase-wide:
+
+| Decision | Why |
+|---|---|
+| **One API surface, the newest.** `ext-anime` is the Aniyomi app's `source-api` (lib 17), which keeps every lib-14/16 member: the Rx `fetch*` methods, both `Video` constructors, the hidden lib-16 `copy`, `Hoster`/`toHosterList`. No lib versions side by side. The manifest lib is recorded, never used to pick an implementation. | Phase 0 found the manifest lib doesn't describe the binary API (AnimeGG declares 14 and calls lib-16 members). The link check (Stage 1) proves the surface per extension. |
+| **The "top 20" is ranked by jsDelivr monthly downloads** of yuzono's APKs, summed per package, torrent extensions excluded, **NSFW included** (user decision 2026-11-04: everything by downloads, real usage). The list is a committed snapshot (`tools/compat-test/top20.txt`); the report has a SAFE-only sub-tally. | Neither index has a popularity signal; jsDelivr serves the APKs and publishes per-file hit counts. |
+| **Cloudflare: measure first** (user decision 2026-11-04). A KCEF-backed solver is only added (as an extra stage) if Cloudflare-blocked sources push the harness below 18/20; otherwise they are listed as "needs Cloudflare solver" and deferred. | Upstream's `CloudflareInterceptor` only uses FlareSolverr, an external service; KCEF is never used for Cloudflare, and a solver is sizeable work. |
+| Filters and preferences are exposed through upstream's GraphQL `Filter`/`Preference` unions and its `FilterChange`/`SourcePreferenceChange` inputs (Stages 3–4). | Typed JSON; one Phase 3 renderer serves both kinds. |
+| The compat harness is a PowerShell driver over the real sidecar jar (`tools/compat-test/`), outside Gradle. | Only an outside process can see a JVM abort or runaway threads/memory, which decide whether "one JVM" stays (phase-1 §8). |
+
+Stage 1 (loader):
+
+| Decision | Why |
+|---|---|
+| Anime sources get their own cache, `AnimeGetSource` (core, `madoyomi.core.anime`), registered with `SourceRegistry`; upstream's manga `GetSource` stays untouched. | Upstream's cache is typed to manga `Source`. |
+| A trusted anime extension is instantiated at install/update, when its key becomes trusted, and on first use (a Phase 1 install needs no reinstall). Each load reconciles `ANIME_SOURCE` with the live sources and sets `is_loaded = true`. | The same meaning of `is_loaded` as for manga; the live code is the authority for its sources. |
+| An update instantiates the new code before the old version is unloaded. | A new version that can't be loaded leaves the installed one as it was. |
+| A load failure other than the gate's `UNTRUSTED` is `LOAD_FAILED` (new code, 500), with `details.cause` and, for a `LinkageError`, `details.missing`. At install it fails the install, as a manga `setupJar` failure does; later, `AnimeSourceAccess` reports it. No new column. | A stable code the trust/compat UI can branch on; nothing half-installed is kept. |
+| `PackageTools` closes a class loader it created when the load fails (a `// Madoyomi:` edit). | Upstream leaked it, and the leaked loader kept the jar open: on Windows that locks the jar against uninstall and update (found by Stage 1's tests). |
+| `ExtensionLinkCheck` (ext-host) checks a jar statically: every external class, method and field is resolved over the host's class files read as bytes (nothing is loaded or initialised), and members whose body only throws `"Stub!"` (android-jar) are reported. | A gap would otherwise surface as a `NoSuchMethodError` deep inside some source call. Static, so it covers code paths the harness never reaches. |
+
+## 10. Findings log
+
+**2026-11-04: loader and link check (Stage 1).** `ExtensionLinkCheck` over the three test APKs (after dex2jar and `Dex2jarRepair`), against the host classpath:
+
+| APK | External classes / members | Missing classes / members | Stubs |
+|---|---|---|---|
+| AnimeGG v14.2 (lib 14) | 105 / 180 | 0 / 0 | 0 |
+| AnimePahe v16.56 (lib 16) | 217 / 561 | 0 / 0 | 7, all in its preference dialog: `android.view.View.findViewById`/`getRootView`/`setEnabled`, `android.widget.TextView.addTextChangedListener`/`getError`/`setError`/`setInputType` |
+| MangaPill v1.6.1 (manga) | 106 / 258 | 0 / 0 | 3: `android.os.LocaleList.get`/`getDefault`/`size` |
+
+- Every reference into the extension API (`eu.kanade.tachiyomi.*`), Injekt, OkHttp, Jsoup and RxJava resolves for both lib generations. That matches Phase 0's runtime result (AnimeGG end to end).
+- The AnimePahe stubs are the preference-dialog gap Phase 0 predicted statically (`docs/research/anime-ext-classes.md`). They only run when a UI binds the `EditTextPreference`, and Madoyomi never does.
+- MangaPill's `LocaleList` stubs were not known before; nothing has hit them at runtime yet (MangaPill browses and reads). Stage 2 fixes stubs by frequency over the top 20.
+- **Upstream leaked a class loader on every failed load.** `PackageTools.loadExtensionSourcesWithLockHeld` created a `ChildFirstURLClassLoader` and only stored it once `Class.forName` succeeded. A failed load left it open, holding the jar, so on Windows the jar couldn't be deleted (uninstall, update) until restart. Fixed, and covered by `ExtensionLifecycleTest`, which renames the jar after a failed load.
+- AnimeGG installs trusted and loaded with its live source `2247987965040486818` (`https://www.animegg.org`) replacing whatever the listing said.

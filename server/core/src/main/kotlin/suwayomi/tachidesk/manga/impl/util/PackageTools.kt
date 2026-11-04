@@ -191,16 +191,22 @@ object PackageTools {
         // trusted now (madoyomi.core.extension.ExtensionLoadGate); throws UNTRUSTED otherwise
         ExtensionLoadGate.check(jar)
 
+        // Madoyomi: the loader is created outside the try, so a failure can close one it created but didn't keep
+        val cachedLoader = jarLoaderMap[jarPath]
+        val classLoader = cachedLoader ?: ChildFirstURLClassLoader(arrayOf<URL>(jar.toUri().toURL()))
         try {
             logger.debug { "loading jar with path: $jarPath" }
-            val classLoader = jarLoaderMap[jarPath] ?: ChildFirstURLClassLoader(arrayOf<URL>(jar.toUri().toURL()))
             val classToLoad = Class.forName(className, false, classLoader)
 
             jarLoaderMap[jarPath] = classLoader
 
             return classToLoad.getDeclaredConstructor().newInstance()
-        } catch (e: Exception) {
-            logger.error(e) { "Failed to load jar with path: $jarPath" }
+        } catch (e: Throwable) {
+            // Madoyomi: catch Throwable (upstream: Exception) and close a class loader this call created and didn't
+            // keep. Upstream leaked it when Class.forName failed, and the leaked loader kept the jar open, which on
+            // Windows locks it against uninstall/update. LinkageErrors (an API the host lacks) are logged here too.
+            if (cachedLoader == null && jarLoaderMap[jarPath] !== classLoader) runCatching { classLoader.close() }
+            if (e is Exception || e is LinkageError) logger.error(e) { "Failed to load jar with path: $jarPath" }
             throw e
         }
     }

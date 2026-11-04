@@ -1,5 +1,5 @@
 // Madoyomi: the Aniyomi anime source API (eu.kanade.tachiyomi.animesource), ported from Aniyomi's
-// source-api (Apache-2.0, see NOTICE.md). Phase 1 only compiles it; loading anime sources is Phase 2.
+// source-api (Apache-2.0, see NOTICE.md). core loads anime extensions against it (madoyomi.core.anime).
 plugins {
     id(
         libs.plugins.kotlin.jvm

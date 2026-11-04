@@ -247,10 +247,10 @@ class ExtensionApiIntegrationTest : ApiGraphQLTest() {
         assertEquals(false, untrusted.dataPath("untrustSignature", "extensions", "0", "isLoaded"))
     }
 
-    // --- 3. anime: yuzono-shaped repo → install AnimeGG → trusted → animeSources, never loaded ---
+    // --- 3. anime: yuzono-shaped repo → install AnimeGG → trusted and loaded → animeSources from the live source ---
 
     @Test
-    fun `an anime repo is added and installed from, and its sources are listed but never loaded`() {
+    fun `an anime repo is added and installed from, and its trusted extension is loaded and its sources listed`() {
         val apk = TestApks.apk(TestApks.ANIMEGG)
         val listed = ListingSource(ANIMEGG_SOURCE, "AnimeGG", "en", "https://www.animegg.org")
         val store = addStore(repo(ExtensionKind.ANIME, apk.hash), TestRepo.Entry(apk, sources = listOf(listed)))
@@ -264,7 +264,7 @@ class ExtensionApiIntegrationTest : ApiGraphQLTest() {
         val installed = install(apk.pkg)
         assertEquals("ANIME", installed["type"])
         assertEquals(true, installed["isTrusted"])
-        assertEquals(false, installed["isLoaded"])
+        assertEquals(true, installed["isLoaded"])
         assertEquals("ANIME", extension(apk.pkg).path("extensionStore", "type"))
 
         val sources =
@@ -277,7 +277,7 @@ class ExtensionApiIntegrationTest : ApiGraphQLTest() {
         assertEquals(ANIMEGG_SOURCE.toString(), node.path("id"))
         assertEquals("https://www.animegg.org", node.path("baseUrl"))
         assertEquals(apk.pkg, node.path("extension", "pkgName"))
-        assertEquals(false, node.path("extension", "isLoaded"))
+        assertEquals(true, node.path("extension", "isLoaded"))
         assertEquals(
             1,
             (graphql("""{ animeSources(condition: {id: "$ANIMEGG_SOURCE"}) { totalCount } }""").dataPath("animeSources", "totalCount")),
@@ -288,7 +288,7 @@ class ExtensionApiIntegrationTest : ApiGraphQLTest() {
                 """mutation { trustExtension(input: {pkgName: "${apk.pkg}"}) { extension { isTrusted isLoaded } trustedSignature { origin } } }""",
             ).assertNoErrors()
         assertEquals(true, trusted.dataPath("trustExtension", "extension", "isTrusted"))
-        assertEquals(false, trusted.dataPath("trustExtension", "extension", "isLoaded"), "anime is never loaded in Phase 1")
+        assertEquals(true, trusted.dataPath("trustExtension", "extension", "isLoaded"))
         assertEquals("USER", trusted.dataPath("trustExtension", "trustedSignature", "origin"))
     }
 

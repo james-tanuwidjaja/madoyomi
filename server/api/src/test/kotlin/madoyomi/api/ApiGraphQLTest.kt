@@ -13,6 +13,7 @@ import de.neonew.exposed.migrations.loadMigrationsFrom
 import de.neonew.exposed.migrations.runMigrations
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
+import madoyomi.core.anime.AnimeGetSource
 import madoyomi.core.extension.ExtensionFiles
 import madoyomi.core.extension.ExtensionLoadGate
 import madoyomi.core.repo.StubRepoHttp
@@ -128,6 +129,7 @@ abstract class ApiGraphQLTest : ApplicationTest() {
     /** Nothing loaded, no permits, no installed files. */
     private fun resetRuntime() {
         GetSource.unregisterAllSources()
+        AnimeGetSource.unregisterAllSources()
         PackageTools.jarLoaderMap.values.forEach { it.close() }
         PackageTools.jarLoaderMap.clear()
         ExtensionLoadGate.clear()

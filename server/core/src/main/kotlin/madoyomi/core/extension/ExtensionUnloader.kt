@@ -5,6 +5,8 @@ package madoyomi.core.extension
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import madoyomi.core.anime.AnimeGetSource
+import madoyomi.core.anime.model.table.AnimeSourceTable
 import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
@@ -22,23 +24,38 @@ fun interface ExtensionUnloader {
 
     companion object {
         /**
-         * Manga: unregisters its sources from upstream's `GetSource` cache and closes its jar's class loader, the same
-         * way upstream's uninstall does. Anime extensions are never loaded in Phase 1, so there is nothing to drop.
-         * Either way the jar's load permit ([ExtensionLoadGate]) goes, so nothing can reload it without a new check.
+         * Unregisters the extension's sources from their cache (manga: upstream's `GetSource`; anime: [AnimeGetSource])
+         * and closes its jar's class loader, the same way upstream's uninstall does. The jar's load permit
+         * ([ExtensionLoadGate]) goes too, so nothing can reload it without a new check.
          */
         val default =
             ExtensionUnloader { extension ->
                 val jarPath = ExtensionFiles.installedJar(extension)
                 jarPath?.let(ExtensionLoadGate::revoke)
-                if (extension[ExtensionTable.type] != ExtensionKind.MANGA) return@ExtensionUnloader
                 val extensionId = extension[ExtensionTable.id].value
-                val sourceIds =
-                    dbTransaction {
-                        SourceTable.selectAll().where { SourceTable.extension eq extensionId }.map { it[SourceTable.id].value }
+                when (extension[ExtensionTable.type]) {
+                    ExtensionKind.MANGA -> {
+                        val sourceIds =
+                            dbTransaction {
+                                SourceTable.selectAll().where { SourceTable.extension eq extensionId }.map { it[SourceTable.id].value }
+                            }
+                        sourceIds.forEach(GetSource::unregisterSource)
                     }
-                sourceIds.forEach(GetSource::unregisterSource)
 
-                // the jar path GetSource loaded it from (Madoyomi or upstream layout)
+                    ExtensionKind.ANIME -> {
+                        AnimeGetSource.unregisterExtension(extensionId)
+                        val sourceIds =
+                            dbTransaction {
+                                AnimeSourceTable
+                                    .selectAll()
+                                    .where { AnimeSourceTable.extension eq extensionId }
+                                    .map { it[AnimeSourceTable.id].value }
+                            }
+                        sourceIds.forEach(AnimeGetSource::unregisterSource)
+                    }
+                }
+
+                // the jar path the source cache loaded it from (Madoyomi or upstream layout)
                 jarPath?.let { PackageTools.jarLoaderMap.remove(it.absolutePathString())?.close() }
             }
     }

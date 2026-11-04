@@ -42,7 +42,7 @@ data class InstallResult(
     val signatureHash: String,
     /** The hash is in `TRUSTED_SIGNATURE`. */
     val trusted: Boolean,
-    /** The extension's code was loaded (trusted manga only; anime is never loaded in Phase 1). */
+    /** The extension's code was loaded (trusted extensions only). */
     val loaded: Boolean,
     /** Non-blocking findings, e.g. an extensions-lib version outside the expected range. */
     val warnings: List<String>,

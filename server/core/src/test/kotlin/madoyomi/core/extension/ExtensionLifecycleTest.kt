@@ -7,11 +7,14 @@ package madoyomi.core.extension
 
 import de.neonew.exposed.migrations.loadMigrationsFrom
 import de.neonew.exposed.migrations.runMigrations
+import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import madoyomi.core.anime.AnimeGetSource
+import madoyomi.core.anime.AnimeSourceAccess
 import madoyomi.core.anime.model.table.AnimeSourceTable
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
@@ -79,6 +82,9 @@ class ExtensionLifecycleTest {
     companion object {
         const val OTHER_KEY = "1111111111111111111111111111111111111111111111111111111111111111"
 
+        // AnimeGG's live source id (MD5 of "animegg/en/1")
+        const val ANIMEGG_SOURCE = 2247987965040486818L
+
         @BeforeAll
         @JvmStatic
         fun beforeAll() {
@@ -131,6 +137,7 @@ class ExtensionLifecycleTest {
     /** Nothing loaded, no permits, no installed files. */
     private fun resetRuntime() {
         GetSource.unregisterAllSources()
+        AnimeGetSource.unregisterAllSources()
         PackageTools.jarLoaderMap.values.forEach { it.close() }
         PackageTools.jarLoaderMap.clear()
         ExtensionLoadGate.clear()
@@ -301,15 +308,16 @@ class ExtensionLifecycleTest {
     // --- anime install ---
 
     @Test
-    fun `an anime extension installs trusted with ANIME_SOURCE rows from the listing and is not loaded`() {
+    fun `a trusted anime extension installs loaded, with ANIME_SOURCE rows from its live sources`() {
         val apk = TestApks.apk(TestApks.ANIMEGG)
-        val listed = ListingSource(7777, "AnimeGG", "en", "https://www.animegg.org")
+        // a listing that disagrees with the code: the live sources win
+        val listed = ListingSource(7777, "AnimeGG", "en", "https://listed.example")
         addRepo(repo(ExtensionKind.ANIME, apk.hash), TestRepo.Entry(apk, sources = listOf(listed)))
 
         val result = installWithProgress(apk.pkg, ExtensionKind.ANIME)
 
         assertTrue(result.trusted)
-        assertFalse(result.loaded)
+        assertTrue(result.loaded)
         assertTrue(result.warnings.isEmpty(), result.warnings.toString())
         assertEquals(
             listOf(InstallState.DOWNLOADING, InstallState.VERIFYING, InstallState.CONVERTING, InstallState.INSTALLED),
@@ -318,23 +326,147 @@ class ExtensionLifecycleTest {
         val row = row(apk.pkg)!!
         assertEquals(ExtensionKind.ANIME, row[ExtensionTable.type])
         assertTrue(row[ExtensionTable.isInstalled])
-        assertFalse(row[ExtensionTable.isLoaded])
+        assertTrue(row[ExtensionTable.isLoaded])
         assertFalse(row[ExtensionTable.isTorrent])
         assertEquals(apk.hash, row[ExtensionTable.signatureHash])
         assertEquals("AnimeGG", row[ExtensionTable.name])
+        assertEquals("en", row[ExtensionTable.lang])
         assertEquals("14", row[ExtensionTable.extensionLib])
         assertEquals("${apk.pkg}.ExtensionGenerated", row[ExtensionTable.classFQName])
 
         val sources = animeSources(apk.pkg)
-        assertEquals(listOf(7777L), sources.map { it[AnimeSourceTable.id].value })
+        assertEquals(listOf(ANIMEGG_SOURCE), sources.map { it[AnimeSourceTable.id].value })
+        assertEquals("AnimeGG", sources.single()[AnimeSourceTable.name])
         assertEquals("https://www.animegg.org", sources.single()[AnimeSourceTable.baseUrl])
         assertTrue(mangaSources(apk.pkg).isEmpty())
+
+        val source = assertIs<AnimeHttpSource>(AnimeGetSource.cached(ANIMEGG_SOURCE))
+        assertEquals("https://www.animegg.org", source.baseUrl)
+        assertEquals(source, run { AnimeSourceAccess.require(ANIMEGG_SOURCE) })
 
         val jar = ExtensionFiles.jarPath(ExtensionKind.ANIME, apk.pkg, apk.inspection.versionName)
         assertTrue(jar.exists())
         assertTrue(jar.startsWith(ExtensionFiles.extensionsRoot / "anime" / apk.pkg))
-        assertFalse(loaded(jar))
+        assertTrue(loaded(jar))
         assertEquals(emptyList(), TestApks.verifyErrors(jar))
+    }
+
+    @Test
+    fun `an untrusted anime extension is never instantiated, and trusting it loads it`() {
+        val apk = TestApks.apk(TestApks.ANIMEGG)
+        val listed = ListingSource(ANIMEGG_SOURCE, "AnimeGG", "en", "https://www.animegg.org")
+        addRepo(repo(ExtensionKind.ANIME, OTHER_KEY), TestRepo.Entry(apk, sources = listOf(listed)))
+
+        val result = run { lifecycle.install(apk.pkg, ExtensionKind.ANIME) }
+
+        assertFalse(result.trusted)
+        assertFalse(result.loaded)
+        assertFalse(row(apk.pkg)!![ExtensionTable.isLoaded])
+        assertEquals(listOf(ANIMEGG_SOURCE), animeSources(apk.pkg).map { it[AnimeSourceTable.id].value })
+        val jar = ExtensionFiles.jarPath(ExtensionKind.ANIME, apk.pkg, apk.inspection.versionName)
+        assertFalse(loaded(jar))
+        assertNull(AnimeGetSource.cached(ANIMEGG_SOURCE))
+        val untrusted = failure { AnimeSourceAccess.require(ANIMEGG_SOURCE) }
+        assertEquals(ErrorCode.UNTRUSTED, untrusted.code)
+        assertEquals(apk.hash, untrusted.details["signatureHash"])
+        assertEquals(apk.pkg, untrusted.details["pkgName"])
+        assertFalse(loaded(jar))
+
+        run { lifecycle.trustExtension(apk.pkg, ExtensionKind.ANIME) }
+
+        assertTrue(row(apk.pkg)!![ExtensionTable.isLoaded])
+        assertTrue(loaded(jar))
+        assertNotNull(AnimeGetSource.cached(ANIMEGG_SOURCE))
+    }
+
+    @Test
+    fun `untrusting a loaded anime extension unloads it and the gate refuses to reload it`() {
+        val apk = TestApks.apk(TestApks.ANIMEGG)
+        addRepo(repo(ExtensionKind.ANIME, OTHER_KEY), TestRepo.Entry(apk))
+        run { lifecycle.install(apk.pkg, ExtensionKind.ANIME) }
+        run { lifecycle.trustSignature(apk.hash) }
+        val jar = ExtensionFiles.jarPath(ExtensionKind.ANIME, apk.pkg, apk.inspection.versionName)
+        assertTrue(loaded(jar))
+
+        assertFalse(run { lifecycle.untrustSignature(apk.hash) })
+
+        assertFalse(row(apk.pkg)!![ExtensionTable.isLoaded])
+        assertFalse(loaded(jar))
+        assertNull(AnimeGetSource.cached(ANIMEGG_SOURCE))
+        assertEquals(ErrorCode.UNTRUSTED, failure { AnimeSourceAccess.require(ANIMEGG_SOURCE) }.code)
+        assertNull(run { AnimeGetSource.getSourceOrNull(ANIMEGG_SOURCE) })
+        assertFalse(loaded(jar))
+    }
+
+    @Test
+    fun `an anime extension installed but not loaded is loaded on first use and its sources reconciled`() {
+        // what a Phase 1 install leaves: trusted, is_loaded = false, ANIME_SOURCE rows from the listing
+        val apk = TestApks.apk(TestApks.ANIMEGG)
+        addRepo(repo(ExtensionKind.ANIME, apk.hash), TestRepo.Entry(apk))
+        run { lifecycle.install(apk.pkg, ExtensionKind.ANIME) }
+        ExtensionUnloader.default.unload(row(apk.pkg)!!)
+        val extensionId = row(apk.pkg)!![ExtensionTable.id].value
+        transaction {
+            AnimeSourceTable.update({ AnimeSourceTable.extension eq extensionId }) { it[name] = "Listed name" }
+            AnimeSourceTable.insert {
+                it[id] = 7777
+                it[name] = "Gone"
+                it[lang] = "en"
+                it[extension] = extensionId
+            }
+        }
+        setRow(apk.pkg) { it[isLoaded] = false }
+
+        val source = run { AnimeGetSource.getSource(ANIMEGG_SOURCE) }
+
+        assertEquals("AnimeGG", source.name)
+        assertTrue(row(apk.pkg)!![ExtensionTable.isLoaded])
+        assertEquals(listOf("AnimeGG"), animeSources(apk.pkg).map { it[AnimeSourceTable.name] })
+        // the listing's source the code doesn't provide is gone
+        assertEquals(ErrorCode.NOT_FOUND, failure { AnimeSourceAccess.require(7777) }.code)
+    }
+
+    @Test
+    fun `an anime extension whose code can't be instantiated reports LOAD_FAILED`() {
+        val apk = TestApks.apk(TestApks.ANIMEGG)
+        addRepo(repo(ExtensionKind.ANIME, apk.hash), TestRepo.Entry(apk))
+        run { lifecycle.install(apk.pkg, ExtensionKind.ANIME) }
+        ExtensionUnloader.default.unload(row(apk.pkg)!!)
+
+        setRow(apk.pkg) { it[classFQName] = "${apk.pkg}.Missing" }
+        val missingClass = failure { AnimeSourceAccess.require(ANIMEGG_SOURCE) }
+        assertEquals(ErrorCode.LOAD_FAILED, missingClass.code)
+        assertEquals(ClassNotFoundException::class.java.name, missingClass.details["cause"])
+        assertEquals("${apk.pkg}.Missing", missingClass.details["missing"])
+        assertEquals(apk.pkg, missingClass.details["pkgName"])
+
+        // a failed load holds no file open (Windows locks), so the jar can still be replaced or deleted
+        val jar = ExtensionFiles.jarPath(ExtensionKind.ANIME, apk.pkg, apk.inspection.versionName)
+        assertFalse(loaded(jar))
+        assertTrue(jar.toFile().renameTo(jar.resolveSibling("moved.jar").toFile()))
+        assertTrue(jar.resolveSibling("moved.jar").toFile().renameTo(jar.toFile()))
+
+        setRow(apk.pkg) { it[classFQName] = "kotlin.Unit" }
+        assertEquals(ErrorCode.LOAD_FAILED, failure { AnimeSourceAccess.require(ANIMEGG_SOURCE) }.code)
+
+        ExtensionUnloader.default.unload(row(apk.pkg)!!)
+        assertTrue(jar.toFile().delete())
+        val noJar = failure { AnimeSourceAccess.require(ANIMEGG_SOURCE) }
+        assertEquals(ErrorCode.LOAD_FAILED, noJar.code)
+        assertNull(run { AnimeGetSource.getSourceOrNull(ANIMEGG_SOURCE) })
+    }
+
+    @Test
+    fun `an anime source id that is unknown, or a manga source, is NOT_FOUND`() {
+        assertEquals(ErrorCode.NOT_FOUND, failure { AnimeSourceAccess.require(4242) }.code)
+
+        val apk = TestApks.apk(TestApks.MANGAPILL)
+        addRepo(repo(ExtensionKind.MANGA, apk.hash), TestRepo.Entry(apk))
+        run { lifecycle.install(apk.pkg, ExtensionKind.MANGA) }
+        val mangaSource = mangaSources(apk.pkg).first()[SourceTable.id].value
+        val e = failure { AnimeSourceAccess.require(mangaSource) }
+        assertEquals(ErrorCode.NOT_FOUND, e.code)
+        assertTrue(e.message!!.contains("manga source"), e.message)
     }
 
     @Test
@@ -476,7 +608,14 @@ class ExtensionLifecycleTest {
         assertEquals(apk.inspection.versionName, row[ExtensionTable.versionName])
         assertFalse(row[ExtensionTable.hasUpdate])
         assertFalse(oldJar.exists())
-        assertTrue(ExtensionFiles.jarPath(ExtensionKind.ANIME, apk.pkg, apk.inspection.versionName).exists())
+        val newJar = ExtensionFiles.jarPath(ExtensionKind.ANIME, apk.pkg, apk.inspection.versionName)
+        assertTrue(newJar.exists())
+        // a trusted anime update reloads from the new jar
+        assertTrue(result.loaded)
+        assertFalse(loaded(oldJar))
+        assertTrue(loaded(newJar))
+        assertTrue(row[ExtensionTable.isLoaded])
+        assertNotNull(AnimeGetSource.cached(ANIMEGG_SOURCE))
     }
 
     @Test
@@ -605,8 +744,13 @@ class ExtensionLifecycleTest {
         )
         run { lifecycle.install(apk.pkg, ExtensionKind.ANIME) }
         assertEquals(1, animeSources(apk.pkg).size)
+        val jar = ExtensionFiles.jarPath(ExtensionKind.ANIME, apk.pkg, apk.inspection.versionName)
+        assertTrue(loaded(jar))
 
         run { lifecycle.uninstall(apk.pkg, ExtensionKind.ANIME) }
+
+        assertFalse(loaded(jar))
+        assertNull(AnimeGetSource.cached(ANIMEGG_SOURCE))
 
         assertTrue(animeSources(apk.pkg).isEmpty())
         assertFalse(ExtensionFiles.pkgDir(ExtensionKind.ANIME, apk.pkg).exists())
@@ -703,7 +847,6 @@ class ExtensionLifecycleTest {
         run { lifecycle.install(apk.pkg, ExtensionKind.ANIME) }
         run { lifecycle.trustExtension(apk.pkg, ExtensionKind.ANIME) }
         assertNotNull(trustRow(apk.hash))
-        // anime: trusted, still not loaded (Phase 2)
-        assertFalse(row(apk.pkg)!![ExtensionTable.isLoaded])
+        assertTrue(row(apk.pkg)!![ExtensionTable.isLoaded])
     }
 }

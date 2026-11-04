@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import madoyomi.core.anime.AnimeExtensionLoader
 import madoyomi.core.anime.model.table.AnimeSourceTable
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
@@ -68,10 +69,10 @@ import kotlin.io.path.writeBytes
  * - **Install** always downloads the listing's APK (Keiyoushi's prebuilt `jarUrl` is ignored), verifies it with apksig,
  *   checks it is the package, version code and kind the repo listed, records its signing-certificate hash
  *   (`signature_hash`) and converts it with dex2jar into `<data>/extensions/{manga|anime}/{pkg}/{pkg}-v{version}.jar`.
- * - **Trust** is `signature_hash ∈ TRUSTED_SIGNATURE`. Only a trusted *manga* extension is loaded (its sources come
- *   from the live code, upstream's `setupJar`). An untrusted one is never instantiated: its source rows come from the
- *   repo listing. Anime extensions are never loaded in Phase 1 (`is_loaded` stays false); their `ANIME_SOURCE` rows
- *   always come from the listing.
+ * - **Trust** is `signature_hash ∈ TRUSTED_SIGNATURE`. Only a trusted extension is loaded: its sources come from the
+ *   live code (manga: upstream's `setupJar`; anime: [AnimeExtensionLoader], which fails the install with
+ *   [ErrorCode.LOAD_FAILED] if the code can't be instantiated). An untrusted one is never instantiated: its source
+ *   rows come from the repo listing.
  * - **Update** re-runs install. A new certificate that isn't trusted is refused with [ErrorCode.SIGNATURE_CHANGED]
  *   and the installed version is kept.
  * - Every install/update reports its steps on [progress].
@@ -199,7 +200,7 @@ class ExtensionLifecycle(
         deleteIfEmpty(ExtensionFiles.pkgDir(kind, pkg))
     }
 
-    /** Trusts [hash] (origin USER) and loads the installed manga extensions signed with it. */
+    /** Trusts [hash] (origin USER) and loads the installed extensions signed with it. */
     suspend fun trustSignature(hash: String) =
         mutex.withLock {
             SignatureTrust.trust(hash, now())
@@ -233,9 +234,9 @@ class ExtensionLifecycle(
         }
 
     /**
-     * Brings the installed extensions signed with [hash] in line with its trust: a trusted manga extension is loaded
-     * (and its `SOURCE` rows reconciled with the live sources), an untrusted one unloaded. Called after any trust
-     * change, including a repo add (`RepoService`).
+     * Brings the installed extensions signed with [hash] in line with its trust: a trusted extension is loaded (and
+     * its `SOURCE`/`ANIME_SOURCE` rows reconciled with the live sources), an untrusted one unloaded. Called after any
+     * trust change, including a repo add (`RepoService`). An extension that fails to load is logged and stays unloaded.
      */
     suspend fun reconcileTrust(hash: String) = mutex.withLock { reconcileLocked(hash) }
 
@@ -262,8 +263,10 @@ class ExtensionLifecycle(
                         logger.info { "Loaded $pkg (signature $hash is trusted)" }
                     }
 
-                    // anime: trusted, but nothing is instantiated before Phase 2
-                    else -> {}
+                    else -> {
+                        AnimeExtensionLoader.loadInstalled(row)
+                        logger.info { "Loaded $pkg (signature $hash is trusted)" }
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -516,7 +519,18 @@ class ExtensionLifecycle(
             ExtensionLoadGate.permit(jar, hash)
 
             val loaded =
-                if (trusted && kind == ExtensionKind.MANGA) {
+                if (trusted && kind == ExtensionKind.ANIME) {
+                    PackageTools.blockJarUsageWhile(listOfNotNull(oldJar, jar)) { loadSources ->
+                        // instantiated first: if that fails, the installed version stays as it was
+                        val sources = AnimeExtensionLoader.instantiate(pkg, metadata.className) { loadSources(jar, it) }
+                        dbTransaction {
+                            installed?.let(unloader::unload)
+                            val extensionId = recordWithoutLoading(pkg, kind, inspection, metadata, hash, listing)
+                            AnimeExtensionLoader.activate(extensionId, sources, metadata.contentWarning)
+                        }
+                    }
+                    true
+                } else if (trusted && kind == ExtensionKind.MANGA) {
                     PackageTools.blockJarUsageWhile(listOfNotNull(oldJar, jar)) { loadSources ->
                         dbSuspendTransaction {
                             installed?.let(unloader::unload)
@@ -600,7 +614,10 @@ class ExtensionLifecycle(
         )
     }
 
-    /** An install whose code must not (untrusted) or cannot yet (anime) run: the row and the listing's sources. */
+    /**
+     * Records an install without running its code: the row and the listing's sources. Untrusted installs stop here;
+     * a trusted anime install then reconciles the sources with the live ones. Returns the row's id.
+     */
     private fun recordWithoutLoading(
         pkg: String,
         kind: ExtensionKind,
@@ -666,6 +683,7 @@ class ExtensionLifecycle(
                 }
             }
         }
+        extensionId
     }
 
     /** Loads an installed, trusted manga extension and reconciles its `SOURCE` rows with its live sources. */

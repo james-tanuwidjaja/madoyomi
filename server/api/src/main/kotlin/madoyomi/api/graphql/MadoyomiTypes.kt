@@ -30,7 +30,7 @@ import suwayomi.tachidesk.manga.model.table.ExtensionStoreTable
 import suwayomi.tachidesk.manga.model.table.ExtensionTable
 import suwayomi.tachidesk.server.database.dbTransaction
 
-/** An anime source (`ANIME_SOURCE`). Phase 1 lists them from the repo listing; browsing them is Phase 2. */
+/** An anime source (`ANIME_SOURCE`): from the live extension once it is loaded, from the repo listing before. */
 class AnimeSourceType(
     val id: Long,
     val name: String,

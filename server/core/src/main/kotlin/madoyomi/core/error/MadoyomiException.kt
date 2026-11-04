@@ -41,6 +41,12 @@ enum class ErrorCode(
     /** A source (extension) request failed: the site answered with an HTTP error or could not be reached. */
     SOURCE_FAILED(424),
 
+    /**
+     * A trusted extension could not be instantiated: its class is missing or not a source, its constructor threw, or
+     * it references an API the host lacks (`details.cause`, and the missing class or member in `details.missing`).
+     */
+    LOAD_FAILED(500),
+
     /** The request itself is invalid: a GraphQL syntax or validation error, a bad argument. */
     BAD_REQUEST(400),
 

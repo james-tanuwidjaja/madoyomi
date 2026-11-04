@@ -223,10 +223,10 @@ How it behaves:
   - dex2jar (upstream `PackageTools.dex2jar`, with `BytecodeEditor`), then `Dex2jarRepair` (ext-host, see below), then upstream's asset and icon extraction.
   - Files: `<data>/extensions/{manga|anime}/{pkg}/{pkg}-v{versionName}.jar`. Icons stay in upstream's cache `<data>/extensions/icon/<pkg>.*`, which upstream's icon endpoint serves.
   - **Trusted manga:** loaded and recorded by upstream's `setupJar` (live sources reconcile `SOURCE`), plus `signature_hash` and `is_loaded = true`.
-  - **Untrusted manga, and every anime extension:** never instantiated. The row is written the way `setupJar` would, plus `signature_hash`, `is_torrent`, `is_loaded = false`, and the source rows come from the listing (`SOURCE` for manga, `ANIME_SOURCE` for anime).
+  - **Untrusted extensions (and, in Phase 1, every anime extension):** never instantiated. The row is written the way `setupJar` would, plus `signature_hash`, `is_torrent`, `is_loaded = false`, and the source rows come from the listing (`SOURCE` for manga, `ANIME_SOURCE` for anime). Since Phase 2 a trusted anime extension is loaded (see "Anime sources (Phase 2)").
   - Progress: `ExtensionLifecycle.progress` emits `DOWNLOADING → VERIFYING → CONVERTING → INSTALLED | FAILED` (with the error code), for the Stage 7 subscription.
 - **Sideloads** (`installExternal`): APKs only (a jar has no signature: `SIGNATURE_INVALID`); the kind comes from the APK's feature; no listing, so no source rows until trusted.
-- **Trust** is `signature_hash ∈ TRUSTED_SIGNATURE` (`SignatureTrust`). `trustSignature`/`trustExtension` add a USER row (or turn the repo's STORE row into USER, so removing the repo no longer revokes it) and load the installed manga extensions signed with it (`reconcileTrust`: `setupJar`, `is_loaded = true`). `untrustSignature` withdraws USER trust only (a key a repo vouches for stays trusted) and unloads what lost trust. Anime: trusted, but never loaded before Phase 2.
+- **Trust** is `signature_hash ∈ TRUSTED_SIGNATURE` (`SignatureTrust`). `trustSignature`/`trustExtension` add a USER row (or turn the repo's STORE row into USER, so removing the repo no longer revokes it) and load the installed manga extensions signed with it (`reconcileTrust`: `setupJar`, `is_loaded = true`). `untrustSignature` withdraws USER trust only (a key a repo vouches for stays trusted) and unloads what lost trust. Anime was trusted but not loaded in Phase 1; since Phase 2 it is loaded the same way (`AnimeExtensionLoader`).
 - **Update** (`update(pkg, kind)`): the repo must list a higher version code (upstream's `hasUpdate`, set by the refresh, is the detection). It re-runs install. If the installed version has a hash and the new APK is signed by another one that isn't trusted, the update is refused with `SIGNATURE_CHANGED` before anything is written, and the installed version stays (loaded, if it was). The old jar is deleted with upstream's delete-on-next-start fallback.
 - **Uninstall:** unload (sources out of `GetSource`, `jarLoaderMap.remove(jar)?.close()`, permit revoked), delete the `SOURCE`/`ANIME_SOURCE` rows, upstream's row rule (delete if obsolete or without `apkUrl`, else back to a plain listing) plus `signature_hash = null`, `is_loaded = false`, then the jar (Madoyomi or upstream layout) via `tryToDeleteFile`.
 - **Upstream-layout installs** (no `signature_hash`: dev data, anything installed by upstream or before Stage 6) are never loaded. Uninstall and reinstall them, or update them when the repo lists a newer version.
@@ -274,6 +274,24 @@ The exit run (`tools/smoke-api.ps1`) found one upstream bug, fixed here (Phase 1
 |---|---|
 | `core/.../manga/impl/util/storage/ImageResponse.kt` | `getCachedImageResponse` maps the cached file's extension back to a MIME type (`ImageUtil.ImageType`, then `MimeUtils`, then upstream's `"image/<ext>"`). Upstream returns `"image/<ext>"`, so every cached JPEG page or thumbnail (saved as `.jpg`) was served as the unregistered `image/jpg`, while the first, uncached fetch was `image/jpeg`. Test: `core/src/test/kotlin/madoyomi/core/storage/CachedImageTypeTest.kt` |
 
+### Anime sources (Phase 2)
+
+Trusted anime extensions are loaded since Phase 2 Stage 1, by the same loader and behind the same trust gate as manga.
+
+| File | Change |
+|---|---|
+| `core/.../manga/impl/util/PackageTools.kt` | `loadExtensionSourcesWithLockHeld` creates the class loader before its `try` and catches `Throwable` (upstream: `Exception`). On a failure it closes a class loader it created but didn't keep in `jarLoaderMap`, and it logs `LinkageError`s as well as exceptions. Upstream leaked the loader whenever `Class.forName` failed, and the leaked loader kept the jar open, which on Windows locks it against uninstall and update. |
+
+How it behaves:
+- **Load points.** A trusted anime extension is instantiated in three cases:
+  - at install or update (`ExtensionLifecycle.record`). The new code is instantiated *before* the old version is unloaded, so a failure keeps the installed version as it was;
+  - when its key becomes trusted (`reconcileLocked`);
+  - on first use (`AnimeGetSource.getSource`), e.g. a Phase 1 install that was never loaded.
+- **What a load does.** The class goes through `PackageTools.loadExtensionSources`/`blockJarUsageWhile`, so `ExtensionLoadGate` applies. The result is one `AnimeSource`, or every source of an `AnimeSourceFactory`. `ANIME_SOURCE` is then reconciled with the live sources (`baseUrl` from `AnimeHttpSource.baseUrl`; ids the code no longer provides are deleted), and `is_loaded = true` is set together with upstream's extension-language rule.
+- **Failures.** Anything other than the gate's `UNTRUSTED` becomes `LOAD_FAILED`, with `details.cause` and, for a `LinkageError`, `details.missing`. This covers a missing class, a non-source class, a throwing constructor and a `LinkageError`. At install it fails the install (progress `FAILED`, code `LOAD_FAILED`) and deletes the new jar.
+- **Unload.** `ExtensionUnloader` drops an anime extension's sources from `AnimeGetSource` and closes its class loader, as for manga.
+- **Diagnosis.** `AnimeSourceAccess` says why a source isn't available: `NOT_FOUND` (with a hint when the id is a manga source), `UNTRUSTED` with the hash, or the loader's `LOAD_FAILED`.
+
 ### New Madoyomi code
 
 | Path | What |
@@ -315,6 +333,9 @@ The exit run (`tools/smoke-api.ps1`) found one upstream bug, fixed here (Phase 1
 | `core/.../madoyomi/core/repo/RepoService.kt`, `extension/ExtensionLifecycle.kt` (Stage 7 additions) | `RepoService.refreshed` (one `RepoRefreshResult` per refreshed repo, for `extensionStoreRefreshed`); `refreshedSubscribers`/`progressSubscribers` (subscriber counts, so tests can wait for a subscription); `ExtensionLoadGate.clear()` is public for `api`'s tests |
 | `api/src/main/kotlin/madoyomi/api/graphql/*`, `api/src/main/resources/META-INF/services/madoyomi.core.graphql.GraphQLSchemaContribution` | Madoyomi's GraphQL operations and types (see "API") and their registration |
 | `api/src/test/kotlin/madoyomi/api/*` | `ApiGraphQLTest` (the production `GraphQL` object, a scratch H2 per test, a loopback `HttpServer` serving `core`'s `TestRepo` fixtures and the real APKs to the production network stack), `ExtensionApiIntegrationTest` (repos, install, trust, update, uninstall and both subscriptions for both kinds), `ErrorModelTest`, `SidecarHttpTest` (token gate, `/health`, WebSocket upgrade, REST error bodies on a bare Javalin) |
+| `core/src/main/kotlin/madoyomi/core/anime/AnimeGetSource.kt`, `AnimeExtensionLoader.kt`, `AnimeSourceAccess.kt` (Phase 2) | the anime source cache (registered with `SourceRegistry`), instantiation and `ANIME_SOURCE` reconcile, and why a source can't be used (see "Anime sources") |
+| `ext-host/src/main/kotlin/madoyomi/exthost/ExtensionLinkCheck.kt` (Phase 2) | static link check of an extension jar: every class, method and field it uses from outside itself is resolved over the host's class files (read as bytes, nothing loaded), reporting missing classes, missing members and android-jar `"Stub!"` bodies. Tests: `core/src/test/kotlin/madoyomi/core/extension/ExtensionLinkCheckTest.kt` |
+| `core/.../madoyomi/core/error/MadoyomiException.kt` (Phase 2 addition) | `ErrorCode.LOAD_FAILED` (500) |
 | `ext-host/src/test/kotlin/madoyomi/exthost/*`, `core/src/test/kotlin/madoyomi/core/extension/*` | `ApkInspectorTest`, `Dex2jarRepairTest`, `ExtensionLifecycleTest`, `SignatureTrustTest` on the real APKs in the gitignored `tools/apks/` (fetched by `tools/fetch-test-apks.ps1`; tests skip without them). `ExtensionLifecycleLiveTest` installs from the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 | `core/src/test/kotlin/madoyomi/core/repo/*`, `core/src/test/resources/repo/*` | parser, fetcher and service tests. Fixtures are text: trimmed real yuzono `index.min.json`/`repo.json`, and trimmed yuzono and Keiyoushi `index.pb` stored as base64 of the gzipped bytes. `RepoServiceLiveTest` hits the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 
