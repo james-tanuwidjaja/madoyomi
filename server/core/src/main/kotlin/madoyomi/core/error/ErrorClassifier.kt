@@ -35,6 +35,12 @@ data class ClassifiedError(
 object ErrorClassifier {
     private const val MAX_CAUSE_DEPTH = 16
 
+    /** The message of upstream's `CloudflareInterceptor` when no Cloudflare solver (FlareSolverr) is enabled. */
+    const val CLOUDFLARE_BLOCKED = "Cloudflare bypass currently disabled"
+
+    /** `details.reason` of a `SOURCE_FAILED` the site's Cloudflare challenge caused. */
+    const val REASON_CLOUDFLARE = "CLOUDFLARE"
+
     fun classify(error: Throwable): ClassifiedError {
         val e = unwrap(error)
         madoyomiCause(e)?.let { return ClassifiedError(it.code, it.message ?: it.code.name, it.details, it.code != ErrorCode.INTERNAL) }
@@ -50,6 +56,12 @@ object ErrorClassifier {
             e is StubSource.SourceNotInstalledException -> {
                 val diagnosed = SourceAccess.diagnose(e.id)
                 ClassifiedError(diagnosed.code, diagnosed.message!!, diagnosed.details, diagnosed.code != ErrorCode.INTERNAL)
+            }
+
+            // upstream's CloudflareInterceptor: the site answered with a Cloudflare challenge and no solver is set up
+            // (or FlareSolverr failed). The site's doing, not a server fault (it was INTERNAL; Phase 2 Stage 5)
+            cloudflareBlock(e) != null -> {
+                expected(ErrorCode.SOURCE_FAILED, cloudflareBlock(e)!!.message ?: CLOUDFLARE_BLOCKED, mapOf("reason" to REASON_CLOUDFLARE))
             }
 
             e is HttpException -> {
@@ -95,6 +107,15 @@ object ErrorClassifier {
         }
         return e
     }
+
+    /**
+     * The `IOException` upstream's `CloudflareInterceptor` throws for a Cloudflare challenge it can't pass: its
+     * "bypass disabled" message, or its private `CloudflareBypassException` (FlareSolverr failed) as the cause.
+     */
+    private fun cloudflareBlock(error: Throwable): Throwable? =
+        generateSequence(error) { it.cause }.take(MAX_CAUSE_DEPTH).firstOrNull {
+            (it is IOException && it.message == CLOUDFLARE_BLOCKED) || it.javaClass.simpleName == "CloudflareBypassException"
+        }
 
     private fun madoyomiCause(error: Throwable): MadoyomiException? =
         generateSequence(error) { it.cause }.take(MAX_CAUSE_DEPTH).filterIsInstance<MadoyomiException>().firstOrNull()

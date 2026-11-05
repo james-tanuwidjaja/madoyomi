@@ -5,7 +5,9 @@ package madoyomi.api
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import com.sun.net.httpserver.HttpServer
 import eu.kanade.tachiyomi.network.HttpException
+import eu.kanade.tachiyomi.network.interceptor.CloudflareInterceptor
 import madoyomi.core.anime.model.table.AnimeSourceTable
 import madoyomi.core.error.ErrorClassifier
 import madoyomi.core.error.ErrorCode
@@ -13,6 +15,8 @@ import madoyomi.core.error.MadoyomiException
 import madoyomi.core.extension.SignatureTrust
 import madoyomi.core.extension.SourceAccess
 import madoyomi.exthost.ExtensionKind
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
@@ -21,10 +25,13 @@ import suwayomi.tachidesk.manga.impl.util.source.StubSource
 import suwayomi.tachidesk.manga.model.table.ExtensionTable
 import suwayomi.tachidesk.manga.model.table.SourceTable
 import java.io.IOException
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.UnknownHostException
 import java.util.concurrent.CompletionException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -126,6 +133,37 @@ class ErrorModelTest : ApiGraphQLTest() {
 
         insertMangaSource(46, installed = false, signatureHash = null)
         assertEquals("NOT_FOUND", browse(46).errorCode, "a listed, uninstalled extension")
+    }
+
+    @Test
+    fun `a Cloudflare challenge without a solver is SOURCE_FAILED with reason CLOUDFLARE`() {
+        // a site that answers like Cloudflare's bot check, through upstream's CloudflareInterceptor (FlareSolverr off)
+        val site = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
+        site.createContext("/") { exchange ->
+            exchange.responseHeaders.add("Server", "cloudflare")
+            val body = "<title>Just a moment...</title>".toByteArray()
+            exchange.sendResponseHeaders(403, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        site.start()
+        try {
+            val client = OkHttpClient.Builder().addInterceptor(CloudflareInterceptor {}).build()
+            val url = "http://127.0.0.1:${site.address.port}/anime"
+            val thrown = assertFailsWith<IOException> { client.newCall(Request.Builder().url(url).build()).execute().close() }
+
+            val classified = ErrorClassifier.classify(CompletionException(thrown))
+            assertEquals(ErrorCode.SOURCE_FAILED, classified.code, "was INTERNAL before Stage 5")
+            assertEquals(mapOf("reason" to ErrorClassifier.REASON_CLOUDFLARE), classified.details)
+            assertEquals(ErrorClassifier.CLOUDFLARE_BLOCKED, classified.message)
+            assertTrue(classified.expected, "the site's doing, not a server fault")
+        } finally {
+            site.stop(0)
+        }
+
+        // wrapped, as an extension's own interceptor or OkHttp's enqueue may do; other IOExceptions are unchanged
+        val wrapped = IOException("call failed", IOException(ErrorClassifier.CLOUDFLARE_BLOCKED))
+        assertEquals(mapOf("reason" to "CLOUDFLARE"), ErrorClassifier.classify(wrapped).details)
+        assertEquals(ErrorCode.INTERNAL, ErrorClassifier.classify(IOException("Cloudflare")).code)
     }
 
     @Test

@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnimeSeasonUpdate
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.network.HttpException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import madoyomi.core.error.ErrorClassifier
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
@@ -28,6 +29,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /** [AnimeSourceCalls]: API gaps become EXTENSION_INCOMPATIBLE and land in the compat log; nothing else changes. */
 class AnimeSourceCallsTest {
@@ -124,10 +126,39 @@ class AnimeSourceCallsTest {
             CancellationException("cancelled"),
         ).forEach { error ->
             val thrown = assertFailsWith<Throwable> { runBlocking { AnimeSourceCalls.call(Source, "videos") { throw error } } }
-            assertSame(error, thrown)
+            // with assertions on (tests), kotlinx-coroutines' stack-trace recovery may hand back a copy of the
+            // exception (same type and message) whose cause is the original, after the dispatcher switch
+            val original = if (thrown === error) thrown else thrown.cause
+            assertSame(error, original, "$thrown")
+            assertEquals<Class<*>>(error.javaClass, thrown.javaClass)
         }
         assertEquals(emptyList(), ExtensionCompatLog.issues(pkg))
         assertEquals(7, runBlocking { AnimeSourceCalls.call(Source, "popular") { 7 } })
+    }
+
+    @Test
+    fun `source code runs on large-stack threads, where a deep java regex recursion fits`() {
+        // anizone's pattern over a page-sized JSON.parse('...') literal: java.util.regex recurses once per character
+        val pattern = Regex("""JSON\.parse\('((?:[^'\\]|\\.)*)'\)""")
+        val page = "JSON.parse('" + "a\\u0022".repeat(15_000) + "')"
+
+        // on a thread with the JVM's default stack it overflows (Android's ICU regex doesn't recurse)
+        var overflowed = false
+        val probe = Runnable { overflowed = runCatching { pattern.find(page) }.exceptionOrNull() is StackOverflowError }
+        val small = Thread(null, probe, "small", 1L shl 20)
+        small.start()
+        small.join()
+        assertTrue(overflowed, "the test input must overflow a 1 MB stack")
+
+        val (thread, length) =
+            runBlocking {
+                AnimeSourceCalls.call(Source, "popular") {
+                    yield() // resumes on the dispatcher, as after a network call
+                    Thread.currentThread().name to pattern.find(page)!!.groupValues[1].length
+                }
+            }
+        assertTrue(thread.startsWith("anime-source-"), thread)
+        assertEquals(page.length - "JSON.parse('')".length, length)
     }
 
     @Test

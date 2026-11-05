@@ -177,6 +177,19 @@ object AnimeVideos {
         }
     }
 
+    /**
+     * Forgets the fetches whose source is no longer the live instance in [AnimeGetSource] (unloaded, updated,
+     * re-instantiated). [AnimeGetSource] calls it when it drops sources: a kept fetch holds its source, and so the
+     * class loader of an uninstalled extension (the compat harness found 18 of 20 loaders alive after uninstalling all;
+     * Phase 2 §10).
+     */
+    internal fun dropStale() {
+        synchronized(cache) { cache.values.removeIf { AnimeGetSource.cached(it.source.id) !== it.source } }
+    }
+
+    /** For tests: the episodes with a kept fetch. */
+    internal fun cachedEpisodes(): Set<Int> = synchronized(cache) { cache.keys.toSet() }
+
     // a fetch is reused while it is fresh and its source is still the live instance (not unloaded, updated, or
     // re-instantiated after a preference change)
     private suspend fun cachedOrFetch(episodeId: Int): Fetch {

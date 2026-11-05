@@ -99,13 +99,13 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 - [x] Browsed entries persisted with stable IDs (`AnimeEntries.upsert` by `(source, url)`, unique since M0071; episodes by `(url, anime)`; Stage 3)
 
 ### Compatibility
-- [ ] `tools/compat-test/` harness runs unattended
-- [ ] `docs/research/anime-compat.md` generated
-- [ ] Failures triaged (stub gap vs. source broken upstream)
+- [x] `tools/compat-test/` harness runs unattended (`run-compat.ps1`: the top 20 on the real sidecar jar in 6.6 min, process health included; Stage 5)
+- [x] `docs/research/anime-compat.md` generated (from the run's JSON; `-ReportOnly` redraws it after a triage edit)
+- [x] Failures triaged (stub gap vs. source broken upstream): `tools/compat-test/triage.txt`. Run 1 had 3 failures: anizone was a host gap (fixed), animepahe is Cloudflare, and hentaihaven's video host is down; §10
 
 ## 6. Exit criteria
 
-- [ ] At least 18 of the top 20 yuzono extensions pass popular → details → episodes → videos (extensions that are broken upstream are excluded and listed).
+- [x] At least 18 of the top 20 yuzono extensions pass popular → details → episodes → videos (extensions that are broken upstream are excluded and listed). **18 of 20** on 2026-11-06 (`docs/research/anime-compat.md`), with resolve too, and no exclusion needed. The two failures are animepahe (Cloudflare) and hentaihaven (its video host is unreachable).
 - [ ] Filters and preferences round-trip through the API for at least 3 extensions that use them.
 - [ ] No regression in manga sources.
 
@@ -143,7 +143,16 @@ Each stage ends in something verifiable and a commit:
    - *Done* (2026-11-05), with `extension.compatIssues` from Stage 2.
 5. **Compat harness** `tools/compat-test/run-compat.ps1` and its first run → `docs/research/anime-compat.md`, including process health (JVM aborts, threads, memory).
    - Then the Cloudflare decision: possibly a KCEF solver stage, 5b.
-6. **Fix round until ≥ 18/20**, filters/preferences round-trip for ≥ 3 extensions, the one-JVM verdict, docs closed.
+   - *Done* (2026-11-06). Run 1 gave 17/20. Three host fixes followed: large-stack source threads (anizone), Cloudflare as `SOURCE_FAILED`, and the video-fetch cache dropped on unload. Run 2 gave **18/20**.
+   - Only animepahe is Cloudflare-blocked, so there is **no Stage 5b**: Cloudflare is deferred (§9).
+6. **Fix round**:
+   - the class loaders still alive after uninstall (15 of 20; §10);
+   - the two `Dex2jarRepair` patterns of the manga sample (user decision, Stage 3);
+   - filters/preferences round-trip through the API for ≥ 3 extensions;
+   - no regression in manga;
+   - the one-JVM verdict;
+   - the remaining API-surface checklist items;
+   - docs closed.
 
 ## 9. Decision record
 
@@ -213,6 +222,18 @@ Stage 4 (GraphQL operations):
 | **`compatIssues` is a field of upstream's `ExtensionType`** (a `// Madoyomi:` resolver, like `isTrusted`), with `ExtensionCompatIssueType` in core. The enums are named `ExtensionCompatIssueKind`/`ExtensionCompatIssueOrigin` in the schema. | The issues belong to the extension the UI already shows. A separate query would duplicate the extension lookup. |
 | **Thumbnails: REST `GET /api/v1/anime/{animeId}/thumbnail`** (`AnimeHttp` in `api`, `AnimeThumbnails` in core):<br>• upstream's manga thumbnail flow: the source's client and headers, `FORCE_NETWORK`, one details refresh on 404/410/301/522/523 or an unreachable host;<br>• cached in upstream's thumbnail cache as `anime-<id>.<ext>`, cleared when a details fetch changes the URL;<br>• the plain client when the source can't be used;<br>• `AnimeType.thumbnailUrl` is the proxied path, `backgroundUrl` the source's URL as it is. | Binary endpoints stay REST (Phase 0). Upstream's `clearCachedImages(cachedThumbnails)` then clears both kinds, and the `anime-` prefix can't collide with a manga id. Thumbnails of library entries (upstream's permanent `ThumbnailDownloadHelper`) are Phase 6, with the anime library. |
 | **`tools/lib/MadoyomiServer.ps1`** holds the server and API helpers; `smoke-api.ps1` dot-sources it. | Stage 5's compat harness drives the same jar the same way. |
+
+Stage 5 (compat harness):
+
+| Decision | Why |
+|---|---|
+| **The harness:** `tools/compat-test/run-compat.ps1` drives the real sidecar jar over GraphQL on a fresh data dir (`MadoyomiServer.ps1`). Per extension:<br>• install, with the progress subscription; the source must be usable;<br>• popular page 1, retried once;<br>• details + episodes (a `Seasons` entry: its first season);<br>• videos of the newest episode, then the oldest, loading lazy hosters until one has videos;<br>• resolve a video.<br><br>Up to 3 popular entries are tried, and every call has a 120 s timeout. **An extension passes when one entry gets through the whole chain.** | Step 17's chain, plus resolve, which Phase 4 needs before playing. Several entries, because one entry's dead link isn't the extension's fault. |
+| **Failure classes:**<br>• `HOST_GAP`: `EXTENSION_INCOMPATIBLE`, or a runtime compat issue;<br>• `CLOUDFLARE`: the server says so, or a 403/503 from a site whose base URL shows PowerShell a challenge;<br>• `SITE_DOWN`: the host is unreachable;<br>• `SOURCE_ERROR`, `INTERNAL`, `JVM_ABORT`.<br><br>A hand-written verdict in `tools/compat-test/triage.txt` (e.g. `upstream-broken`, `site-down`) overrides the automatic class. `-ReportOnly` redraws the report from the saved JSON. | The report stays generated, and the triage is versioned with it. A probe challenge alone doesn't count: OkHttp passes where PowerShell gets one (hentaihaven). |
+| **Process health is measured from outside:**<br>• after the repo add, after each extension, and after uninstalling everything;<br>• `jcmd GC.run` + `GC.heap_info` (live heap), `jstat -class`, `jcmd VM.classloader_stats` (extension class loaders), `Thread.print`, and the process counters;<br>• `-XX:ErrorFile` puts any hs_err into the data dir;<br>• a dead JVM is recorded and restarted. | What decides "one JVM" (phase-1 §8) is only visible from outside the process. Measuring after a full GC makes the heap numbers comparable. |
+| **Source calls run on large-stack threads:** `AnimeSourceCalls.call` switches to a dispatcher of 64 daemon threads with 128 MB stacks. | `java.util.regex` recurses once per repetition of a group, but Android's ICU regex doesn't. anizone's `(?:[^'\\]|\\.)*` over its 41K-character page needs more than 16 MB (§10). Windows only reserves a thread's stack and commits it as it is used. The JVM-wide alternative, an `-Xss` in the Tauri launch command, is left to Phase 3/7 if a non-suspend path ever needs it. |
+| **A Cloudflare challenge is `SOURCE_FAILED` with `details.reason = "CLOUDFLARE"`** (`ErrorClassifier`; upstream's `CloudflareInterceptor` message, matched as a constant). | It was `INTERNAL`, a server fault. The site blocked the request, and the UI can say so. |
+| **Cloudflare outcome** (the phase-wide "measure first"): 1 of the top 20 is blocked (animepahe), and the harness passes 18/20 without a solver. Cloudflare-blocked sources are listed as "needs Cloudflare solver" and **deferred**, so there is no Stage 5b. | The decision rule of 2026-11-04: a solver only if Cloudflare pushes the result below 18/20. Cloudflare serves 19 of the 20 sites (rule34video uses DDoS-Guard), and PowerShell's probe gets a challenge on three (animepahe, missav, hentaihaven). Only animepahe challenges the extension's OkHttp, though. |
+| **Dropping a source drops what is cached for it:** `AnimeGetSource`'s unregister paths call `AnimeVideos.dropStale()`. | The harness found 18 of 20 extension class loaders alive after uninstalling all of them, and the kept video fetches held them (§10). |
 
 ## 10. Findings log
 
@@ -314,3 +335,53 @@ Stage 4 (GraphQL operations):
 - **AnimePahe through GraphQL** (`AnimeExtensionApiTest`, installed from a loopback repo, no network): it loads at install, its 7 preferences come back with the union's types (3 switches, 3 lists, 1 edit text), and a switch and a list change persist. `extension.compatIssues` lists its 7 static `STUB`s (the `EditTextPreference` dialog, Stage 1). kickassanime's 7 filters come back as upstream's union types.
 - **Schema notes.** graphql-kotlin takes a nested class's simple name as the GraphQL name, so `ExtensionCompatLog`'s `IssueKind`/`Origin` got `@GraphQLName`s (`ExtensionCompatIssueKind`/`ExtensionCompatIssueOrigin`) rather than a bare `Origin` in the schema. Enums outside the schema's `supportedPackages` work (upstream's `ContentWarning` and `UpdateStrategy` already do), so `FetchType` and `AnimeUpdateStrategy` are the extension API's own. `KotlinDataLoader` needs a non-null value type; an unknown key still resolves to null through the Java `DataLoader`, as upstream's `MangaDataLoader` does.
 - **Smoke refactor gotcha.** In PowerShell, a function's pipeline output is its return value, so Gradle's output inside `Resolve-MadoyomiJar` became the jar path (the first run failed with "The filename or extension is too long"). Build output goes to `Out-Host` now; the Stage 5 harness has the same trap.
+
+**2026-11-06: compat harness (Stage 5).** `tools/compat-test/run-compat.ps1` on the real sidecar jar, a fresh data dir, and yuzono (249 anime extensions). The report is `docs/research/anime-compat.md`, from run 2.
+
+| | Run 1 (before the fixes) | Run 2 (after) |
+|---|---|---|
+| Pass, whole chain incl. resolve | 17 of 20 | **18 of 20** |
+| SAFE only | 7 of 9 | 8 of 9 |
+| Failures | animepahe (Cloudflare), hentaihaven (video host down; the probe misclassified it as Cloudflare), anizone (`StackOverflowError`) | animepahe (CLOUDFLARE), hentaihaven (SITE_DOWN) |
+| JVM aborts, hs_err, OutOfMemoryError | none | none |
+| Exit after stdin closed | 0 | 0 |
+| Duration | 6.9 min | 6.6 min |
+
+- **anizone: a host difference, not an extension bug.** Popular threw `StackOverflowError`, 1024 frames of `java.util.regex` (`Branch`/`GroupHead`/`Loop`). The extension's `JSON\.parse\('((?:[^'\\]|\\.)*)'\)` runs over a 41K-character literal on the popular page (22K on the home page).
+  - Java's regex recurses once per repetition of the group. Android's ICU regex is iterative, so the extension works on a phone.
+  - A single-file Java check on JDK 21 over the same pattern:
+
+    | Input | 1 MB stack | 4 MB | 16 MB | 64 MB |
+    |---|---|---|---|---|
+    | 2K characters | overflows | ok | ok | ok |
+    | 10K | overflows | overflows | ok | ok |
+    | 41K | overflows | overflows | overflows | ok |
+    | 250K | overflows | overflows | overflows | ok |
+
+  - Fixed: source calls run on 128 MB-stack threads (§9 Stage 5; `AnimeSourceCallsTest` overflows a 1 MB thread with the pattern and passes on the dispatcher). anizone passes in 5.7 s.
+- **Cloudflare:**
+  - only animepahe is blocked. Its own WebView interceptor waits about 60 s, then upstream's `CloudflareInterceptor` throws "Cloudflare bypass currently disabled";
+  - that surfaced as `INTERNAL` and is `SOURCE_FAILED` with `details.reason = "CLOUDFLARE"` now (`ErrorModelTest`, through the real interceptor against a loopback "Cloudflare" site);
+  - 19 of the 20 sites are served by Cloudflare. PowerShell's probe gets a challenge on 3 (animepahe, missav, hentaihaven), and OkHttp only on animepahe. So a plain probe can't decide a Cloudflare failure; the classifier now needs the server's word or a 403/503.
+  - Outcome: 1 blocked, 18/20 without a solver. **Deferred, no Stage 5b** (§9).
+- **hentaihaven: its video host is unreachable.** Browse, details and episodes work. The only hoster, Octopus, needs `octopusmanifest.org`, which resolves (195.16.73.90) but refuses TCP 443 from this network (`Test-NetConnection`). Triaged `site-down`.
+- **Hoster use** (the open question of Stage 3), over the 19 extensions that reached videos:
+  - 12 declare their own hoster list (1 to 10 hosters), and 7 get Aniyomi's `no_hoster_list` (hanime, oppaistream, missav, onetwothreeanime, kickassanime, streamingcommunity, animeonsen);
+  - **none has a lazy hoster**, so `fetchHosterVideos` wasn't needed in the run;
+  - every resolve was immediate: the videos came back `initialized`;
+  - the probe of the resolved URL with the video's headers answered 200/206 for all 18, mostly HLS (`mpegurl`), plus one DASH manifest (animeonsen) and plain mp4 (rule34video).
+- **Extensions run local HTTP servers inside the JVM.** missav (`localhost`), onetwothreeanime and reanime (`127.0.0.1`) return video URLs served by a proxy they start themselves. reanime's run added about 60 threads, which went away when they were idle. Phase 4 has to keep the source instance alive while mpv plays, and mpv must be allowed to reach loopback.
+- **Lib versions** (installed, the repo's current): 14 for 6 extensions, 16 for 14. They're the same as the Stage 2 snapshot.
+- **Process health (one JVM for the whole run; the table is in the report):**
+  - the live heap after a full GC grew from 102 MB (repo added) to 122 MB after 20 extensions, and was 113 MB after uninstalling them;
+  - metaspace grew from 77 to 102 MB;
+  - OS threads peaked at 239. That counts the new source pool (at most 64, idle ones end after 60 s) and the extensions' proxies, and it was 195 at the end;
+  - private bytes went from 694 to 799 MB. The pool's 128 MB stacks are only reserved, which private bytes don't show;
+  - no abort, no hs_err, exit code 0.
+  - Nothing grows per extension beyond its own classes, so **one JVM stays** as far as crashes, threads and memory go (phase-1 §8); the Stage 6 verdict closes it.
+- **Class loaders survive uninstall.**
+  - Run 1: after uninstalling all 20, 18 extension class loaders were still alive after a full GC, and 46 classes were unloaded. The two that were collected (animepahe, anizone) are the two that never reached videos: `AnimeVideos` kept the last fetch, and so the source, for up to 10 minutes. Fixed (`AnimeGetSource` drops the fetches with the source; `AnimeVideosTest` checks that a dropped source is collected).
+  - Run 2: 15 alive, 253 classes unloaded. **Other holders remain**, about 1.2 MB of metaspace per extension that isn't unloaded.
+  - Not a crash risk; it matters for uninstall and update over a long session. Finding the holders (a heap dump: thread context class loaders of extension-started threads, Injekt, static caches) is Stage 6.
+- **Runtime compat issues: none.** The compat log only has the static `STUB`s of the scan (the `EditTextPreference` dialog), and no extension hit a missing class or member at runtime.
+- **Harness gotcha.** PowerShell variables are case-insensitive, so the script's `$results` was its `[string]$Results` parameter, and `+=` concatenated the result objects into one string (the first trial). Renamed `$extResults`.
