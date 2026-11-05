@@ -57,7 +57,7 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 
 ### API surface
 - [x] Package layout matches `extensions-lib` exactly (the Aniyomi app's `source-api`, ported in Phase 1. `ExtensionLinkCheck` resolves every reference into the API of AnimeGG (lib 14) and AnimePahe (lib 16); Stage 1, §10)
-- [ ] `SAnime`, `SEpisode`, `Video`, `Track`, `AnimesPage`
+- [x] `SAnime`, `SEpisode`, `Video`, `Track`, `AnimesPage` (every field is stored or mapped by the Stage 3 services: `ANIME`/`EPISODE` since M0071, `Video` with headers, subtitle and audio tracks, timestamps and mpv args; AnimeGG end to end through them, §10)
 - [ ] `AnimeSource`, `AnimeCatalogueSource`, `AnimeHttpSource`, `ParsedAnimeHttpSource`
 - [ ] `ConfigurableAnimeSource`, `AnimeSourceFactory`
 - [x] Source loading + stable source IDs (trusted extensions load at install, at trust and on first use, behind `ExtensionLoadGate`; `ANIME_SOURCE` is reconciled with the live sources. IDs come from the extension: `AnimeHttpSource.generateId`, MD5 of `name/lang/versionId`, e.g. AnimeGG `2247987965040486818`. Stage 1, §9)
@@ -71,17 +71,17 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 - [x] Injekt/`NetworkHelper` lookups resolved (the extension's own `injectLazy<NetworkHelper>()` gets the app's instance; same test)
 
 ### Filters & preferences
-- [ ] Filter → JSON serializer (all filter types)
-- [ ] JSON → filter state deserializer
-- [ ] Preference screen → JSON schema
-- [ ] Preference updates persisted per source
+- [x] Filter → JSON serializer (all filter types): `AnimeFilters.filtersOf`, upstream's GraphQL `Filter` union (Stage 3, §9). Round-trips over every filter of kickassanime, aniwave and hanime (§10); the GraphQL field is Stage 4
+- [x] JSON → filter state deserializer: `AnimeFilters.apply`, upstream's `FilterChange` on a fresh list, `BAD_REQUEST` with the position path for a change that doesn't fit
+- [x] Preference screen → JSON schema: `AnimeSourcePreferences`, upstream's `Preference` union and `preferenceOf` (AnimePahe's 7 preferences; Stage 3)
+- [x] Preference updates persisted per source: in its `SharedPreferences` (`source_<id>`), the change listener first as on Android, then the source is re-instantiated on next use (Stage 3, §9). The GraphQL mutation is Stage 4
 
 ### API
 - [ ] Sources list / popular / latest / search
 - [ ] Filters endpoint
 - [ ] Preferences GET/PUT
 - [ ] Anime details, episodes, videos
-- [ ] Browsed entries persisted with stable IDs
+- [x] Browsed entries persisted with stable IDs (`AnimeEntries.upsert` by `(source, url)`, unique since M0071; episodes by `(url, anime)`; Stage 3)
 
 ### Compatibility
 - [ ] `tools/compat-test/` harness runs unattended
@@ -120,6 +120,7 @@ Each stage ends in something verifiable and a commit:
    - Details plus episodes (reconcile, seasons).
    - Hosters → videos (not persisted).
    - Filter and preference mapping.
+   - *Done* (2026-11-05). The `Dex2jarRepair` patterns of Stage 2 were left to Stage 6 (user decision).
 4. **GraphQL operations**: `fetchSourceAnime`, `fetchAnimeAndEpisodes`, `fetchEpisodeVideos`, `updateAnimeSourcePreference`, `anime`/`animes`/`episodes`, and `AnimeSourceType.filters`/`preferences`.
    - The `/api/v1/anime/{id}/thumbnail` route.
    - The PLAN.md §5 mapping table.
@@ -169,6 +170,21 @@ Stage 2 (top 20, compat scan, logging, stubs):
 | **No `android.widget`/`android.view` replacements.** The `TextView`/`View`/`EditText` stubs of 6 top-20 extensions are all in `EditTextPreference.OnBindEditTextListener` bodies and their `TextWatcher`s (checked with jadx in AnimePahe and StreamingCommunity). | Only a UI that binds the edit dialog runs them, and Madoyomi never calls the listener (its preference UI is its own, Phase 3). |
 | **Lib-16 suspend request helpers** `OkHttpClient.get(String\|HttpUrl, …)`/`post(…)` were added to `ext-host`'s `Requests.kt` (a `// Madoyomi:` edit, from Aniyomi's `core/common`). | A gap in the extension API itself (anikoto, kotokai, aniwave call `get$default`), which `ExtensionLinkCheckTest`'s three APKs didn't use. |
 
+Stage 3 (core anime services):
+
+| Decision | Why |
+|---|---|
+| **The services are core objects in `madoyomi.core.anime`:**<br>• `AnimeBrowse` (popular, latest, search)<br>• `AnimeDetails` (details, then episodes or seasons)<br>• `AnimeVideos` (hosters, videos, `resolveVideo`)<br>• `AnimeFilters`<br>• `AnimeSourcePreferences`<br>• `AnimeEntries` (row ↔ model mapping, the upsert)<br><br>Every source call goes through `AnimeSourceCalls`. An unknown anime or episode is `NOT_FOUND`, and an input that doesn't fit is `BAD_REQUEST`. | Stage 4's GraphQL operations become thin wrappers, and the services are tested without GraphQL. |
+| **M0071** adds:<br>• the missing `SAnime`/`SEpisode` columns, `memo` included;<br>• seasons as `ANIME` rows with `parent_id` (`ON DELETE SET NULL`) and `season_source_order`;<br>• `CREATE UNIQUE INDEX IF NOT EXISTS` on `ANIME (source, url)` and `EPISODE (url, anime)`, after deleting duplicates (lowest id kept).<br><br>The foreign key is declared inline in `ADD COLUMN IF NOT EXISTS`. | The memo is the extension's own data and must come back to it with the entry, as upstream stores `MangaTable.memo`. A season is browsable and can go in the library like any entry. Both statements are portable to H2 and PostgreSQL and idempotent, and `ADD CONSTRAINT IF NOT EXISTS` is H2-only. |
+| **The browse upsert is upstream's `MangaList.insertOrUpdate`** (library rows untouched; null fields keep the stored value), plus:<br>• the page is deduplicated by url;<br>• entries without a url are dropped;<br>• a unique-key race is retried once.<br><br>Ids come back in page order, each once. | Upstream inserted a url twice when a page listed it twice. With the unique index, a concurrent browse of the same page would otherwise fail. |
+| **Episode reconcile is upstream's chapter reconcile, trimmed:**<br>• matched by url;<br>• `source_order` counts from the oldest (1);<br>• the watch state is never overwritten, and a deleted episode's state moves to a new one with the same number;<br>• a `date_upload` of 0 keeps the stored date.<br><br>**An empty list changes nothing** (upstream throws "No chapters found"). | One numbering for chapters and episodes. A site that changes its links must not lose what was watched. An anime can legitimately have no episodes yet. |
+| **Which children to fetch follows `fetch_type`:**<br>• `Episodes` → `getAnimeEpisodeUpdate`. An initialized entry gets details and episodes in one call, which the source runs in parallel; otherwise details come first.<br>• `Seasons` → `getAnimeSeasonUpdate`.<br><br>A dropped season loses its `parent_id` but is not deleted. The stored episodes or seasons are handed to the source. | The lib-17 entry points; their defaults run the lib-14/16 methods, so one path serves every extension. A season may be in the library. |
+| **Videos follow the Aniyomi app's `EpisodeLoader`/`HosterLoader`:**<br>• hosters only from an `AnimeHttpSource` whose own classes declare a hoster method (`checkHasHosters`), else `getVideoList(episode).toHosterList()`;<br>• `sortHosters`/`sortVideos`;<br>• the `"null"` URL → `getVideoUrl`;<br>• lazy hosters on request;<br>• `resolveVideo` only for videos that aren't `initialized`.<br><br>Hosters load in parallel, and a failing one carries its error code instead of failing the call. A video without headers gets the source's headers. | The same videos as in Aniyomi, for every lib generation. A source call on the plain `AnimeCatalogueSource` hoster defaults would recurse (they do in Aniyomi too, §10), and this path never makes one. |
+| **`resolveVideo` works on the last fetch of the episode**, kept in memory: 32 episodes, 10 minutes, and only while its source is still the live instance. | A `Video` is extension state that can't be rebuilt from an id. Resolving needs the original object, and video URLs expire anyway. |
+| **Filters and preferences use upstream's GraphQL types as they are:**<br>• `Filter`, `FilterChange`, `Preference`, `preferenceOf`, `SourcePreferenceChange`;<br>• filter changes are `BAD_REQUEST` with the position path when they don't fit (upstream threw a plain exception);<br>• a change to a header or separator is ignored. | The phase-wide decision: one shape and one Phase 3 renderer for both kinds. AndroidCompat's `androidx.preference` classes are shared, so upstream's mapping applies unchanged. |
+| **A preference change:**<br>• builds the screen anew;<br>• runs the extension's change listener first and saves only if it agrees (Android's order);<br>• drops the source from the cache so its next use is a new instance. | Upstream cached the screen (a change before any read was a null pointer), saved before asking the listener, and ignored its veto. Extensions often read a preference once (a `by lazy` base URL). |
+| The **ext-anime port keeps Aniyomi's self-recursive `AnimeCatalogueSource.getHosterList`/`getVideoList(hoster)`** unchanged. | Aniyomi has the same code. No Madoyomi path calls it, and the port stays identical to upstream. |
+
 ## 10. Findings log
 
 **2026-11-04: loader and link check (Stage 1).** `ExtensionLinkCheck` over the three test APKs (after dex2jar and `Dex2jarRepair`), against the host classpath:
@@ -214,5 +230,39 @@ Stage 2 (top 20, compat scan, logging, stubs):
 - **New R8 patterns that `Dex2jarRepair` doesn't handle** (manga only; every anime class verifies):
   - **mangadex** (#2 of the sample): 8 classes fail with `Bad <init> method call … Type 'java/lang/Object' is not assignable to 'f4'`. They are kotlinx-serialization DTOs whose sealed parent lost its no-op constructor to R8, so the subclass constructor calls `Object.<init>` directly (jadx: `f4 extends u`, and `f4.<init>` has no super call). This is the constructor elision of phase-1 §10, but as a *super call inside a constructor* rather than at a `new` site. The repair would rewrite it to the direct superclass and add the missing constructors, as it already does for `new` sites.
   - **mangafire, comix, mangakakalot**: 1 class each, `Call to wrong <init> method`, with the repair's note `dex has 1 new java/lang/Exception, jar has 0`. A `new` site the repair couldn't map, because dex2jar emitted a different number of them.
-  - Neither pattern was seen before (Phase 1 only ran MangaPill). Both are open (Stage 3 prompt).
-- **Runtime:** AnimePahe's preference screen sets up with no `"Stub!"` (3 `ListPreference`, 2 `SwitchPreferenceCompat`, 1 `EditTextPreference`), and the values round-trip through its `SharedPreferences` (`AnimeExtensionRuntimeTest`). AnimeGG's client is `NetworkHelper`'s, and its cookie jar and `android.webkit.CookieManager` see each other's cookies.
+  - Neither pattern was seen before (Phase 1 only ran MangaPill). Both are open: left to the Stage 6 fix round (user decision 2026-11-05).
+- **Runtime:** AnimePahe's preference screen sets up with no `"Stub!"` (3 `ListPreference`, 3 `SwitchPreferenceCompat`, 1 `EditTextPreference`; Stage 2 counted 2 switches, Stage 3's mapping found the third), and the values round-trip through its `SharedPreferences` (`AnimeExtensionRuntimeTest`). AnimeGG's client is `NetworkHelper`'s, and its cookie jar and `android.webkit.CookieManager` see each other's cookies.
+
+**2026-11-05: core anime services (Stage 3).**
+- **The live chain** (`AnimeServicesLiveTest`, `MADOYOMI_LIVE_SOURCE_TESTS=1`; real sites, extensions loaded without the trust gate):
+
+  | Extension | Popular | Details → episodes | Videos | Resolved |
+  |---|---|---|---|---|
+  | AnimeGG | 125 entries, same ids on a second call | "One Piece", 1167 episodes reconciled | 1 hoster (`no_hoster_list`, lib 14), 3 videos | `[SUBBED] AnimeGG:1080p`, an mp4 with `User-Agent` and `referer` headers |
+  | AnimePahe | not reached | | | |
+
+  - The whole AnimeGG chain takes about 7 s.
+  - AnimePahe is behind Cloudflare. Its own WebView interceptor runs first, then upstream's `CloudflareInterceptor` fails with "Cloudflare bypass currently disabled" (FlareSolverr is off). This is the "measure first" decision of Stage 5; the live test skips a Cloudflare-blocked site and says so.
+  - Before that, the test environment showed that **extensions need Android's main looper.** AnimePahe's interceptor does `Handler(Looper.getMainLooper())`, which throws a null pointer when no main loop runs. The sidecar starts one (`LooperThread` in upstream's `applicationSetup`); `ApplicationTest.testingSetup()` doesn't, so the live test starts it.
+- **Filters of real extensions** (`AnimeFiltersTest`): every filter is moved off its default, the changes are applied to a fresh list, and the mapped result is compared.
+
+  | Extension | Filters | Changes | Types |
+  |---|---|---|---|
+  | kickassanime (SAFE) | 7 | 81 | header, separator, 4 selects, a group of 77 checkboxes |
+  | aniwave (SAFE) | 8 | 112 | a select and 7 groups of 111 checkboxes |
+  | hanime (NSFW, #1) | 4 | 220 | 64 tri-states and 154 checkboxes in 2 groups, a sort, a select |
+
+  - The text filter is covered by the fake list. hanime is the only top-20 extension with a sort or a tri-state (from the dex strings of all 20).
+  - In all three, a fresh `getFilterList()` has the defaults again after a search, so the lists aren't shared objects.
+- **AnimePahe has 7 preferences, not 6:** `preferred_mirror`, `preferred_quality` and `preferred_lang` (lists), `pref_show_site_number`, `preferred_link_type` and `preferred_av1` (switches), and `cf_bypass_ua` (edit text).
+  - All of them map, and list, switch and edit-text changes persist and read back.
+  - Stage 2's count said 2 switches; it is corrected above.
+- **Aniyomi's `AnimeCatalogueSource.getHosterList`/`getVideoList(hoster)` call themselves** (the Aniyomi app's `source-api` has the same two lines). `AnimeHttpSource` overrides both, and the app (and now Madoyomi) never asks a non-HTTP source for hosters, so they are unreachable.
+- Hoster use in the top 20 (whether `getHosterList` is declared, lazy hosters) was not measured here; the Stage 5 harness reports it per extension.
+- **Test isolation (fixed here).** The madoyomi scratch-database tests restored the database after a test with `previousPrimary?.let { TransactionManager.defaultDatabase = it }`. That broke other tests:
+  - `primaryDatabase` is the explicit default, or else the newest connection. Restoring it made an *implicit* primary explicit, for example `ApplicationTest`'s shared `mem:test` or another test's scratch database.
+  - An explicit default beats every later `Database.connect`, so a later scratch test wrote into the wrong database.
+  - It only worked because every `madoyomi.*` class ran before any `ApplicationTest` subclass. Gradle runs previously failed classes first, which showed it: `OpdsExploreNsfwTest` then `ExtensionLifecycleTest` gave 23 failures, and the reverse order made Opds count a 4th source.
+  - Now each scratch database is the explicit default while its test runs, and the previous explicit default (`TransactionManager.defaultDatabase`, possibly none) is restored. This applies to `ExtensionLifecycleTest`, `ExtensionLifecycleLiveTest`, `SignatureTrustTest`, `RepoServiceTest`, `RepoServiceLiveTest`, `MigrationsFromEmptyDbTest` and the new `ScratchDatabase`; `api`'s `ApiGraphQLTest` already did this.
+  - The Stage 3 DB tests use `ScratchDatabase` (`AnimeTestSources.kt`) rather than `ApplicationTest`.
+- Task 6 (the two `Dex2jarRepair` patterns of the manga sample) was not done: left to the Stage 6 fix round (user decision 2026-11-05).

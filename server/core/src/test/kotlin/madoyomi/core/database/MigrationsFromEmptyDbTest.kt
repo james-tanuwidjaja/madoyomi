@@ -8,6 +8,10 @@ package madoyomi.core.database
 import de.neonew.exposed.migrations.Migration
 import de.neonew.exposed.migrations.loadMigrationsFrom
 import de.neonew.exposed.migrations.runMigrations
+import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
+import eu.kanade.tachiyomi.animesource.model.FetchType
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import madoyomi.core.anime.model.table.AnimeCategoryTable
 import madoyomi.core.anime.model.table.AnimeHistoryTable
 import madoyomi.core.anime.model.table.AnimeSourceTable
@@ -20,6 +24,7 @@ import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.DatabaseConfig
 import org.jetbrains.exposed.v1.core.ExperimentalKeywordApi
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -41,6 +46,7 @@ import suwayomi.tachidesk.test.ApplicationTest
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -77,6 +83,13 @@ class MigrationsFromEmptyDbTest {
                         "SOURCE",
                         "ADDED_AT",
                         "LAST_FETCHED_AT",
+                        "BACKGROUND_URL",
+                        "UPDATE_STRATEGY",
+                        "FETCH_TYPE",
+                        "SEASON_NUMBER",
+                        "MEMO",
+                        "PARENT_ID",
+                        "SEASON_SOURCE_ORDER",
                     ),
                 "EPISODE" to
                     setOf(
@@ -93,6 +106,10 @@ class MigrationsFromEmptyDbTest {
                         "SOURCE_ORDER",
                         "FETCHED_AT",
                         "ANIME",
+                        "FILLERMARK",
+                        "SUMMARY",
+                        "PREVIEW_URL",
+                        "MEMO",
                     ),
                 "ANIME_HISTORY" to setOf("ID", "EPISODE", "LAST_SEEN"),
                 "ANIME_CATEGORY" to setOf("ID", "CATEGORY", "ANIME"),
@@ -103,6 +120,7 @@ class MigrationsFromEmptyDbTest {
             mapOf(
                 "TRUSTED_SIGNATURE" to mapOf("STORE_ID" to ("EXTENSIONSTORE" to "CASCADE")),
                 "ANIME_SOURCE" to mapOf("EXTENSION" to ("EXTENSION" to null)),
+                "ANIME" to mapOf("PARENT_ID" to ("ANIME" to "SET NULL")),
                 "EPISODE" to mapOf("ANIME" to ("ANIME" to "CASCADE")),
                 "ANIME_HISTORY" to mapOf("EPISODE" to ("EPISODE" to "CASCADE")),
                 "ANIME_CATEGORY" to mapOf("CATEGORY" to ("CATEGORY" to "CASCADE"), "ANIME" to ("ANIME" to "CASCADE")),
@@ -136,7 +154,7 @@ class MigrationsFromEmptyDbTest {
         val migrations = loadMigrations()
         val versions = migrations.map { it.version }.sorted()
         assertEquals((1..migrations.size).toList(), versions, "migration versions must be consecutive from 1")
-        assertTrue(migrations.size >= 70, "expected at least M0069 and M0070, found ${migrations.size} migrations")
+        assertTrue(migrations.size >= 71, "expected at least M0069 to M0071, found ${migrations.size} migrations")
 
         val madoyomiVersions = migrations.filter { it is MadoyomiMigration }.map { it.version }.sorted()
         assertEquals(
@@ -302,6 +320,19 @@ class MigrationsFromEmptyDbTest {
                         it[genre] = "Action, Comedy"
                         it[inLibrary] = true
                         it[sourceReference] = 4_242L
+                        it[backgroundUrl] = "https://example.org/bg.jpg"
+                        it[updateStrategy] = AnimeUpdateStrategy.ONLY_FETCH_ONCE
+                        it[fetchType] = FetchType.Seasons
+                        it[seasonNumber] = 2.5
+                        it[memo] = buildJsonObject { put("key", "value") }
+                    }
+                val seasonId =
+                    AnimeTable.insertAndGetId {
+                        it[url] = "/anime/1/season/1"
+                        it[title] = "Season 1"
+                        it[sourceReference] = 4_242L
+                        it[parentId] = animeId
+                        it[seasonSourceOrder] = 1
                     }
                 val episodeId =
                     EpisodeTable.insertAndGetId {
@@ -311,6 +342,10 @@ class MigrationsFromEmptyDbTest {
                         it[sourceOrder] = 0
                         it[lastSecondSeen] = 90
                         it[anime] = animeId
+                        it[fillermark] = true
+                        it[summary] = "A summary"
+                        it[previewUrl] = "https://example.org/preview.jpg"
+                        it[memo] = buildJsonObject { put("n", 1) }
                     }
                 AnimeHistoryTable.insert {
                     it[episode] = episodeId
@@ -337,11 +372,24 @@ class MigrationsFromEmptyDbTest {
                 val episode = EpisodeTable.selectAll().single()
                 assertEquals(animeId.value, episode[EpisodeTable.anime].value)
                 assertEquals(90L, episode[EpisodeTable.lastSecondSeen])
+                assertTrue(episode[EpisodeTable.fillermark])
+                assertEquals("A summary", episode[EpisodeTable.summary])
+                assertEquals(buildJsonObject { put("n", 1) }, episode[EpisodeTable.memo])
                 assertEquals(1L, AnimeCategoryTable.selectAll().count())
+                val anime = AnimeTable.selectAll().where { AnimeTable.id eq animeId }.single()
+                assertEquals(AnimeUpdateStrategy.ONLY_FETCH_ONCE, anime[AnimeTable.updateStrategy])
+                assertEquals(FetchType.Seasons, anime[AnimeTable.fetchType])
+                assertEquals(2.5, anime[AnimeTable.seasonNumber])
+                assertEquals(buildJsonObject { put("key", "value") }, anime[AnimeTable.memo])
+                val season = AnimeTable.selectAll().where { AnimeTable.id eq seasonId }.single()
+                assertEquals(animeId.value, season[AnimeTable.parentId]?.value)
+                assertEquals(FetchType.Episodes, season[AnimeTable.fetchType])
+                assertEquals("{}", season[AnimeTable.memo].toString())
 
                 // ON DELETE CASCADE: removing the anime removes its episodes, their history and its category links,
-                // and removing a store revokes its signing key.
+                // and removing a store revokes its signing key. A season outlives its parent (SET NULL).
                 AnimeTable.deleteWhere { AnimeTable.id eq animeId }
+                assertNull(AnimeTable.selectAll().where { AnimeTable.id eq seasonId }.single()[AnimeTable.parentId])
                 assertEquals(0L, EpisodeTable.selectAll().count())
                 assertEquals(0L, AnimeHistoryTable.selectAll().count())
                 assertEquals(0L, AnimeCategoryTable.selectAll().count())
@@ -351,10 +399,62 @@ class MigrationsFromEmptyDbTest {
         }
     }
 
+    @Test
+    fun `M0071 drops duplicate anime and episodes and keeps them unique`() {
+        val migrations = loadMigrations()
+        withScratchDatabase { db ->
+            runMigrations(migrations.filter { it.version < 71 }, db)
+            val first =
+                transaction(db) {
+                    // Before M0071 nothing kept them apart.
+                    repeat(2) { exec("INSERT INTO ANIME (URL, TITLE, SOURCE) VALUES ('/a', 'A', 1)") }
+                    exec("INSERT INTO ANIME (URL, TITLE, SOURCE) VALUES ('/a', 'Same url, other source', 2)")
+                    val min =
+                        exec("SELECT MIN(ID) FROM ANIME WHERE SOURCE = 1") { rs ->
+                            rs.next()
+                            rs.getInt(1)
+                        }!!
+                    repeat(2) { exec("INSERT INTO EPISODE (URL, NAME, SOURCE_ORDER, ANIME) VALUES ('/e', 'E', 1, $min)") }
+                    min
+                }
+
+            runMigrations(migrations, db)
+
+            transaction(db) {
+                val anime = AnimeTable.selectAll().map { it[AnimeTable.sourceReference] to it[AnimeTable.id].value }
+                assertEquals(listOf(1L, 2L), anime.map { it.first }.sorted(), "one row per (source, url)")
+                assertEquals(first, anime.single { it.first == 1L }.second, "the lowest id is kept")
+                assertEquals(1L, EpisodeTable.selectAll().count())
+            }
+            transaction(db) {
+                assertFailsWith<ExposedSQLException> {
+                    AnimeTable.insert {
+                        it[url] = "/a"
+                        it[title] = "Duplicate"
+                        it[sourceReference] = 1L
+                    }
+                }
+            }
+            transaction(db) {
+                val animeId = AnimeTable.selectAll().where { AnimeTable.sourceReference eq 1L }.single()[AnimeTable.id]
+                assertFailsWith<ExposedSQLException> {
+                    EpisodeTable.insert {
+                        it[url] = "/e"
+                        it[name] = "Duplicate"
+                        it[sourceOrder] = 2
+                        it[anime] = animeId
+                    }
+                }
+            }
+        }
+    }
+
     /** Runs [block] against a fresh in-memory H2 database and restores the shared test database afterwards. */
     private fun withScratchDatabase(block: (Database) -> Unit) {
-        // Database.connect makes the scratch database the primary one for bare `transaction {}` calls.
-        val previousPrimaryDatabase = TransactionManager.primaryDatabase
+        // The scratch database is the explicit default while it runs, then the previous explicit default (or none) is
+        // restored. Not `primaryDatabase`: restoring an implicit primary would make it explicit, and an explicit default
+        // wins over every later `Database.connect` (other tests rely on that making their scratch database the primary).
+        val previousDefault = TransactionManager.defaultDatabase
         val database =
             Database.connect(
                 "jdbc:h2:mem:madoyomi-migrations-${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
@@ -362,12 +462,11 @@ class MigrationsFromEmptyDbTest {
                 databaseConfig = dbConfig,
             )
         try {
+            TransactionManager.defaultDatabase = database
             block(database)
         } finally {
             TransactionManager.closeAndUnregister(database)
-            if (previousPrimaryDatabase != null) {
-                TransactionManager.defaultDatabase = previousPrimaryDatabase
-            }
+            TransactionManager.defaultDatabase = previousDefault
         }
     }
 

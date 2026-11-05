@@ -64,14 +64,16 @@ class ExtensionLifecycleLiveTest {
         }
     }
 
-    private var previousPrimary: Database? = null
+    // the explicit default before the test (not `primaryDatabase`: restoring an implicit primary would make it explicit,
+    // and an explicit default wins over every later `Database.connect`)
+    private var previousDefault: Database? = null
     private lateinit var database: Database
     private val lifecycle = ExtensionLifecycle(RepoIndexFetcher.network, madoyomi.core.repo.NetworkRepoHttp)
     private val repos = RepoService(RepoIndexFetcher.network, onTrusted = { lifecycle.reconcileTrust(it) })
 
     @BeforeEach
     fun setUp() {
-        previousPrimary = TransactionManager.primaryDatabase
+        previousDefault = TransactionManager.defaultDatabase
         database =
             Database.connect(
                 "jdbc:h2:mem:madoyomi-live-ext-${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
@@ -84,6 +86,7 @@ class ExtensionLifecycleLiveTest {
                     },
             )
         runMigrations(loadMigrationsFrom("suwayomi.tachidesk.server.database.migration", ServerConfig::class.java), database)
+        TransactionManager.defaultDatabase = database
         serverConfig.extensionStores.value = emptyList()
     }
 
@@ -95,7 +98,7 @@ class ExtensionLifecycleLiveTest {
         ExtensionKind.entries.forEach { (ExtensionFiles.extensionsRoot / it.dirName).deleteRecursively() }
         serverConfig.extensionStores.value = emptyList()
         TransactionManager.closeAndUnregister(database)
-        previousPrimary?.let { TransactionManager.defaultDatabase = it }
+        TransactionManager.defaultDatabase = previousDefault
     }
 
     private fun row(pkg: String) = transaction { ExtensionTable.selectAll().where { ExtensionTable.pkgName eq pkg }.first() }
