@@ -49,6 +49,21 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 15. `GET /api/anime/{id}` (details, with `?refresh=true`), `GET /api/anime/{id}/episodes`, `GET /api/episodes/{id}/videos`.
 16. Store browsed anime/episodes in the DB (upsert by source + URL) so the IDs stay stable.
 
+    As decided in Phase 0, these map to GraphQL at `/api/graphql` (REST only for binaries), like the Phase 1 endpoints ([phase-1 step 17](phase-1-backend-foundation.md#api)). Stage 4:
+
+    | PLAN.md §5 REST sketch | GraphQL |
+    |---|---|
+    | `GET /api/sources?type=anime` | `animeSources(condition: {id, name, lang, extensionPkgName})` (Phase 1). `AnimeSourceType` gains `iconUrl`, plus `supportsLatest` and `isConfigurable` from the live source (null while it can't be used), and `anime` (its stored entries) |
+    | `GET /api/sources/{id}/popular?page=`, `…/latest`, `…/search?q=&page=&filters=` | `fetchSourceAnime(input: {source, type: POPULAR\|LATEST\|SEARCH, page, query, filters: [FilterChange]})` → `{animes, hasNextPage}`; entries are stored with stable ids (upstream's `fetchSourceManga`) |
+    | `GET /api/sources/{id}/filters` | `AnimeSourceType.filters` → upstream's `Filter` union (`SelectFilter`, `GroupFilter`, …) |
+    | `GET /api/sources/{id}/preferences` | `AnimeSourceType.preferences` → upstream's `Preference` union |
+    | `PUT /api/sources/{id}/preferences` | `updateAnimeSourcePreference(input: {source, change: SourcePreferenceChange})` → `{preferences, source}` (`MANAGE_SOURCE_PREFERENCES`, as upstream's `updateSourcePreference`) |
+    | `GET /api/anime/{id}` (+ refresh) | `anime(id)`, `animes(condition, filter, order, paging)` (upstream's `manga`/`mangas`); refresh: `fetchAnimeAndEpisodes(input: {id, fetchAnime, fetchEpisodes})` → `{anime, episodes, seasons}` plus the source's error, if any, in `errors[]` (upstream's `fetchMangaAndChapters`) |
+    | `GET /api/anime/{id}/episodes` | `AnimeType.episodes`, `episodes(condition: {animeId, …}, filter, order, paging)` (upstream's `chapters`); a `Seasons` entry has `AnimeType.seasons` and each season `parent` |
+    | `GET /api/episodes/{id}/videos` | `fetchEpisodeVideos(input: {episodeId})` → `{episode, hosters: [{index, name, state, videos: [{videoUrl, headers, subtitleTracks, audioTracks, timestamps, mpvArgs, initialized, …}]}]}`; `fetchHosterVideos(input: {episodeId, hosterIndex})` for a lazy or failed hoster; `resolveEpisodeVideo(input: {episodeId, hosterIndex, videoIndex})` before playing a video that isn't `initialized` |
+    | (compat log) | `ExtensionType.compatIssues` → `{kind, target, origin, context, count, firstSeen, lastSeen}` |
+    | `GET /api/image?src=&sourceId=` (thumbnails) | REST `GET /api/v1/anime/{animeId}/thumbnail` (binary; the source's client and headers; cached, `cache-control: max-age=86400`). `AnimeType.thumbnailUrl` points there |
+
 ### Compatibility harness
 17. `tools/compat-test/`: for each of the top ~20 yuzono extensions (by repo order or a list in `top20.txt`): install → popular page 1 → first anime details → episodes → videos for the first episode → record pass/fail per step + errors + missing classes.
 18. Write the results table to `docs/research/anime-compat.md`. Re-run after each stub fix.
@@ -65,22 +80,22 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 
 ### Android stubs & networking
 - [x] Anime-specific stubs added (`SharedPreferences`, `Context`, `Uri`, `Base64`, `Log`, …). The static scan over the top 20 finds no missing class or member. The remaining `"Stub!"`s are in the deep-link `UrlActivity`, one WebView SSL callback (hanime) and `EditTextPreference` binder code: `OnBindEditTextListener` bodies (checked with jadx in AnimePahe and StreamingCommunity) and the `TextWatcher`s they install (the others). Madoyomi never runs any of these (Stage 2, §10). The `androidx.preference` value accessors are implemented; runtime confirmation comes from the Stage 5 harness
-- [x] Missing class/method logger (`ExtensionCompatLog`: class-loader hook, `AnimeSourceCalls` → `EXTENSION_INCOMPATIBLE`, link-check install warnings; Stage 2, §9. GraphQL `compatIssues` is Stage 4)
+- [x] Missing class/method logger (`ExtensionCompatLog`: class-loader hook, `AnimeSourceCalls` → `EXTENSION_INCOMPATIBLE`, link-check install warnings; Stage 2, §9. On GraphQL as `extension.compatIssues` since Stage 4)
 - [x] Shared OkHttp client, cookie jar, rate limiting (`AnimeExtensionRuntimeTest`: AnimeGG's client is `NetworkHelper`'s, with its cookie jar shared with `android.webkit.CookieManager` both ways; `rateLimit` keeps the jar)
 - [ ] Cloudflare/WebView shim reachable from anime sources
 - [x] Injekt/`NetworkHelper` lookups resolved (the extension's own `injectLazy<NetworkHelper>()` gets the app's instance; same test)
 
 ### Filters & preferences
-- [x] Filter → JSON serializer (all filter types): `AnimeFilters.filtersOf`, upstream's GraphQL `Filter` union (Stage 3, §9). Round-trips over every filter of kickassanime, aniwave and hanime (§10); the GraphQL field is Stage 4
+- [x] Filter → JSON serializer (all filter types): `AnimeFilters.filtersOf`, upstream's GraphQL `Filter` union (Stage 3, §9). Round-trips over every filter of kickassanime, aniwave and hanime (§10); on GraphQL as `AnimeSourceType.filters` since Stage 4
 - [x] JSON → filter state deserializer: `AnimeFilters.apply`, upstream's `FilterChange` on a fresh list, `BAD_REQUEST` with the position path for a change that doesn't fit
 - [x] Preference screen → JSON schema: `AnimeSourcePreferences`, upstream's `Preference` union and `preferenceOf` (AnimePahe's 7 preferences; Stage 3)
-- [x] Preference updates persisted per source: in its `SharedPreferences` (`source_<id>`), the change listener first as on Android, then the source is re-instantiated on next use (Stage 3, §9). The GraphQL mutation is Stage 4
+- [x] Preference updates persisted per source: in its `SharedPreferences` (`source_<id>`), the change listener first as on Android, then the source is re-instantiated on next use (Stage 3, §9). On GraphQL as `updateAnimeSourcePreference` since Stage 4
 
 ### API
-- [ ] Sources list / popular / latest / search
-- [ ] Filters endpoint
-- [ ] Preferences GET/PUT
-- [ ] Anime details, episodes, videos
+- [x] Sources list / popular / latest / search: `animeSources` (with the live `supportsLatest`, `isConfigurable`), `fetchSourceAnime(POPULAR|LATEST|SEARCH)` (Stage 4, step 16; `AnimeBrowseApiTest`, smoke step 6 on AnimeGG)
+- [x] Filters endpoint: `AnimeSourceType.filters`, changes through `fetchSourceAnime(filters: [FilterChange])` (`AnimeBrowseApiTest` on a fake, `AnimeExtensionApiTest` on kickassanime)
+- [x] Preferences GET/PUT: `AnimeSourceType.preferences`, `updateAnimeSourcePreference` (`AnimeExtensionApiTest`: AnimePahe installed from a loopback repo, 7 preferences, switch and list changes persist)
+- [x] Anime details, episodes, videos: `anime`/`animes`/`episodes`, `fetchAnimeAndEpisodes`, `fetchEpisodeVideos`/`fetchHosterVideos`/`resolveEpisodeVideo`, and the REST thumbnail (Stage 4; `AnimeDetailsApiTest`, `AnimeVideosApiTest`, `AnimeThumbnailTest`; the AnimeGG chain of `tools/smoke-api.ps1`, §10)
 - [x] Browsed entries persisted with stable IDs (`AnimeEntries.upsert` by `(source, url)`, unique since M0071; episodes by `(url, anime)`; Stage 3)
 
 ### Compatibility
@@ -125,6 +140,7 @@ Each stage ends in something verifiable and a commit:
    - The `/api/v1/anime/{id}/thumbnail` route.
    - The PLAN.md §5 mapping table.
    - `smoke-api.ps1` anime steps, with the helpers moved to `tools/lib/MadoyomiServer.ps1`.
+   - *Done* (2026-11-05), with `extension.compatIssues` from Stage 2.
 5. **Compat harness** `tools/compat-test/run-compat.ps1` and its first run → `docs/research/anime-compat.md`, including process health (JVM aborts, threads, memory).
    - Then the Cloudflare decision: possibly a KCEF solver stage, 5b.
 6. **Fix round until ≥ 18/20**, filters/preferences round-trip for ≥ 3 extensions, the one-JVM verdict, docs closed.
@@ -184,6 +200,19 @@ Stage 3 (core anime services):
 | **Filters and preferences use upstream's GraphQL types as they are:**<br>• `Filter`, `FilterChange`, `Preference`, `preferenceOf`, `SourcePreferenceChange`;<br>• filter changes are `BAD_REQUEST` with the position path when they don't fit (upstream threw a plain exception);<br>• a change to a header or separator is ignored. | The phase-wide decision: one shape and one Phase 3 renderer for both kinds. AndroidCompat's `androidx.preference` classes are shared, so upstream's mapping applies unchanged. |
 | **A preference change:**<br>• builds the screen anew;<br>• runs the extension's change listener first and saves only if it agrees (Android's order);<br>• drops the source from the cache so its next use is a new instance. | Upstream cached the screen (a change before any read was a null pointer), saved before asking the listener, and ignored its veto. Extensions often read a preference once (a `by lazy` base URL). |
 | The **ext-anime port keeps Aniyomi's self-recursive `AnimeCatalogueSource.getHosterList`/`getVideoList(hoster)`** unchanged. | Aniyomi has the same code. No Madoyomi path calls it, and the port stays identical to upstream. |
+
+Stage 4 (GraphQL operations):
+
+| Decision | Why |
+|---|---|
+| **The operations are thin wrappers in `api`** (`madoyomi.api.graphql`: `AnimeQuery`, `EpisodeQuery`, `AnimeMutation`, `AnimeTypes`, `AnimeVideoTypes`). They have upstream's shapes: `fetchSourceAnime` ↔ `fetchSourceManga`, `fetchAnimeAndEpisodes` ↔ `fetchMangaAndChapters`, `anime`/`animes`/`episodes` ↔ `manga`/`mangas`/`chapters` (condition, filter, order, cursor paging, with upstream's filter and pagination helpers), and `updateAnimeSourcePreference` ↔ `updateSourcePreference`. There are no per-user tables; the anime tables have none. | The core services are tested without GraphQL (Stage 3). One shape for both kinds keeps the Phase 3 client's code paths alike. |
+| **Data loaders through the schema hook**: `GraphQLSchemaContribution.dataLoaders`, appended to upstream's `TachideskDataLoaderRegistryFactory` (a `// Madoyomi:` edit). Anime, episodes-of-anime, seasons-of-anime, source and entries-of-source loaders. | Upstream's types resolve their relations through data loaders; a list of 100 anime with `source` would otherwise be 100 queries. The loaders are found with ServiceLoader, like the operations. |
+| **`AnimeSourceType.supportsLatest`/`isConfigurable` are null** while the source can't be used (untrusted, not loadable). **`filters`/`preferences` fail** with the reason (`UNTRUSTED`, `NOT_FOUND`, `LOAD_FAILED`). | `animeSources` lists sources from the repo listing too (Phase 1), so a list query must not fail for one untrusted source; the extension's `isTrusted`/`isLoaded` say why. Filters and preferences are asked for one source at a time, where the reason is what the UI needs. |
+| **`fetchAnimeAndEpisodes` returns the stored data plus the error** (`DataFetcherResult`, as upstream). The error is classified like any other (`MadoyomiGraphQLErrors.errorOf`: code and details), and an unknown id is a plain `NOT_FOUND`. `fetchEpisodes` refreshes the seasons of a `Seasons` entry, and the payload has `seasons`. | Upstream's partial result was `toGraphQLError()` without a code. The stored entry is still worth showing when the site is down. |
+| **Three video mutations:** `fetchEpisodeVideos` (every non-lazy hoster), `fetchHosterVideos` (one hoster on request) and `resolveEpisodeVideo`. Hosters and videos are addressed by index in the last fetch (`AnimeVideos`' in-memory cache). They are mutations because they call the source. | They match Aniyomi's three steps (`EpisodeLoader`, lazy `HosterLoader`, `getResolvedVideo`). A `Video` is extension state that can't be rebuilt from an id (Stage 3). |
+| **`compatIssues` is a field of upstream's `ExtensionType`** (a `// Madoyomi:` resolver, like `isTrusted`), with `ExtensionCompatIssueType` in core. The enums are named `ExtensionCompatIssueKind`/`ExtensionCompatIssueOrigin` in the schema. | The issues belong to the extension the UI already shows. A separate query would duplicate the extension lookup. |
+| **Thumbnails: REST `GET /api/v1/anime/{animeId}/thumbnail`** (`AnimeHttp` in `api`, `AnimeThumbnails` in core):<br>• upstream's manga thumbnail flow: the source's client and headers, `FORCE_NETWORK`, one details refresh on 404/410/301/522/523 or an unreachable host;<br>• cached in upstream's thumbnail cache as `anime-<id>.<ext>`, cleared when a details fetch changes the URL;<br>• the plain client when the source can't be used;<br>• `AnimeType.thumbnailUrl` is the proxied path, `backgroundUrl` the source's URL as it is. | Binary endpoints stay REST (Phase 0). Upstream's `clearCachedImages(cachedThumbnails)` then clears both kinds, and the `anime-` prefix can't collide with a manga id. Thumbnails of library entries (upstream's permanent `ThumbnailDownloadHelper`) are Phase 6, with the anime library. |
+| **`tools/lib/MadoyomiServer.ps1`** holds the server and API helpers; `smoke-api.ps1` dot-sources it. | Stage 5's compat harness drives the same jar the same way. |
 
 ## 10. Findings log
 
@@ -266,3 +295,22 @@ Stage 3 (core anime services):
   - Now each scratch database is the explicit default while its test runs, and the previous explicit default (`TransactionManager.defaultDatabase`, possibly none) is restored. This applies to `ExtensionLifecycleTest`, `ExtensionLifecycleLiveTest`, `SignatureTrustTest`, `RepoServiceTest`, `RepoServiceLiveTest`, `MigrationsFromEmptyDbTest` and the new `ScratchDatabase`; `api`'s `ApiGraphQLTest` already did this.
   - The Stage 3 DB tests use `ScratchDatabase` (`AnimeTestSources.kt`) rather than `ApplicationTest`.
 - Task 6 (the two `Dex2jarRepair` patterns of the manga sample) was not done: left to the Stage 6 fix round (user decision 2026-11-05).
+
+**2026-11-05: GraphQL operations (Stage 4).**
+- **`tools/smoke-api.ps1` against the real repos passes all 24 steps** (the jar as the Tauri shell starts it, a fresh data dir, GraphQL and the binary REST routes only; `MADOYOMI_PORT` after 7.6 s). The new AnimeGG chain:
+
+  | Step | Result |
+  |---|---|
+  | install | `isLoaded = true` at install (Phase 1's smoke expected `false`: anime wasn't loaded then) |
+  | `animeSources` | `2247987965040486818`, `supportsLatest = true`, `isConfigurable = true`, 2 filters |
+  | `fetchSourceAnime POPULAR` | 125 entries, the same ids on a second call, 7.6 s for both |
+  | `fetchAnimeAndEpisodes` | "One Piece", 1167 episodes, no error |
+  | `fetchEpisodeVideos` (newest, "Episode 1180") | 1 hoster (`no_hoster_list`, lib 14), 3 videos, headers `User-Agent` and `referer` |
+  | `resolveEpisodeVideo` | `[SUBBED] AnimeGG:1080p`, initialized, its URL on `www.animegg.org` (23 ms) |
+  | thumbnail | `image/jpeg`, 67,554 bytes from the source (its headers), the same from the cache with `?token=` |
+  | `compatIssues` | none |
+
+  The manga chain (MangaPill) is unchanged: 10 popular, "Berserk" with 405 chapters, 92 pages, the page image as `image/jpeg` from the source and from the cache. The repos list 249 anime and 1458 manga extensions now (247 and 1454 on 2026-11-03).
+- **AnimePahe through GraphQL** (`AnimeExtensionApiTest`, installed from a loopback repo, no network): it loads at install, its 7 preferences come back with the union's types (3 switches, 3 lists, 1 edit text), and a switch and a list change persist. `extension.compatIssues` lists its 7 static `STUB`s (the `EditTextPreference` dialog, Stage 1). kickassanime's 7 filters come back as upstream's union types.
+- **Schema notes.** graphql-kotlin takes a nested class's simple name as the GraphQL name, so `ExtensionCompatLog`'s `IssueKind`/`Origin` got `@GraphQLName`s (`ExtensionCompatIssueKind`/`ExtensionCompatIssueOrigin`) rather than a bare `Origin` in the schema. Enums outside the schema's `supportedPackages` work (upstream's `ContentWarning` and `UpdateStrategy` already do), so `FetchType` and `AnimeUpdateStrategy` are the extension API's own. `KotlinDataLoader` needs a non-null value type; an unknown key still resolves to null through the Java `DataLoader`, as upstream's `MangaDataLoader` does.
+- **Smoke refactor gotcha.** In PowerShell, a function's pipeline output is its return value, so Gradle's output inside `Resolve-MadoyomiJar` became the jar path (the first run failed with "The filename or extension is too long"). Build output goes to `Out-Host` now; the Stage 5 harness has the same trap.

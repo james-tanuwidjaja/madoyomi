@@ -245,7 +245,7 @@ GET    /api/image?src=&sourceId=          image proxy
 WS     /ws                                downloads, updates, playback progress events
 ```
 
-**Decided in Phase 0: keep Suwayomi's GraphQL API and add anime types to it.** The endpoints above map to GraphQL queries and mutations. REST stays only for binaries (`/api/image`, page bytes, later a video proxy). The mapping of the repo, extension, trust, source and event endpoints is in [phase-1 step 17](phases/phase-1-backend-foundation.md#api); the anime browse/details/episodes/videos endpoints are mapped in Phase 2.
+**Decided in Phase 0: keep Suwayomi's GraphQL API and add anime types to it.** The endpoints above map to GraphQL queries and mutations. REST stays only for binaries (`/api/image`, page bytes, later a video proxy). The mapping of the repo, extension, trust, source and event endpoints is in [phase-1 step 17](phases/phase-1-backend-foundation.md#api); the anime source, filter, preference, browse, details, episode and video endpoints, and the anime thumbnail, are mapped in [phase-2 step 16](phases/phase-2-anime-sources.md#api).
 
 ---
 

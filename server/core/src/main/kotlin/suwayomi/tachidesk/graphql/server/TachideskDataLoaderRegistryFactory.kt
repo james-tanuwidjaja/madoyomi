@@ -8,6 +8,7 @@
 package suwayomi.tachidesk.graphql.server
 
 import com.expediagroup.graphql.dataloader.KotlinDataLoaderRegistryFactory
+import madoyomi.core.graphql.MadoyomiSchemaContributions
 import suwayomi.tachidesk.graphql.dataLoaders.CategoriesForMangaDataLoader
 import suwayomi.tachidesk.graphql.dataLoaders.CategoryCountForMangaDataLoader
 import suwayomi.tachidesk.graphql.dataLoaders.CategoryDataLoader
@@ -103,6 +104,8 @@ class TachideskDataLoaderRegistryFactory {
                 UserDataLoader(),
                 PermissionsForUserDataLoader(),
                 RolesForUserDataLoader(),
+                // Madoyomi: the data loaders of Madoyomi's GraphQL types (api module), found like its operations
+                *MadoyomiSchemaContributions.dataLoaders().toTypedArray(),
             )
     }
 }

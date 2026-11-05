@@ -7,8 +7,17 @@ package madoyomi.api.graphql
 
 import com.expediagroup.graphql.generator.annotations.GraphQLDescription
 import com.expediagroup.graphql.generator.annotations.GraphQLIgnore
+import com.expediagroup.graphql.server.extensions.getValueFromDataLoader
+import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
+import graphql.schema.DataFetchingEnvironment
+import madoyomi.core.anime.AnimeFilters
+import madoyomi.core.anime.AnimeSourceAccess
+import madoyomi.core.anime.AnimeSourceCalls
+import madoyomi.core.anime.AnimeSourcePreferences
 import madoyomi.core.anime.model.table.AnimeSourceTable
 import madoyomi.core.error.ErrorCode
+import madoyomi.core.error.MadoyomiException
 import madoyomi.core.extension.ExtensionInstallProgress
 import madoyomi.core.extension.InstallState
 import madoyomi.core.extension.SignatureTrustOrigin
@@ -25,18 +34,31 @@ import suwayomi.tachidesk.graphql.server.primitives.NodeList
 import suwayomi.tachidesk.graphql.server.primitives.PageInfo
 import suwayomi.tachidesk.graphql.types.ExtensionStoreType
 import suwayomi.tachidesk.graphql.types.ExtensionType
+import suwayomi.tachidesk.graphql.types.Filter
+import suwayomi.tachidesk.graphql.types.Preference
+import suwayomi.tachidesk.manga.impl.extension.Extension
 import suwayomi.tachidesk.manga.model.dataclass.ContentWarning
 import suwayomi.tachidesk.manga.model.table.ExtensionStoreTable
 import suwayomi.tachidesk.manga.model.table.ExtensionTable
+import suwayomi.tachidesk.server.JavalinSetup.future
 import suwayomi.tachidesk.server.database.dbTransaction
+import java.util.concurrent.CompletableFuture
+import kotlin.coroutines.cancellation.CancellationException
 
-/** An anime source (`ANIME_SOURCE`): from the live extension once it is loaded, from the repo listing before. */
+/**
+ * An anime source (`ANIME_SOURCE`): from the live extension once it is loaded, from the repo listing before. The
+ * fields that need the live source ([supportsLatest], [isConfigurable]) are null while it can't be used (untrusted,
+ * not loadable: the extension's `isTrusted`/`isLoaded` say why); [filters] and [preferences] fail with the reason
+ * (`NOT_FOUND`, `UNTRUSTED`, `LOAD_FAILED`).
+ */
 class AnimeSourceType(
     val id: Long,
     val name: String,
     val lang: String,
     val contentWarning: ContentWarning,
     val baseUrl: String?,
+    @GraphQLDescription("The extension's icon (upstream's icon endpoint)")
+    val iconUrl: String,
     @GraphQLDescription("The extension that provides this source")
     val extension: ExtensionType,
 ) : Node {
@@ -47,8 +69,48 @@ class AnimeSourceType(
         lang = row[AnimeSourceTable.lang],
         contentWarning = ContentWarning.valueOf(row[AnimeSourceTable.contentWarning]),
         baseUrl = row[AnimeSourceTable.baseUrl],
+        iconUrl = Extension.proxyExtensionIconUrl(row[ExtensionTable.pkgName]),
         extension = ExtensionType(row),
     )
+
+    @GraphQLDescription("Whether the source has latest updates (fetchSourceAnime LATEST); null while the source can't be used")
+    fun supportsLatest(): CompletableFuture<Boolean?> =
+        future { usable()?.let { source -> AnimeSourceCalls.callBlocking(source, "latest") { source.supportsLatest } } }
+
+    @GraphQLDescription("Whether the source has preferences; null while the source can't be used")
+    fun isConfigurable(): CompletableFuture<Boolean?> = future { usable()?.let { it is ConfigurableAnimeSource } }
+
+    @GraphQLDescription("The source's search filters, as they are by default (changes go into fetchSourceAnime)")
+    fun filters(): CompletableFuture<List<Filter>> = future { AnimeFilters.filtersOf(AnimeSourceAccess.require(id)) }
+
+    @GraphQLDescription("The source's settings screen (empty if it has none)")
+    fun preferences(): CompletableFuture<List<Preference>> = future { AnimeSourcePreferences.preferences(id) }
+
+    @GraphQLDescription("The source's stored entries (browsed or in the library)")
+    fun anime(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<AnimeNodeList> =
+        dataFetchingEnvironment.getValueFromDataLoader("AnimeForAnimeSourceDataLoader", id)
+
+    private suspend fun usable(): AnimeSource? =
+        try {
+            AnimeSourceAccess.require(id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: MadoyomiException) {
+            null
+        }
+
+    companion object {
+        /** The source [id] with its extension, or null if there is no `ANIME_SOURCE` row. */
+        fun find(id: Long): AnimeSourceType? =
+            dbTransaction {
+                AnimeSourceTable
+                    .innerJoin(ExtensionTable)
+                    .selectAll()
+                    .where { AnimeSourceTable.id eq id }
+                    .firstOrNull()
+                    ?.let(::AnimeSourceType)
+            }
+    }
 }
 
 data class AnimeSourceNodeList(
