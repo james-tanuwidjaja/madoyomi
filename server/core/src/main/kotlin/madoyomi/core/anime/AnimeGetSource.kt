@@ -73,17 +73,23 @@ object AnimeGetSource {
         sourceCache[source.id] = source
     }
 
+    // every drop also forgets what other caches keep of the dropped instances (AnimeVideos' last fetches), so an
+    // unloaded extension's class loader can be collected
+
     fun unregisterSource(sourceId: Long) {
         sourceCache.remove(sourceId)
+        AnimeVideos.dropStale()
     }
 
     /** Drops every source the extension [extensionId] registered. */
     fun unregisterExtension(extensionId: Int) {
         byExtension.remove(extensionId)?.forEach(sourceCache::remove)
+        AnimeVideos.dropStale()
     }
 
     fun unregisterAllSources() {
         sourceCache.clear()
         byExtension.clear()
+        AnimeVideos.dropStale()
     }
 }

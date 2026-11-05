@@ -6,10 +6,17 @@ package madoyomi.core.anime
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import eu.kanade.tachiyomi.animesource.AnimeSource
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.withContext
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
 import madoyomi.core.extension.ExtensionCompatLog
 import madoyomi.core.extension.ExtensionIncompatibility
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -19,18 +26,43 @@ import kotlin.coroutines.cancellation.CancellationException
  * the extension's own failures) passes through unchanged, for `ErrorClassifier`.
  */
 object AnimeSourceCalls {
-    /** Runs [block], a call of [operation] (`popular`, `search`, `videos`, …) on [source]. */
+    /**
+     * The stack of the threads source calls run on. Android's regex engine (ICU) is iterative, `java.util.regex`
+     * recurses once per repetition of a group, so an extension's `(?:a|b)*` over a long page overflows a JVM thread's
+     * default 1 MB stack where it works on Android (anizone, Phase 2 §10: a 41K-character `JSON.parse('…')` needs more
+     * than 16 MB; 64 MB was enough up to 250K). Windows only reserves a thread's stack and commits it as it is used.
+     */
+    const val STACK_SIZE: Long = 128L * 1024 * 1024
+
+    private const val MAX_THREADS = 64
+
+    private val threadCount = AtomicInteger()
+
+    /** Source code runs here: up to [MAX_THREADS] daemon threads with [STACK_SIZE] stacks, idle ones end after 60 s. */
+    val dispatcher: CoroutineDispatcher =
+        ThreadPoolExecutor(MAX_THREADS, MAX_THREADS, 60, TimeUnit.SECONDS, LinkedBlockingQueue()) { runnable ->
+            Thread(null, runnable, "anime-source-${threadCount.incrementAndGet()}", STACK_SIZE).apply { isDaemon = true }
+        }.apply { allowCoreThreadTimeOut(true) }.asCoroutineDispatcher()
+
+    /**
+     * Runs [block], a call of [operation] (`popular`, `search`, `videos`, …) on [source], on [dispatcher]. The
+     * extension's code resumes there after each suspension (a network call), so its parsing runs on the large stack.
+     */
     suspend fun <T> call(
         source: AnimeSource,
         operation: String,
         block: suspend () -> T,
     ): T =
-        try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            throw translate(source, operation, e)
+        // translated on the source's thread, so the original error is the cause (not a copy made by the coroutine
+        // stack-trace recovery that runs when assertions are on)
+        withContext(dispatcher) {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                throw translate(source, operation, e)
+            }
         }
 
     /** The blocking variant of [call], for the non-suspend parts of the API (filters, preferences, headers). */

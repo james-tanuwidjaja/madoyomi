@@ -130,10 +130,10 @@ Details: [phase-2-anime-sources.md](phases/phase-2-anime-sources.md)
 
 Milestones:
 - [ ] `animesource` API + models implemented
-- [ ] Android stubs + missing-class logging
-- [ ] Filters and preferences exposed as JSON
-- [ ] Anime API endpoints (browse, details, episodes, videos)
-- [ ] Compat harness: ≥18/20 top yuzono extensions pass
+- [x] Android stubs + missing-class logging (Stage 2)
+- [x] Filters and preferences exposed as JSON (Stages 3–4)
+- [x] Anime API endpoints (browse, details, episodes, videos) (Stage 4)
+- [x] Compat harness: ≥18/20 top yuzono extensions pass (18/20 on 2026-11-06, [anime-compat.md](research/anime-compat.md))
 
 ### Phase 3 — Frontend MVP
 Details: [phase-3-frontend-mvp.md](phases/phase-3-frontend-mvp.md)
@@ -255,7 +255,7 @@ WS     /ws                                downloads, updates, playback progress 
 |---|---|---|
 | Android API surface used by extensions isn't stubbed | Extensions crash | Log missing classes/methods; build a compatibility test suite over the repo |
 | `extensions-lib` version changes (anime lib differs from manga lib) | Breakage across all extensions | Pin versions; support multiple lib versions side by side if needed |
-| Cloudflare / WebView-dependent extensions | Some sources unusable | Headless browser shim; FlareSolverr as fallback |
+| Cloudflare / WebView-dependent extensions | Some sources unusable | Headless browser shim; FlareSolverr as fallback. Measured in Phase 2: 1 of the top 20 is blocked (AnimePahe), so the solver is deferred |
 | Video URLs require headers/cookies | 403s in the player | Always pass `Video.headers` to mpv; proxy fallback |
 | Extensions are arbitrary JVM code | Security | Trust prompt by signing cert; only user-added repos; consider a separate JVM process per extension type |
 | R8-optimised APKs that dex2jar mistranslates (e.g. Keiyoushi's removed constructors and merged classes) | Extensions fail to load (`VerifyError`) | A bytecode repair pass after dex2jar (`Dex2jarRepair`: constructors restored, frames recomputed with the APK's class hierarchy); the Phase 2 compat harness should include manga extensions to catch new patterns |
@@ -269,7 +269,7 @@ WS     /ws                                downloads, updates, playback progress 
 - [x] Fork Suwayomi-Server, or write a fresh backend reusing its extension-host code? **Fork** (phase-0 §9; confirmed by the S1 run and the S3 harness running on Suwayomi's runtime unchanged).
 - [x] REST, or extend Suwayomi's GraphQL? **Extend GraphQL**, keep REST for binary endpoints (phase-0 §9).
 - [ ] mpv in a separate window (MVP) vs. embedded (later): confirm UX priority
-- [x] One JVM process for both extension types, or isolated processes? **One JVM** (shared network/DI/stub layer). Crash isolation is deferred: an in-process extension can't be contained without a separate JVM anyway, so the trust gate is the containment. Revisit if Phase 2's compat harness shows hard crashes (phase-1 §8, §9).
+- [x] One JVM process for both extension types, or isolated processes? **One JVM** (shared network/DI/stub layer). Crash isolation is deferred: an in-process extension can't be contained without a separate JVM anyway, so the trust gate is the containment. Revisit if Phase 2's compat harness shows hard crashes (phase-1 §8, §9). The Stage 5 harness ran the top 20 in one JVM with no abort and bounded threads and memory; the leak it found is class loaders kept after uninstall (phase-2 §10).
 - [x] Name: Madoyomi · License: MPL-2.0
 - [ ] Windows-only, or keep macOS/Linux possible (the architecture already allows it)?
 

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import suwayomi.tachidesk.server.database.dbTransaction
 import suwayomi.tachidesk.test.ApplicationTest
+import java.lang.ref.WeakReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -236,5 +237,46 @@ class AnimeVideosTest {
         val e = assertFailsWith<MadoyomiException> { runBlocking { AnimeVideos.fetchEpisodeVideos(Int.MAX_VALUE) } }
         assertEquals(ErrorCode.NOT_FOUND, e.code)
         assertNull(e.cause)
+    }
+
+    /** A source only [fetchWithThrowawaySource] holds, so the test can watch it being collected. */
+    private class ThrowawaySource : AnimeHttpSource() {
+        override val name = "Fake throwaway"
+        override val lang = "en"
+        override val baseUrl = "https://throwaway.example.org"
+        override val supportsLatest = false
+
+        @Deprecated("Use the hoster version instead")
+        override suspend fun getVideoList(episode: SEpisode): List<Video> = listOf(Video(videoUrl = "https://t/1.mp4", videoTitle = "1"))
+    }
+
+    private fun fetchWithThrowawaySource(): Triple<Int, Long, WeakReference<AnimeHttpSource>> {
+        val source = ThrowawaySource()
+        FakeAnimeSource.clearRows(source.id)
+        AnimeGetSource.registerSource(source)
+        val episodeId = episodeOf(source)
+        runBlocking { AnimeVideos.fetchEpisodeVideos(episodeId) }
+        return Triple(episodeId, source.id, WeakReference(source))
+    }
+
+    @Test
+    fun `dropping a source forgets its fetches, so an unloaded extension can be collected`() {
+        val (episodeId, sourceId, ref) = fetchWithThrowawaySource()
+        try {
+            assertTrue(episodeId in AnimeVideos.cachedEpisodes(), "the fetch is kept for resolveVideo")
+
+            // the uninstall path (ExtensionUnloader -> AnimeGetSource) drops the source: its fetch goes with it
+            AnimeGetSource.unregisterSource(sourceId)
+            assertFalse(episodeId in AnimeVideos.cachedEpisodes())
+            repeat(50) {
+                if (ref.get() == null) return@repeat
+                System.gc()
+                Thread.sleep(20)
+            }
+            assertNull(ref.get(), "nothing else keeps the dropped source (and so its class loader)")
+        } finally {
+            AnimeGetSource.unregisterSource(sourceId)
+            FakeAnimeSource.clearRows(sourceId)
+        }
     }
 }

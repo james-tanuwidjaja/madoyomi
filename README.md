@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes) and **Phase 1 (backend foundation)** are done. **Phase 2 (anime sources)** is in progress: Stages 1–4 of 6 are done, and Stage 5 (the compatibility harness over the top 20 anime extensions) is next.
+> **Early development. Not usable yet.** Phase 0 (spikes) and **Phase 1 (backend foundation)** are done. **Phase 2 (anime sources)** is in progress: Stages 1–5 of 6 are done, and Stage 6 (the last fix round, then the phase is closed) is next.
 >
 > The backend in `server/` is a Suwayomi-Server fork, rebranded as Madoyomi-Server. It runs as a local sidecar (loopback only, random port, API token). From its GraphQL API you can:
 > - add Aniyomi and Mihon repos (JSON and protobuf indexes) and list their extensions;
@@ -14,7 +14,11 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 > - browse anime sources: popular, latest, search with filters, details with episodes (or seasons), and the videos of an episode with their headers, subtitle and audio tracks. Source preferences can be changed, and anime thumbnails are served through the backend;
 > - see per extension which Android or extension APIs it needs and doesn't get (`compatIssues`).
 >
-> AnimeGG works end to end against the real site. Sites behind Cloudflare (e.g. AnimePahe) don't work yet; how many of the top 20 that affects is measured in Stage 5. The app doesn't use the real backend yet (Phase 3), and videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
+> **18 of the 20 most-downloaded yuzono anime extensions** work end to end against their real sites (install, browse, details and episodes, videos, a resolved video URL), measured by the compatibility harness ([docs/research/anime-compat.md](docs/research/anime-compat.md)). The two that don't:
+> - AnimePahe: its site is behind a Cloudflare challenge, and a Cloudflare solver is deferred;
+> - HentaiHaven: its video host was unreachable.
+>
+> The app doesn't use the real backend yet (Phase 3), and videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
 
 ---
 
@@ -60,7 +64,7 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 | [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phase 1 done, Phase 2 in progress |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
-| [`tools/`](tools/) | Dev scripts (tracked): `fetch-upstream-assets.ps1`, `fetch-test-apks.ps1`, `run-server.ps1`, `smoke-api.ps1` (the end-to-end API test against real repos) and its helpers in `lib/MadoyomiServer.ps1`, and `compat-test/` (the top-20 anime and manga-sample lists, and the static compatibility scan). Local binaries (`tools/bin/`), test APKs (`tools/apks/`, `tools/compat-test/apks/`) and upstream checkouts (`tools/upstream/`) are gitignored. | Active |
+| [`tools/`](tools/) | Dev scripts (tracked): `fetch-upstream-assets.ps1`, `fetch-test-apks.ps1`, `run-server.ps1`, `smoke-api.ps1` (the end-to-end API test against real repos) and its helpers in `lib/MadoyomiServer.ps1`, and `compat-test/` (the top-20 anime and manga-sample lists, the static compatibility scan, and the compatibility harness `run-compat.ps1` with its triage file). Local binaries (`tools/bin/`), test APKs (`tools/apks/`, `tools/compat-test/apks/`) and upstream checkouts (`tools/upstream/`) are gitignored. | Active |
 | [`docs/`](docs/) | Project plan and per-phase checklists | Active |
 
 The backend in `server/` is a Gradle multi-module project:
@@ -204,6 +208,7 @@ Backend commands. Run the Gradle ones from `server/`, with `JAVA_HOME` set to `t
 | `.\tools\fetch-upstream-assets.ps1` (from the repo root) | Restore the upstream fonts and test images |
 | `.\tools\fetch-test-apks.ps1` (from the repo root) | Download the extension APKs the tests use into `tools/apks/` |
 | `.\tools\compat-test\scan.ps1` (from the repo root) | Download the top-20 anime and manga-sample APKs and run the static compatibility scan into `docs/research/compat-scan.md` |
+| `.\tools\compat-test\run-compat.ps1 -NoBuild` (from the repo root) | Compatibility harness: run the top 20 anime extensions on the real server jar (about 7 min, needs internet access), with process health, into `docs/research/anime-compat.md`. `-Only <names>` reruns a few into `tools/compat-test/out/`; `-ReportOnly` redraws the report after a `triage.txt` edit |
 
 ## Roadmap
 
@@ -213,7 +218,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 |---|---|---|---|
 | 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
-| 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | 🟡 In progress (Stages 1–4 of 6: loader, compat scan, services, GraphQL API; next: compat harness) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
+| 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | 🟡 In progress (Stages 1–5 of 6: loader, compat scan, services, GraphQL API, compat harness with 18/20 passing; next: the last fix round) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
 | 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | ⚪ Not started | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
 | 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
 | 5 | **Manga reader:** image proxy and cache, paged, webtoon and double-page modes | ⚪ Not started | [phase-5-manga-reader.md](docs/phases/phase-5-manga-reader.md) |
@@ -234,7 +239,7 @@ Decided in Phase 0 (see [phase-0-spikes.md §9](docs/phases/phase-0-spikes.md)):
 
 Decided in Phase 1 (see [phase-1-backend-foundation.md §8 and §9](docs/phases/phase-1-backend-foundation.md#9-decision-record)):
 
-- **One JVM process** for the backend and both extension types (final). Crash isolation is deferred, and the trust gate keeps untrusted code from loading at all. This gets revisited if Phase 2's compatibility tests show hard crashes.
+- **One JVM process** for the backend and both extension types (final). Crash isolation is deferred, and the trust gate keeps untrusted code from loading at all. This gets revisited if Phase 2's compatibility tests show hard crashes. The Phase 2 harness ran the top 20 in one JVM with no crash, and threads and memory stayed bounded.
 
 - **Plain copy of upstream** into `server/`, first committed unmodified as a baseline, with the upstream commit recorded in [server/UPSTREAM.md](server/UPSTREAM.md).
 - **Keep upstream package names** (`suwayomi.tachidesk.*`). New code goes under `madoyomi.*`, which keeps upstream merges manageable.
@@ -245,7 +250,8 @@ Decided so far in Phase 2 (see [phase-2-anime-sources.md §9](docs/phases/phase-
 
 - **One anime API surface, the newest** (Aniyomi's lib 17, which keeps every lib-14/16 member), checked per extension by a static link check instead of running lib versions side by side.
 - **The "top 20" is ranked by jsDelivr downloads** of yuzono's APKs, NSFW included, torrent extensions excluded.
-- **Cloudflare: measure first.** A Cloudflare solver is only added if blocked sites push the compatibility result below 18 of 20.
+- **Cloudflare: measure first.** A Cloudflare solver is only added if blocked sites push the compatibility result below 18 of 20. Measured in Stage 5: only AnimePahe of the top 20 is blocked, and 18 of 20 pass without a solver, so the solver is **deferred**.
+- **Extension code runs on large-stack threads** (128 MB). Java's regex engine recurses where Android's doesn't, and one top-20 extension (AniZone) overflowed a normal thread stack on a long page.
 - **Filters and preferences use upstream's GraphQL types**, so one renderer serves anime and manga.
 
 Still open:
