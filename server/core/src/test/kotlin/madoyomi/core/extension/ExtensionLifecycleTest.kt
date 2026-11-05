@@ -102,7 +102,9 @@ class ExtensionLifecycleTest {
             preserveKeywordCasing = false
         }
 
-    private var previousPrimary: Database? = null
+    // the explicit default before the test (not `primaryDatabase`: restoring an implicit primary would make it explicit,
+    // and an explicit default wins over every later `Database.connect`)
+    private var previousDefault: Database? = null
     private lateinit var database: Database
     private val http = StubRepoHttp()
     private var clock = 1_000L
@@ -114,7 +116,7 @@ class ExtensionLifecycleTest {
     @BeforeEach
     fun setUp() {
         Assumptions.assumeTrue(serverConfig.databaseType.value == DatabaseType.H2)
-        previousPrimary = TransactionManager.primaryDatabase
+        previousDefault = TransactionManager.defaultDatabase
         database =
             Database.connect(
                 "jdbc:h2:mem:madoyomi-ext-${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
@@ -122,6 +124,7 @@ class ExtensionLifecycleTest {
                 databaseConfig = dbConfig,
             )
         runMigrations(loadMigrationsFrom("suwayomi.tachidesk.server.database.migration", ServerConfig::class.java), database)
+        TransactionManager.defaultDatabase = database
         serverConfig.extensionStores.value = emptyList()
         resetRuntime()
     }
@@ -131,7 +134,7 @@ class ExtensionLifecycleTest {
         resetRuntime()
         serverConfig.extensionStores.value = emptyList()
         TransactionManager.closeAndUnregister(database)
-        previousPrimary?.let { TransactionManager.defaultDatabase = it }
+        TransactionManager.defaultDatabase = previousDefault
     }
 
     /** Nothing loaded, no permits, no installed files. */

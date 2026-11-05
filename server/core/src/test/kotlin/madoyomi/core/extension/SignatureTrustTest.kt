@@ -48,7 +48,9 @@ class SignatureTrustTest {
         }
     }
 
-    private var previousPrimary: Database? = null
+    // the explicit default before the test (not `primaryDatabase`: restoring an implicit primary would make it explicit,
+    // and an explicit default wins over every later `Database.connect`)
+    private var previousDefault: Database? = null
     private lateinit var database: Database
     private val http = StubRepoHttp()
     private val repos = RepoService(RepoIndexFetcher(http), now = { 1L }, onTrusted = {})
@@ -57,7 +59,7 @@ class SignatureTrustTest {
     @BeforeEach
     fun setUp() {
         Assumptions.assumeTrue(serverConfig.databaseType.value == DatabaseType.H2)
-        previousPrimary = TransactionManager.primaryDatabase
+        previousDefault = TransactionManager.defaultDatabase
         database =
             Database.connect(
                 "jdbc:h2:mem:madoyomi-trust-${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
@@ -70,13 +72,14 @@ class SignatureTrustTest {
                     },
             )
         runMigrations(loadMigrationsFrom("suwayomi.tachidesk.server.database.migration", ServerConfig::class.java), database)
+        TransactionManager.defaultDatabase = database
         repo.serve()
     }
 
     @AfterEach
     fun tearDown() {
         TransactionManager.closeAndUnregister(database)
-        previousPrimary?.let { TransactionManager.defaultDatabase = it }
+        TransactionManager.defaultDatabase = previousDefault
     }
 
     private fun origin(hash: String) =

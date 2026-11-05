@@ -71,7 +71,8 @@ class RepoServiceLiveTest {
         }
 
     private fun withScratchDb(block: (RepoService) -> Unit) {
-        val previous = TransactionManager.primaryDatabase
+        // the explicit default (see ExtensionLifecycleTest), made the scratch database while it runs
+        val previous = TransactionManager.defaultDatabase
         val db =
             Database.connect(
                 "jdbc:h2:mem:madoyomi-live-${UUID.randomUUID()};DB_CLOSE_DELAY=-1",
@@ -85,11 +86,12 @@ class RepoServiceLiveTest {
             )
         try {
             runMigrations(loadMigrationsFrom("suwayomi.tachidesk.server.database.migration", ServerConfig::class.java), db)
+            TransactionManager.defaultDatabase = db
             block(RepoService(RepoIndexFetcher(http), unloader = {}))
         } finally {
             serverConfig.extensionStores.value = emptyList()
             TransactionManager.closeAndUnregister(db)
-            previous?.let { TransactionManager.defaultDatabase = it }
+            TransactionManager.defaultDatabase = previous
         }
     }
 
