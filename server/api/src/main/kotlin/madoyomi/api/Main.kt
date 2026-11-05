@@ -45,7 +45,10 @@ fun main(args: Array<String>) {
     applicationSetup()
     forceAuthModeNone()
 
-    javalinSetup { config -> SidecarHttp.install(config, token, startedAt) }
+    javalinSetup { config ->
+        SidecarHttp.install(config, token, startedAt)
+        AnimeHttp.install(config)
+    }
 
     val port = JavalinSetup.connector?.localPort ?: error("HTTP connector was not created")
     // The handshake line. Flush explicitly: stdout is a pipe, not a console.

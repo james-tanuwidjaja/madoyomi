@@ -11,9 +11,11 @@ import graphql.GraphQLError
 import graphql.GraphqlErrorBuilder
 import graphql.execution.DataFetcherExceptionHandler
 import graphql.execution.DataFetcherExceptionHandlerResult
+import graphql.execution.ResultPath
 import graphql.execution.instrumentation.InstrumentationState
 import graphql.execution.instrumentation.SimplePerformantInstrumentation
 import graphql.execution.instrumentation.parameters.InstrumentationExecutionParameters
+import graphql.language.SourceLocation
 import io.github.oshai.kotlinlogging.KotlinLogging
 import madoyomi.core.error.ErrorClassifier
 import madoyomi.core.error.ErrorCode
@@ -34,24 +36,35 @@ object MadoyomiGraphQLErrors {
 
     val exceptionHandler =
         DataFetcherExceptionHandler { parameters ->
-            val exception = parameters.exception
-            val classified = ErrorClassifier.classify(exception)
-            if (classified.expected) {
-                logger.debug { "GraphQL field ${parameters.path} failed (${classified.code}): ${classified.message}" }
-            } else {
-                logger.error(exception) { "GraphQL field ${parameters.path} failed" }
-            }
-            val error =
-                GraphqlErrorBuilder
-                    .newError()
-                    .message(classified.message)
-                    .path(parameters.path)
-                    .location(parameters.sourceLocation)
-                    .errorType(ErrorType.DataFetchingException)
-                    .extensions(mapOf(CODE to classified.code.name, DETAILS to classified.details.ifEmpty { null }))
-                    .build()
+            val error = errorOf(parameters.exception, parameters.path, parameters.sourceLocation)
             CompletableFuture.completedFuture(DataFetcherExceptionHandlerResult.newResult().error(error).build())
         }
+
+    /**
+     * The error for [exception] as the exception handler reports it (classified code and details, the stack trace of an
+     * unexpected one in the log). Also for a resolver that returns data *and* an error (`DataFetcherResult`), as
+     * upstream's `fetchMangaAndChapters` does.
+     */
+    fun errorOf(
+        exception: Throwable,
+        path: ResultPath?,
+        location: SourceLocation? = null,
+    ): GraphQLError {
+        val classified = ErrorClassifier.classify(exception)
+        if (classified.expected) {
+            logger.debug { "GraphQL field $path failed (${classified.code}): ${classified.message}" }
+        } else {
+            logger.error(exception) { "GraphQL field $path failed" }
+        }
+        return GraphqlErrorBuilder
+            .newError()
+            .message(classified.message)
+            .apply { path?.let { path(it) } }
+            .apply { location?.let { location(it) } }
+            .errorType(ErrorType.DataFetchingException)
+            .extensions(mapOf(CODE to classified.code.name, DETAILS to classified.details.ifEmpty { null }))
+            .build()
+    }
 
     val instrumentation =
         object : SimplePerformantInstrumentation() {

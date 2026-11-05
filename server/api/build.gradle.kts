@@ -32,8 +32,10 @@ dependencies {
     implementation(libs.bundles.shared)
     implementation(libs.bundles.javalin)
 
-    // Madoyomi's GraphQL additions (madoyomi.api.graphql): schema types, the DB tables they read, ExtensionKind
+    // Madoyomi's GraphQL additions (madoyomi.api.graphql): schema types, the DB tables they read, ExtensionKind,
+    // and (Phase 2) the anime source API the anime types and tests use
     implementation(projects.extHost)
+    implementation(projects.extAnime)
     implementation(libs.graphql.kotlin.server)
     implementation(libs.graphql.kotlin.scheme)
     implementation(libs.bundles.exposed)

@@ -172,19 +172,23 @@ object AnimeEntries {
     /**
      * Writes a details fetch ([details], the extension's answer for [animeId]) like upstream's `updateMangaDatabase`:
      * the url stays the DB's (a details answer often has none), unset or null fields keep the old value, and the row
-     * becomes `initialized` with `last_fetched_at` now.
+     * becomes `initialized` with `last_fetched_at` now. A new thumbnail URL drops the cached thumbnail (upstream's
+     * `clearThumbnail`).
      */
     internal fun writeDetails(
         animeId: Int,
         details: SAnime,
     ) {
-        dbTransaction {
-            val row = AnimeTable.selectAll().where { AnimeTable.id eq animeId }.single()
-            AnimeTable.update({ AnimeTable.id eq animeId }) {
-                it.browseFields(details, row)
-                it[AnimeTable.initialized] = true
-                it[AnimeTable.lastFetchedAt] = System.currentTimeMillis() / 1000
+        val thumbnailChanged =
+            dbTransaction {
+                val row = AnimeTable.selectAll().where { AnimeTable.id eq animeId }.single()
+                AnimeTable.update({ AnimeTable.id eq animeId }) {
+                    it.browseFields(details, row)
+                    it[AnimeTable.initialized] = true
+                    it[AnimeTable.lastFetchedAt] = System.currentTimeMillis() / 1000
+                }
+                details.thumbnail_url != null && details.thumbnail_url != row[AnimeTable.thumbnailUrl]
             }
-        }
+        if (thumbnailChanged) AnimeThumbnails.clear(animeId)
     }
 }

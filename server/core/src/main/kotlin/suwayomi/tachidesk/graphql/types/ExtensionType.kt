@@ -12,6 +12,7 @@ import com.expediagroup.graphql.generator.annotations.GraphQLDescription
 import com.expediagroup.graphql.server.extensions.getValueFromDataLoader
 import graphql.schema.DataFetchingEnvironment
 import madoyomi.core.extension.SignatureTrust
+import madoyomi.core.graphql.ExtensionCompatIssueType
 import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.ResultRow
 import suwayomi.tachidesk.graphql.server.primitives.Cursor
@@ -85,6 +86,12 @@ class ExtensionType(
     // Madoyomi: whether signatureHash is in TRUSTED_SIGNATURE (only an extension with a trusted hash is ever loaded)
     @GraphQLDescription("The signing certificate (signatureHash) is trusted. Only trusted extensions are loaded.")
     fun isTrusted(): Boolean = SignatureTrust.isTrusted(signatureHash)
+
+    // Madoyomi: what the extension needs from the host and doesn't get (ExtensionCompatLog, in memory since start)
+    @GraphQLDescription(
+        "API gaps of this extension since the server started: the install-time link check and what its code hit at runtime",
+    )
+    fun compatIssues(): List<ExtensionCompatIssueType> = ExtensionCompatIssueType.of(pkgName)
 
     fun source(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<SourceNodeList> =
         dataFetchingEnvironment.getValueFromDataLoader<String, SourceNodeList>("SourcesForExtensionDataLoader", pkgName)
