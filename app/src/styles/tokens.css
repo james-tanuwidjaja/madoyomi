@@ -1,0 +1,119 @@
+/*
+ * Design tokens (Phase 3 §9): a Windows 11 / Fluent-like look. Segoe UI Variable, neutral layered surfaces,
+ * 4/8 px radii, subtle borders, one accent, compact density.
+ *
+ * Dark and light both ship. The theme follows Windows (prefers-color-scheme) unless <html data-theme="dark|light">
+ * overrides it (the Settings screen sets that attribute). Components use these variables only, never raw colours.
+ * The light set appears twice (the media query and the override), because CSS can't share a block between them.
+ */
+
+:root {
+  /* type */
+  --font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-family-display:
+    "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-family-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --font-size-caption: 12px;
+  --font-size-body: 14px;
+  --font-size-body-large: 18px;
+  --font-size-subtitle: 20px;
+  --font-size-title: 28px;
+  --font-weight-regular: 400;
+  --font-weight-semibold: 600;
+  --line-height: 1.43;
+
+  /* shape and spacing (compact density) */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --control-height: 32px;
+
+  /* motion */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --easing-standard: cubic-bezier(0.33, 0, 0.67, 1);
+
+  /* colour: dark (default) */
+  color-scheme: dark;
+  --color-bg: #202020;
+  --color-surface: #2b2b2b;
+  --color-surface-raised: #323232;
+  --color-surface-sunken: #1c1c1c;
+  --color-surface-hover: rgb(255 255 255 / 6%);
+  --color-surface-pressed: rgb(255 255 255 / 4%);
+  --color-overlay: rgb(0 0 0 / 50%);
+  --color-border: rgb(255 255 255 / 8%);
+  --color-border-strong: rgb(255 255 255 / 16%);
+  --color-text: rgb(255 255 255 / 100%);
+  --color-text-secondary: rgb(255 255 255 / 79%);
+  --color-text-tertiary: rgb(255 255 255 / 54%);
+  --color-accent: #60cdff;
+  --color-accent-hover: #5ab8e6;
+  --color-on-accent: #000000;
+  --color-danger: #ff99a4;
+  --color-danger-surface: #442726;
+  --color-warning: #fce100;
+  --color-success: #6ccb5f;
+  --color-focus: #ffffff;
+  --shadow-flyout: 0 8px 16px rgb(0 0 0 / 26%);
+  --shadow-dialog: 0 32px 64px rgb(0 0 0 / 37%), 0 2px 21px rgb(0 0 0 / 37%);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --color-bg: #f3f3f3;
+    --color-surface: #fbfbfb;
+    --color-surface-raised: #ffffff;
+    --color-surface-sunken: #ebebeb;
+    --color-surface-hover: rgb(0 0 0 / 4%);
+    --color-surface-pressed: rgb(0 0 0 / 2%);
+    --color-overlay: rgb(0 0 0 / 30%);
+    --color-border: rgb(0 0 0 / 6%);
+    --color-border-strong: rgb(0 0 0 / 14%);
+    --color-text: rgb(0 0 0 / 90%);
+    --color-text-secondary: rgb(0 0 0 / 61%);
+    --color-text-tertiary: rgb(0 0 0 / 45%);
+    --color-accent: #005fb8;
+    --color-accent-hover: #196ebf;
+    --color-on-accent: #ffffff;
+    --color-danger: #c42b1c;
+    --color-danger-surface: #fde7e9;
+    --color-warning: #9d5d00;
+    --color-success: #0f7b0f;
+    --color-focus: #000000;
+    --shadow-flyout: 0 8px 16px rgb(0 0 0 / 14%);
+    --shadow-dialog: 0 32px 64px rgb(0 0 0 / 19%), 0 2px 21px rgb(0 0 0 / 15%);
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #f3f3f3;
+  --color-surface: #fbfbfb;
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #ebebeb;
+  --color-surface-hover: rgb(0 0 0 / 4%);
+  --color-surface-pressed: rgb(0 0 0 / 2%);
+  --color-overlay: rgb(0 0 0 / 30%);
+  --color-border: rgb(0 0 0 / 6%);
+  --color-border-strong: rgb(0 0 0 / 14%);
+  --color-text: rgb(0 0 0 / 90%);
+  --color-text-secondary: rgb(0 0 0 / 61%);
+  --color-text-tertiary: rgb(0 0 0 / 45%);
+  --color-accent: #005fb8;
+  --color-accent-hover: #196ebf;
+  --color-on-accent: #ffffff;
+  --color-danger: #c42b1c;
+  --color-danger-surface: #fde7e9;
+  --color-warning: #9d5d00;
+  --color-success: #0f7b0f;
+  --color-focus: #000000;
+  --shadow-flyout: 0 8px 16px rgb(0 0 0 / 14%);
+  --shadow-dialog: 0 32px 64px rgb(0 0 0 / 19%), 0 2px 21px rgb(0 0 0 / 15%);
+}

@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is next: the Vue UI on the real backend.
+> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stage 1 of 7 is done. The desktop app now starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`). It shows a "starting" splash until the backend is healthy, and restarts the backend on its own if it crashes (with an overlay that says so). The screens come next.
 >
 > The backend in `server/` is a Suwayomi-Server fork, rebranded as Madoyomi-Server. It runs as a local sidecar (loopback only, random port, API token). From its GraphQL API you can:
 > - add Aniyomi and Mihon repos (JSON and protobuf indexes) and list their extensions;
@@ -20,7 +20,7 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 >
 > Filters and preferences round-trip through the API: a filtered search works on all 18 with filters, and a preference change on 19 of 20. **9 of the 10 most-downloaded Keiyoushi manga extensions** read down to a page image ([docs/research/manga-compat.md](docs/research/manga-compat.md)); comix needs a real WebView, which is deferred with the Cloudflare solver. Uninstalling an extension frees its code: of the 20 anime extensions, 1 is still kept after uninstall, by a video connection of its own.
 >
-> The app doesn't use the real backend yet (Phase 3), and videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
+> The app has no screens yet beyond a placeholder home that shows the backend's version and address (Phase 3), and videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
 
 ---
 
@@ -62,7 +62,7 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 
 | Path | What | Status |
 |---|---|---|
-| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`) + Vue 3 UI (`src/`) | Scaffolded |
+| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the startup splash and error screens, design tokens, a placeholder home) | Phase 3 in progress |
 | [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phases 1 and 2 done |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
@@ -137,7 +137,7 @@ pnpm tauri dev
 
 `pnpm tauri dev` starts the Vite dev server and opens the desktop window. The first run compiles the Rust shell and takes a few minutes. Later runs are much faster.
 
-To work on the UI only, run `pnpm dev` and open <http://localhost:1420> in a browser. Tauri APIs are not available in this mode.
+To work on the UI only, run `pnpm dev` and open <http://localhost:1420> in a browser. Tauri APIs are not available in this mode, so there is no backend, and a banner says so. To use a backend anyway, start one with `.\tools\run-server.ps1` and put the base URL and token it prints into `app/.env.local` (gitignored) as `VITE_MADOYOMI_URL=http://127.0.0.1:<port>` and `VITE_MADOYOMI_TOKEN=<token>`, then restart `pnpm dev`.
 
 ### Backend (`server/`)
 
@@ -178,7 +178,14 @@ End-to-end smoke test against the real repos (needs internet access):
 The script starts the jar the way the app does, on a throwaway data dir under `%TEMP%`, and drives it over GraphQL only. It adds yuzono (anime) and Keiyoushi (manga), lists both kinds' extensions, and installs and checks AnimeGG and MangaPill while a WebSocket subscription follows the installs. It then reads a MangaPill chapter down to a page image, and runs AnimeGG from popular through details and episodes to the videos of the newest episode, a resolved video and a thumbnail. It prints PASS/FAIL per step and exits non-zero if any step fails. `Get-Help .\tools\smoke-api.ps1 -Detailed` lists the options (another jar, data dir or repo URLs).
 
 > [!NOTE]
-> `pnpm tauri dev` also starts a JVM sidecar. For now it is the Phase 0 dummy backend (`spikes/sidecar`), not the real server. The app switches to the real server, with the token, in Phase 3. Build the dummy once with `cd spikes; .\gradlew :sidecar:shadowJar` (needs JDK 21 in `tools/bin/jdk-21`, or set `MADOYOMI_JAVA`). Without it the app still opens, and the home screen shows "Backend: error". See [spikes/README.md](spikes/README.md). To start the real server instead, set `$env:MADOYOMI_SIDECAR_JAR` to `server\api\build\Madoyomi-Server-v0.1.0.jar` before `pnpm tauri dev`. The shell starts it and the server answers `/health`, but the shell still waits only 20 s for the port line. The real server can take longer than that on a busy machine (about 7 s when idle, about 60 s under heavy load), and the home screen then shows "did not report a port within 20s". The rest of the API stays locked, because the shell doesn't pass a token or `--data-dir` yet (the server uses `%APPDATA%\Madoyomi`). Phase 3 fixes all three.
+> `pnpm tauri dev` also starts the real backend, the newest `server\api\build\Madoyomi-Server-*.jar`. Build it once first: `.\gradlew.bat :api:shadowJar` in `server/` (see [Backend](#backend-server)). The shell runs it with `tools/bin/jdk-21`, a fresh API token per app session and `--data-dir %APPDATA%\Madoyomi`, and keeps its stdin open; the backend exits when the app does.
+> - **Startup.** The window shows "Starting the backend…" until `/health` answers, about 10–12 s (longer on a busy machine; after 30 s it says so). The shell keeps waiting for up to 5 minutes while the JVM is alive.
+> - **Crashes.** If the backend exits or stops answering, the app shows an overlay and restarts it after 1, 2, 4 and 8 s. After 5 failed starts in a row it stops and offers Retry and Open logs. A missing jar shows that error at once.
+> - **Logs.** `sidecar.log` (the backend's output plus the shell's start, port, health and exit lines) and the server's `madoyomi.log` are in `<data dir>\logs`.
+> - **Environment overrides,** set before `pnpm tauri dev`: `MADOYOMI_SIDECAR_JAR` (another jar), `MADOYOMI_JAVA` (another `java.exe`), `MADOYOMI_DATA_DIR` (another data dir, e.g. a fresh one for testing).
+> - **One server per data dir.** Don't run `pnpm tauri dev` and a server of your own on the same data dir at once (the database is locked). `tools/run-server.ps1` uses `tools/dev-data/`, so the two don't clash.
+>
+> The Phase 0 dummy sidecar in `spikes/sidecar` is no longer used by the app.
 
 ## Common commands
 
@@ -186,14 +193,15 @@ Run these from `app/`:
 
 | Command | What it does |
 |---|---|
-| `pnpm tauri dev` | Run the desktop app (Vite + Rust shell, hot reload) |
-| `pnpm dev` | UI only, in a browser at http://localhost:1420 |
+| `pnpm tauri dev` | Run the desktop app (Vite + Rust shell, hot reload). It starts the backend jar from `server/api/build` (see the note above) |
+| `pnpm dev` | UI only, in a browser at http://localhost:1420 (no backend, unless `VITE_MADOYOMI_URL` and `VITE_MADOYOMI_TOKEN` are set in `.env.local`) |
 | `pnpm test` / `pnpm test:watch` | Run Vitest once / in watch mode |
 | `pnpm lint` / `pnpm lint:fix` | ESLint check / auto-fix |
 | `pnpm format` / `pnpm format:check` | Prettier write / check |
 | `pnpm typecheck` | Type-check with `vue-tsc` |
 | `pnpm build` | Type-check and build the UI into `dist/` |
 | `pnpm tauri build` | Build NSIS + MSI installers into `src-tauri/target/release/bundle/` |
+| `cargo test` / `cargo clippy --all-targets` (in `app/src-tauri/`) | Rust shell unit tests (port line, backoff, `/health`, log timestamps) / Rust lints |
 
 More detail is in [app/README.md](app/README.md).
 
@@ -212,7 +220,6 @@ Backend commands. Run the Gradle ones from `server/`, with `JAVA_HOME` set to `t
 | `.\tools\compat-test\scan.ps1` (from the repo root) | Download the top-20 anime and manga-sample APKs and run the static compatibility scan into `docs/research/compat-scan.md` |
 | `.\tools\compat-test\run-compat.ps1 -NoBuild` (from the repo root) | Compatibility harness: run the top 20 anime extensions on the real server jar (about 8 min, needs internet access), with process health, into `docs/research/anime-compat.md`. Per extension it also round-trips a preference and runs a filtered search, and after uninstalling all of them it reports what still keeps their code in memory (a heap dump, read by `lib/HprofLoaderRoots.java`). `-Only <names>` reruns a few into `tools/compat-test/out/`; `-ReportOnly` redraws the report after a `triage.txt` edit |
 | `.\tools\compat-test\run-compat.ps1 -NoBuild -Kind Manga` (from the repo root) | The same harness over the 10-extension Keiyoushi manga sample (popular, details and chapters, pages, a page image) into `docs/research/manga-compat.md`: the "no regression in manga" check (about 2 min) |
-un-compat.ps1 -NoBuild -Kind Manga` (from the repo root) | The same harness over the 10-extension Keiyoushi manga sample (popular, details and chapters, pages, a page image) into `docs/research/manga-compat.md`: the "no regression in manga" check (about 2 min) |
 
 ## Roadmap
 
@@ -223,7 +230,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 | 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ✅ Done (18/20 top anime extensions end to end, filters and preferences through the API, 9/10 of the manga sample; Cloudflare/WebView shim deferred) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
-| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | ⚪ Not started (next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
+| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stage 1 of 7 done: the app starts the real backend with a token and data dir, shows a startup splash, and restarts it after a crash; screens next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
 | 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
 | 5 | **Manga reader:** image proxy and cache, paged, webtoon and double-page modes | ⚪ Not started | [phase-5-manga-reader.md](docs/phases/phase-5-manga-reader.md) |
 | 6 | **Library features:** categories, updates, history, downloads, backup/restore | ⚪ Not started | [phase-6-library-features.md](docs/phases/phase-6-library-features.md) |
@@ -261,6 +268,13 @@ Decided in Phase 2 (see [phase-2-anime-sources.md §9](docs/phases/phase-2-anime
   - Threads the extension left running are stopped: its own thread pools are shut down, others are interrupted, and a local server blocked on its socket has that socket closed. Nothing is forced, and a thread that keeps running is logged.
   - Shared objects no longer hold extension objects: each extension gets its own JSON instance, and preference listeners are held weakly, as on Android.
 - **No regression in manga** is checked with the harness's manga mode over the 10 most-downloaded Keiyoushi extensions. A source that needs a real WebView (comix) counts as deferred, not as a regression.
+
+Decided so far in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3-frontend-mvp.md#9-decision-record)):
+
+- **UI components: headless primitives with our own styles.** [Reka UI](https://reka-ui.com/) provides accessible dialogs, selects, tabs, checkboxes and switches. They are styled only through Madoyomi's design tokens, and long lists are virtualized with TanStack Virtual.
+- **Dark and light themes from the start.** The app follows the Windows setting, and Settings will offer System, Dark or Light.
+- **A Windows 11 / Fluent-like look:** Segoe UI Variable, neutral layered surfaces, small radii, subtle borders, one accent colour, compact density.
+- **The app runs the backend itself.** It gets a new API token every session, which is never logged. Data lives in `%APPDATA%\Madoyomi`, the same place a server started by hand uses. The shell waits patiently while the JVM starts. After a crash it restarts the backend with a backoff (1, 2, 4, 8 s), and after 5 failed starts in a row it stops and offers Retry. Logs are in `%APPDATA%\Madoyomi\logs`.
 
 Still open:
 

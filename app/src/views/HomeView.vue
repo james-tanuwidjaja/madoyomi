@@ -1,37 +1,30 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { getVersion } from "@tauri-apps/api/app";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
+import { useBackendStore } from "../stores/backend";
 
-type BackendStatus =
-  { state: "checking" } | { state: "ok"; url: string } | { state: "error"; message: string };
-
+// Placeholder home until the app shell and its screens arrive (Phase 3 Stage 2).
 const version = ref<string | null>(null);
-// Null outside Tauri (plain `pnpm dev` in a browser): there is no sidecar to talk to.
-const backend = ref<BackendStatus | null>(null);
+const backend = useBackendStore();
 
-async function checkBackend() {
-  backend.value = { state: "checking" };
-  try {
-    const url = await invoke<string>("get_backend_url");
-    const res = await fetch(`${url}/health`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = (await res.json()) as { status?: string };
-    if (body.status !== "ok") throw new Error(`unexpected status ${String(body.status)}`);
-    backend.value = { state: "ok", url };
-  } catch (e) {
-    backend.value = { state: "error", message: e instanceof Error ? e.message : String(e) };
-  }
-}
+const server = computed(() =>
+  backend.ready && backend.status
+    ? {
+        version: backend.status.serverVersion ?? "?",
+        url: backend.status.baseUrl,
+      }
+    : null,
+);
 
 onMounted(async () => {
+  // Null outside Tauri (plain `pnpm dev` in a browser).
   if (!isTauri()) return;
   try {
     version.value = await getVersion();
   } catch {
     version.value = null;
   }
-  await checkBackend();
 });
 </script>
 
@@ -40,10 +33,8 @@ onMounted(async () => {
     <h1>Madoyomi</h1>
     <p class="tagline">窓 · 読み — anime &amp; manga for Windows</p>
     <p v-if="version" class="version">v{{ version }}</p>
-    <p v-if="backend" class="backend" :data-state="backend.state">
-      <template v-if="backend.state === 'checking'">Backend: starting…</template>
-      <template v-else-if="backend.state === 'ok'">Backend: ok ({{ backend.url }})</template>
-      <template v-else>Backend: error ({{ backend.message }})</template>
+    <p v-if="server" class="backend" :data-state="backend.status?.state">
+      Madoyomi-Server {{ server.version }} · {{ server.url }}
     </p>
   </main>
 </template>
@@ -56,18 +47,21 @@ onMounted(async () => {
   text-align: center;
 }
 
+h1 {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-semibold);
+}
+
 .tagline {
-  opacity: 0.7;
+  color: var(--color-text-secondary);
 }
 
 .version,
 .backend {
-  font-size: 0.85rem;
-  opacity: 0.5;
-}
-
-.backend[data-state="error"] {
-  color: #d33;
-  opacity: 0.9;
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-caption);
 }
 </style>
