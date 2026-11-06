@@ -14,8 +14,47 @@ pnpm tauri build    # NSIS/MSI installer
 cd src-tauri; cargo test; cargo clippy --all-targets   # Rust shell tests and lints
 ```
 
-- `src/`: Vue app (router, Pinia stores, views, components; design tokens in `styles/tokens.css`)
+- `src/`: Vue app
+  - `api/`: the backend API.
+    - `client.ts`: GraphQL with the token, `ApiError`, and `assetUrl` for binary routes.
+    - `types.ts`: hand-written types.
+    - `operations/`: the GraphQL documents and typed calls.
+    - `ws.ts`: our `graphql-transport-ws` client.
+    - `realtime.ts`: the vue-query defaults and the app-wide event subscriptions.
+  - `composables/`: vue-query hooks (`useExtensionStores`, `useExtensions`, `useSources`, `useSourceFilters`, `useSourceBrowse` (infinite), `useAnime`/`useEpisodes`, `useManga`/`useChapters`) and the query keys.
+  - `stores/`: Pinia: `backend` (the shell), `events` (live events, socket state), `mediaKind` (the anime/manga switch, persisted).
+  - `router/`: the routes.
+  - `components/`: the shell (`AppShell`, `ShellFooter`), `BackendGate`, and the page building blocks.
+  - `views/`: one per route.
+  - `styles/tokens.css`: the design tokens.
 - `src-tauri/`: Rust shell (window, backend sidecar lifecycle in `src/sidecar.rs`, later the updater)
+
+## Routes
+
+| Route                               | View                                   | Status                                                       |
+| ----------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
+| `/` → `/library`                    | `LibraryView`                          | placeholder (Stage 5)                                        |
+| `/browse`                           | `BrowseView`                           | lists the sources of the current kind; full screen Stage 4   |
+| `/browse/:sourceId`                 | `SourceView`                           | placeholder (Stage 4)                                        |
+| `/anime/:id`, `/manga/:id`          | `AnimeDetailsView`, `MangaDetailsView` | placeholder (Stage 5); they set the anime/manga switch       |
+| `/extensions`                       | `ExtensionsView`                       | placeholder (Stage 3), links to Repos                        |
+| `/repos`                            | `ReposView`                            | lists the repos, "Refresh all", live events; full in Stage 3 |
+| `/downloads`                        | `DownloadsView`                        | placeholder (Phase 6)                                        |
+| `/settings`, `/settings/source/:id` | `SettingsView`, `SourceSettingsView`   | placeholder (Stage 6)                                        |
+| anything else                       | `NotFoundView`                         |                                                              |
+
+The routes of one kind (`/browse/:sourceId`, `/anime/:id`, `/manga/:id`, `/settings/source/:id`) go back to their section's list when the switch changes kind.
+
+## Live check of the API operations
+
+`src/api/__tests__/operations.live.spec.ts` runs only when `MADOYOMI_LIVE_URL` and `MADOYOMI_LIVE_TOKEN` point at a running server, e.g. one from `../tools/run-server.ps1`:
+
+```powershell
+$env:MADOYOMI_LIVE_URL = 'http://127.0.0.1:<port>'; $env:MADOYOMI_LIVE_TOKEN = '<its token>'
+pnpm vitest run src/api/__tests__/operations.live.spec.ts
+```
+
+It validates every document in `src/api/operations/` against the server's schema, checks that a wrong token gets 401, and receives `extensionStoreRefreshed` through `ws.ts` after a repo refresh (that needs at least one repo). Run it after changing an operation or a type.
 
 ## Backend sidecar
 

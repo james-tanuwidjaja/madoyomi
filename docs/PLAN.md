@@ -147,12 +147,12 @@ Details: [phase-3-frontend-mvp.md](phases/phase-3-frontend-mvp.md)
 
 Milestones:
 - [x] Tauri sidecar lifecycle (spawn, handshake, restart) (Stage 1: the real jar with a token and `--data-dir`, `/health` checks, restart with backoff, splash and failure screens; phase-3 §10)
-- [ ] Typed API client + WebSocket
+- [x] Typed API client + WebSocket (Stage 2: `api/client.ts`, hand-written `types.ts` validated against the live schema, our own `graphql-transport-ws` client that follows backend restarts, vue-query hooks with infinite browse; phase-3 §9, §10)
 - [ ] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens
 - [ ] Generic filter and preference renderers
 - [ ] lint / typecheck / tests pass
 
-**Phase 3 in progress (Stage 1 of 7 done, 2026-11-06).** The stage plan is in phase-3 §8. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
+**Phase 3 in progress (Stage 2 of 7 done, 2026-11-07).** The stage plan is in phase-3 §8. The app now has its shell (sidebar, anime/manga switch, every route) and talks to the backend: typed GraphQL, live events over WebSocket, and both kept working across a backend restart. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
 
 ### Phase 4 — Playback
 Details: [phase-4-playback.md](phases/phase-4-playback.md)
@@ -274,7 +274,7 @@ WS     /ws                                downloads, updates, playback progress 
 - [x] REST, or extend Suwayomi's GraphQL? **Extend GraphQL**, keep REST for binary endpoints (phase-0 §9).
 - [ ] mpv in a separate window (MVP) vs. embedded (later): confirm UX priority
 - [x] One JVM process for both extension types, or isolated processes? **One JVM** (shared network/DI/stub layer). Crash isolation is deferred: an in-process extension can't be contained without a separate JVM anyway, so the trust gate is the containment. Revisit if Phase 2's compat harness shows hard crashes (phase-1 §8, §9). **Verdict (Phase 2 Stage 6): one JVM stays.** Two harness runs of the top 20 in one JVM had no abort, bounded heap and threads. The class loaders kept after uninstall went from 15 to 1 (a connection reanime keeps open; phase-1 §8, phase-2 §10).
-- [x] UI components and theme? **Headless primitives (Reka UI) with our own styles; dark and light themes that follow Windows; Fluent-like tokens** (phase-3 §9, Stage 1).
+- [x] UI components and theme? **Headless primitives (Reka UI) with our own styles; dark and light themes that follow Windows; Fluent-like tokens** (phase-3 §9, Stage 1). The window keeps the **native Windows title bar** (Snap Layouts, caption buttons; phase-3 §9, Stage 2).
 - [x] Name: Madoyomi · License: MPL-2.0
 - [ ] Windows-only, or keep macOS/Linux possible (the architecture already allows it)?
 
@@ -282,7 +282,7 @@ WS     /ws                                downloads, updates, playback progress 
 
 ## 8. First tasks (start here)
 
-These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06). [Phase 3](phases/phase-3-frontend-mvp.md) is in progress: Stage 1 (the shell and sidecar lifecycle) is done, and Stage 2 (the API layer and app shell) is next.
+These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06). [Phase 3](phases/phase-3-frontend-mvp.md) is in progress: Stages 1 (the shell and sidecar lifecycle) and 2 (the API layer and app shell) are done, and Stage 3 (Repos and Extensions, with the trust prompt) is next.
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.
