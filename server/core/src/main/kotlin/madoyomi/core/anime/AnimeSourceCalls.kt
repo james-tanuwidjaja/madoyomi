@@ -40,9 +40,29 @@ object AnimeSourceCalls {
 
     /** Source code runs here: up to [MAX_THREADS] daemon threads with [STACK_SIZE] stacks, idle ones end after 60 s. */
     val dispatcher: CoroutineDispatcher =
-        ThreadPoolExecutor(MAX_THREADS, MAX_THREADS, 60, TimeUnit.SECONDS, LinkedBlockingQueue()) { runnable ->
-            Thread(null, runnable, "anime-source-${threadCount.incrementAndGet()}", STACK_SIZE).apply { isDaemon = true }
-        }.apply { allowCoreThreadTimeOut(true) }.asCoroutineDispatcher()
+        ThreadPoolExecutor(MAX_THREADS, MAX_THREADS, 60, TimeUnit.SECONDS, LinkedBlockingQueue(), ::newThread)
+            .apply { allowCoreThreadTimeOut(true) }
+            .asCoroutineDispatcher()
+
+    /**
+     * A pool thread. The pool grows while a source call runs (an `async` inside the extension), and a new thread
+     * inherits the access-control context of the stack that creates it: the protection domain of every extension
+     * frame on it, and so that extension's class loader, for as long as the thread lives. The threads it starts in
+     * turn inherit that too (a pool thread that once ran kickassanime started reanime's local server, which then kept
+     * kickassanime's loader after uninstall; Phase 2 §10, Stage 6). Created privileged, a thread inherits only the
+     * host's own frames.
+     */
+    @Suppress("DEPRECATION")
+    private fun newThread(runnable: Runnable): Thread =
+        java.security.AccessController.doPrivileged(
+            java.security.PrivilegedAction {
+                Thread(null, runnable, "anime-source-${threadCount.incrementAndGet()}", STACK_SIZE).apply {
+                    isDaemon = true
+                    // not whatever the creating thread had (an extension may set its own)
+                    contextClassLoader = AnimeSourceCalls::class.java.classLoader
+                }
+            },
+        )
 
     /**
      * Runs [block], a call of [operation] (`popular`, `search`, `videos`, …) on [source], on [dispatcher]. The

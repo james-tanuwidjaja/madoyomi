@@ -76,7 +76,12 @@ class JavaSharedPreferences(
         }
     private val preferences = PropertiesSettings(properties)
 
-    private val listeners = mutableMapOf<SharedPreferences.OnSharedPreferenceChangeListener, (String) -> Unit>()
+    // Madoyomi: weak keys, as Android's SharedPreferencesImpl (a WeakHashMap; "the preference manager does not
+    // currently store a strong reference to the listener"). A strong map kept every listener an extension registered,
+    // and with it the extension's class loader after uninstall, since these objects live as long as the process
+    // (upstream: a strong map of listener -> lambda, the lambda capturing the listener)
+    private val listeners =
+        java.util.Collections.synchronizedMap(java.util.WeakHashMap<SharedPreferences.OnSharedPreferenceChangeListener, Unit>())
 
     // TODO: 2021-05-29 Need to find a way to get this working with all pref types
     override fun getAll(): MutableMap<String, *> = preferences.keys.associateWith { preferences.getStringOrNull(it) }.toMutableMap()
@@ -129,8 +134,9 @@ class JavaSharedPreferences(
     override fun contains(key: String): Boolean = key in preferences.keys
 
     private fun notify(key: String) {
-        listeners.forEach { (_, listener) ->
-            listener(key)
+        // Madoyomi: the listeners themselves (upstream: the lambdas wrapping them), copied before the calls
+        synchronized(listeners) { listeners.keys.toList() }.forEach { listener ->
+            listener.onSharedPreferenceChanged(this, key)
         }
     }
 
@@ -381,10 +387,7 @@ class JavaSharedPreferences(
     }
 
     override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
-        val javaListener: (String) -> Unit = {
-            listener.onSharedPreferenceChanged(this, it)
-        }
-        listeners[listener] = javaListener
+        listeners[listener] = Unit // Madoyomi: weakly held (see listeners)
     }
 
     override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {

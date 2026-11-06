@@ -12,10 +12,19 @@ import java.util.Enumeration
  * - the child class loader
  * - the parent class loader.
  */
+// Madoyomi: every loader has a unique name (upstream: unnamed), which stack frames carry
+// (StackTraceElement.getClassLoaderName). R8's short class names (a, b2, v7) repeat across extensions, so a frame's
+// class name alone can't tell whose code a thread runs (madoyomi.core.extension.ExtensionThreads)
 class ChildFirstURLClassLoader(
     urls: Array<URL>,
     parent: ClassLoader? = null,
-) : URLClassLoader(urls, parent) {
+) : URLClassLoader("madoyomi-extension-${counter.incrementAndGet()}", urls, parent) {
+    private companion object {
+        val counter =
+            java.util.concurrent.atomic
+                .AtomicLong()
+    }
+
     private val systemClassLoader: ClassLoader? = getSystemClassLoader()
 
     override fun loadClass(

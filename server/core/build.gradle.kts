@@ -177,6 +177,9 @@ tasks {
             showStandardStreams = true
             events("passed", "skipped", "failed")
         }
+        // Madoyomi: as the server jar's manifest (Add-Opens), so unload can read the Runnable of a thread an extension
+        // left running (madoyomi.core.extension.ExtensionThreads)
+        jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED")
         // Set before any test runs, a test may load the config before ApplicationTest sets it
         // Madoyomi: config property prefix madoyomi.config (upstream: suwayomi.tachidesk.config)
         systemProperty(

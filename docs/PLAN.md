@@ -129,11 +129,13 @@ Details: [phase-2-anime-sources.md](phases/phase-2-anime-sources.md)
 - Exit: the top ~20 yuzono extensions browse, search, list episodes and return videos.
 
 Milestones:
-- [ ] `animesource` API + models implemented
+- [x] `animesource` API + models implemented (Stages 1, 3 and 6: every API-surface item of the phase doc, `ParsedAnimeHttpSource` by a test, since none of the top 20 uses it)
 - [x] Android stubs + missing-class logging (Stage 2)
 - [x] Filters and preferences exposed as JSON (Stages 3–4)
 - [x] Anime API endpoints (browse, details, episodes, videos) (Stage 4)
 - [x] Compat harness: ≥18/20 top yuzono extensions pass (18/20 on 2026-11-06, [anime-compat.md](research/anime-compat.md))
+
+**Phase 2 done (2026-11-06).** Every exit criterion passes: 18/20 extensions, filters and preferences through the API, no manga regression ([manga-compat.md](research/manga-compat.md): 9/10, comix needs a WebView). The Cloudflare/WebView shim is deferred (phase-2 §5).
 
 ### Phase 3 — Frontend MVP
 Details: [phase-3-frontend-mvp.md](phases/phase-3-frontend-mvp.md)
@@ -255,10 +257,10 @@ WS     /ws                                downloads, updates, playback progress 
 |---|---|---|
 | Android API surface used by extensions isn't stubbed | Extensions crash | Log missing classes/methods; build a compatibility test suite over the repo |
 | `extensions-lib` version changes (anime lib differs from manga lib) | Breakage across all extensions | Pin versions; support multiple lib versions side by side if needed |
-| Cloudflare / WebView-dependent extensions | Some sources unusable | Headless browser shim; FlareSolverr as fallback. Measured in Phase 2: 1 of the top 20 is blocked (AnimePahe), so the solver is deferred |
+| Cloudflare / WebView-dependent extensions | Some sources unusable | Headless browser shim; FlareSolverr as fallback. Measured in Phase 2: 1 of the top 20 is blocked (AnimePahe), so the solver is deferred. A real WebView is a separate need: 1 of the 10-extension manga sample (comix) renders its site in one, and the sidecar runs with KCEF off |
 | Video URLs require headers/cookies | 403s in the player | Always pass `Video.headers` to mpv; proxy fallback |
 | Extensions are arbitrary JVM code | Security | Trust prompt by signing cert; only user-added repos; consider a separate JVM process per extension type |
-| R8-optimised APKs that dex2jar mistranslates (e.g. Keiyoushi's removed constructors and merged classes) | Extensions fail to load (`VerifyError`) | A bytecode repair pass after dex2jar (`Dex2jarRepair`: constructors restored, frames recomputed with the APK's class hierarchy); the Phase 2 compat harness should include manga extensions to catch new patterns |
+| R8-optimised APKs that dex2jar mistranslates (e.g. Keiyoushi's removed constructors and merged classes) | Extensions fail to load (`VerifyError`) | A bytecode repair pass after dex2jar (`Dex2jarRepair`: constructors restored, frames recomputed with the APK's class hierarchy); the Phase 2 compat scan covers a 10-extension manga sample. It found two more patterns there (a super call that skips a removed constructor; a `new T` dex2jar leaves unfolded), fixed in Stage 6: all 30 APKs verify. Rerun `tools/compat-test/scan.ps1` when the lists are refreshed |
 | Protobuf index schema undocumented | Can't list manga extensions | Reverse-engineer from Mihon's client source; JSON fallback if one exists |
 | License mixing | Suwayomi is MPL-2.0, Aniyomi code is Apache-2.0 | Madoyomi is MPL-2.0; keep upstream headers; add a NOTICE/THIRD_PARTY file |
 
@@ -269,7 +271,7 @@ WS     /ws                                downloads, updates, playback progress 
 - [x] Fork Suwayomi-Server, or write a fresh backend reusing its extension-host code? **Fork** (phase-0 §9; confirmed by the S1 run and the S3 harness running on Suwayomi's runtime unchanged).
 - [x] REST, or extend Suwayomi's GraphQL? **Extend GraphQL**, keep REST for binary endpoints (phase-0 §9).
 - [ ] mpv in a separate window (MVP) vs. embedded (later): confirm UX priority
-- [x] One JVM process for both extension types, or isolated processes? **One JVM** (shared network/DI/stub layer). Crash isolation is deferred: an in-process extension can't be contained without a separate JVM anyway, so the trust gate is the containment. Revisit if Phase 2's compat harness shows hard crashes (phase-1 §8, §9). The Stage 5 harness ran the top 20 in one JVM with no abort and bounded threads and memory; the leak it found is class loaders kept after uninstall (phase-2 §10).
+- [x] One JVM process for both extension types, or isolated processes? **One JVM** (shared network/DI/stub layer). Crash isolation is deferred: an in-process extension can't be contained without a separate JVM anyway, so the trust gate is the containment. Revisit if Phase 2's compat harness shows hard crashes (phase-1 §8, §9). **Verdict (Phase 2 Stage 6): one JVM stays.** Two harness runs of the top 20 in one JVM had no abort, bounded heap and threads. The class loaders kept after uninstall went from 15 to 1 (a connection reanime keeps open; phase-1 §8, phase-2 §10).
 - [x] Name: Madoyomi · License: MPL-2.0
 - [ ] Windows-only, or keep macOS/Linux possible (the architecture already allows it)?
 
@@ -277,7 +279,7 @@ WS     /ws                                downloads, updates, playback progress 
 
 ## 8. First tasks (start here)
 
-These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) is done too; next up is [Phase 2](phases/phase-2-anime-sources.md).
+These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06); next up is [Phase 3](phases/phase-3-frontend-mvp.md).
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

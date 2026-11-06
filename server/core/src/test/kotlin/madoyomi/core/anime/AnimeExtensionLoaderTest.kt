@@ -19,7 +19,10 @@ import java.lang.reflect.InvocationTargetException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /** [AnimeExtensionLoader.instantiate]: what an extension's main class may be, and how its failures are reported. */
 class AnimeExtensionLoaderTest {
@@ -113,5 +116,26 @@ class AnimeExtensionLoaderTest {
     fun `the trust gate's refusal passes through unchanged`() {
         val untrusted = MadoyomiException(ErrorCode.UNTRUSTED, "no")
         assertSame(untrusted, failure { throw untrusted })
+    }
+
+    @Test
+    fun `a lazy load that an unload overtook registers nothing`() {
+        val extensionId = 990_001
+        val source = Fake(990_001_001L)
+        try {
+            // what a lazy load (AnimeGetSource.getSource -> loadInstalled) reads before it instantiates the code
+            val before = AnimeGetSource.unloadCount(extensionId)
+            // an uninstall or update unloads the extension meanwhile
+            AnimeGetSource.unregisterExtension(extensionId)
+            assertFalse(AnimeGetSource.register(extensionId, listOf(source), ifUnloadCount = before))
+            assertNull(AnimeGetSource.cached(source.id), "the unloaded code doesn't come back")
+
+            // a load that no unload overtook registers, as do the eager ones (install, trust), which pass no count
+            assertTrue(AnimeGetSource.register(extensionId, listOf(source), ifUnloadCount = AnimeGetSource.unloadCount(extensionId)))
+            assertSame(source, AnimeGetSource.cached(source.id))
+            assertTrue(AnimeGetSource.register(extensionId, listOf(source)))
+        } finally {
+            AnimeGetSource.unregisterExtension(extensionId)
+        }
     }
 }

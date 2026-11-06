@@ -58,14 +58,30 @@ object AnimeGetSource {
             null
         }
 
-    /** Caches [sources], all from the extension [extensionId], replacing what that extension had registered. */
+    /** How often each extension was unloaded ([unregisterExtension]), for a load that must not outlive an unload. */
+    private val unloads = ConcurrentHashMap<Int, Long>()
+
+    /** The number of times the extension [extensionId] was unloaded so far (see [register]). */
+    fun unloadCount(extensionId: Int): Long = unloads[extensionId] ?: 0
+
+    /**
+     * Caches [sources], all from the extension [extensionId], replacing what that extension had registered. With
+     * [ifUnloadCount] (a lazy load: [unloadCount] before it started), nothing is cached and false is returned when the
+     * extension was unloaded in the meantime (an uninstall or update while the load ran), so the unloaded code doesn't
+     * come back.
+     */
+    @Synchronized
     fun register(
         extensionId: Int,
         sources: List<AnimeSource>,
-    ) {
-        unregisterExtension(extensionId)
+        ifUnloadCount: Long? = null,
+    ): Boolean {
+        if (ifUnloadCount != null && unloadCount(extensionId) != ifUnloadCount) return false
+        byExtension.remove(extensionId)?.forEach(sourceCache::remove)
         sources.forEach { sourceCache[it.id] = it }
         byExtension[extensionId] = sources.map { it.id }.toSet()
+        AnimeVideos.dropStale()
+        return true
     }
 
     /** For tests: caches a single [source] that belongs to no extension. */
@@ -82,7 +98,9 @@ object AnimeGetSource {
     }
 
     /** Drops every source the extension [extensionId] registered. */
+    @Synchronized
     fun unregisterExtension(extensionId: Int) {
+        unloads.merge(extensionId, 1L, Long::plus)
         byExtension.remove(extensionId)?.forEach(sourceCache::remove)
         AnimeVideos.dropStale()
     }

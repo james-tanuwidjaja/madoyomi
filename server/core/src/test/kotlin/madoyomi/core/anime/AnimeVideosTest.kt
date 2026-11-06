@@ -17,6 +17,7 @@ import madoyomi.core.anime.model.table.AnimeTable
 import madoyomi.core.anime.model.table.EpisodeTable
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
+import madoyomi.core.extension.GcAssert
 import okhttp3.Headers.Companion.headersOf
 import org.jetbrains.exposed.v1.jdbc.insertAndGetId
 import org.junit.jupiter.api.AfterAll
@@ -268,15 +269,40 @@ class AnimeVideosTest {
             // the uninstall path (ExtensionUnloader -> AnimeGetSource) drops the source: its fetch goes with it
             AnimeGetSource.unregisterSource(sourceId)
             assertFalse(episodeId in AnimeVideos.cachedEpisodes())
-            repeat(50) {
-                if (ref.get() == null) return@repeat
-                System.gc()
-                Thread.sleep(20)
-            }
-            assertNull(ref.get(), "nothing else keeps the dropped source (and so its class loader)")
+            GcAssert.assertCollected(ref, "nothing else keeps the dropped source (and so its class loader)")
         } finally {
             AnimeGetSource.unregisterSource(sourceId)
             FakeAnimeSource.clearRows(sourceId)
+        }
+    }
+
+    /** Drops itself from [AnimeGetSource] in the middle of the call, as an uninstall that runs meanwhile would. */
+    private class UnloadedMidCallSource : AnimeHttpSource() {
+        override val name = "Fake unloaded mid-call"
+        override val lang = "en"
+        override val baseUrl = "https://unloaded.example.org"
+        override val supportsLatest = false
+
+        @Deprecated("Use the hoster version instead")
+        override suspend fun getVideoList(episode: SEpisode): List<Video> {
+            AnimeGetSource.unregisterSource(id)
+            return listOf(Video(videoUrl = "https://u/1.mp4", videoTitle = "1"))
+        }
+    }
+
+    @Test
+    fun `a fetch whose source was unloaded while it ran is not kept`() {
+        val source = UnloadedMidCallSource()
+        FakeAnimeSource.clearRows(source.id)
+        AnimeGetSource.registerSource(source)
+        try {
+            val episodeId = episodeOf(source)
+            val hosters = runBlocking { AnimeVideos.fetchEpisodeVideos(episodeId) }
+            assertEquals(1, hosters.single().videos.size, "the caller still gets its videos")
+            assertFalse(episodeId in AnimeVideos.cachedEpisodes(), "but the unloaded source isn't kept for resolveVideo")
+        } finally {
+            AnimeGetSource.unregisterSource(source.id)
+            FakeAnimeSource.clearRows(source.id)
         }
     }
 }

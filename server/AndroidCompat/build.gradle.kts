@@ -78,4 +78,12 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // Madoyomi: a data root under build/ (as core's tests), so the SharedPreferences tests don't write to the user's data dir
+    systemProperty(
+        "madoyomi.config.server.rootDir",
+        layout.buildDirectory
+            .dir("tmp/TestDesk")
+            .get()
+            .asFile.absolutePath,
+    )
 }
