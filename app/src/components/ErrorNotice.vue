@@ -1,25 +1,26 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { isApiError } from "../api/client";
+import { describeError } from "../api/errorText";
 
-/** A failed request: what the backend said (its error code and message), and a retry. */
-const props = defineProps<{ error: unknown; title?: string }>();
-const emit = defineEmits<{ retry: [] }>();
+/**
+ * A failed request: what went wrong in plain words, the backend's error code and message, and a retry. The "Try
+ * again" button shows only when the parent listens for `retry` (a form's error has nothing to retry by itself).
+ */
+const props = defineProps<{ error: unknown; title?: string; onRetry?: () => void }>();
 
-const info = computed(() => {
-  const e = props.error;
-  if (isApiError(e)) return { code: e.code, message: e.message };
-  return { code: null, message: e instanceof Error ? e.message : String(e) };
-});
+const info = computed(() => describeError(props.error));
 </script>
 
 <template>
   <div class="error-notice" role="alert">
     <p class="title">{{ title ?? "Couldn't load this" }}</p>
+    <p v-if="info.hint" class="hint">{{ info.hint }}</p>
     <p class="message">
       <code v-if="info.code" class="code">{{ info.code }}</code> {{ info.message }}
     </p>
-    <button type="button" class="btn" @click="emit('retry')">Try again</button>
+    <button v-if="props.onRetry" type="button" class="btn" @click="props.onRetry()">
+      Try again
+    </button>
   </div>
 </template>
 
@@ -40,6 +41,12 @@ p {
 
 .title {
   font-weight: var(--font-weight-semibold);
+}
+
+.message {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  overflow-wrap: anywhere;
 }
 
 .code {

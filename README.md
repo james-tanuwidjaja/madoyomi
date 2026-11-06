@@ -5,7 +5,22 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stages 1 and 2 of 7 are done. The desktop app starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`). It shows a "starting" splash until the backend is healthy, and restarts the backend on its own if it crashes (with an overlay that says so). The app now has its shell: a sidebar (Library, Browse, Extensions, Downloads, Settings), an anime/manga switch and every route. It talks to the backend through a typed GraphQL client and receives live events over a WebSocket, and both carry on by themselves after a backend restart. The screens come next, starting with Repos and Extensions.
+> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stages 1–3 of 7 are done.
+>
+> The desktop app:
+> - starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`);
+> - shows a "starting" splash until the backend is healthy;
+> - restarts the backend on its own if it crashes, with an overlay that says so;
+> - has its shell: a sidebar (Library, Browse, Extensions, Downloads, Settings), an anime/manga switch and every route;
+> - talks to the backend through a typed GraphQL client and receives live events over a WebSocket, and both carry on by themselves after a backend restart.
+>
+> **You can now manage repos and extensions in the app:**
+> - add a repo by its URL (the app works out whether it's anime or manga), remove it, and refresh it;
+> - browse what your repos offer, with search, a language filter and a "Show 18+" switch;
+> - install, update and uninstall extensions, and watch each step;
+> - get the trust prompt (with the signing certificate and a warning) for an extension whose certificate you haven't trusted yet.
+>
+> Browsing sources comes next.
 >
 > The backend in `server/` is a Suwayomi-Server fork, rebranded as Madoyomi-Server. It runs as a local sidecar (loopback only, random port, API token). From its GraphQL API you can:
 > - add Aniyomi and Mihon repos (JSON and protobuf indexes) and list their extensions;
@@ -20,7 +35,7 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 >
 > Filters and preferences round-trip through the API: a filtered search works on all 18 with filters, and a preference change on 19 of 20. **9 of the 10 most-downloaded Keiyoushi manga extensions** read down to a page image ([docs/research/manga-compat.md](docs/research/manga-compat.md)); comix needs a real WebView, which is deferred with the Cloudflare solver. Uninstalling an extension frees its code: of the 20 anime extensions, 1 is still kept after uninstall, by a video connection of its own.
 >
-> Most screens are still placeholders that say which stage builds them (Phase 3). Repos already lists your repos with a refresh and the live events, and Browse lists your sources. Videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
+> Repos and Extensions are done. The other screens are still placeholders that say which stage builds them (Phase 3); Browse already lists your sources. Videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
 
 ---
 
@@ -62,7 +77,7 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 
 | Path | What | Status |
 |---|---|---|
-| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes, the typed API client and WebSocket in `api/`, vue-query hooks in `composables/`, the startup splash and error screens, design tokens) | Phase 3 in progress |
+| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes, the Repos and Extensions screens with the trust prompt, the typed API client and WebSocket in `api/`, vue-query hooks in `composables/`, the startup splash and error screens, design tokens) | Phase 3 in progress |
 | [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phases 1 and 2 done |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
@@ -231,7 +246,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 | 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ✅ Done (18/20 top anime extensions end to end, filters and preferences through the API, 9/10 of the manga sample; Cloudflare/WebView shim deferred) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
-| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stages 1–2 of 7 done: the app starts the real backend and restarts it after a crash; the app shell with every route, the typed API client and live WebSocket events; Repos and Extensions next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
+| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stages 1–3 of 7 done: the app starts the real backend and restarts it after a crash; the app shell with every route, the typed API client and live WebSocket events; the Repos and Extensions screens with the trust prompt; Browse and Source next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
 | 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
 | 5 | **Manga reader:** image proxy and cache, paged, webtoon and double-page modes | ⚪ Not started | [phase-5-manga-reader.md](docs/phases/phase-5-manga-reader.md) |
 | 6 | **Library features:** categories, updates, history, downloads, backup/restore | ⚪ Not started | [phase-6-library-features.md](docs/phases/phase-6-library-features.md) |
@@ -280,6 +295,11 @@ Decided so far in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3
 - **Our own small WebSocket client** for live events, because the common library insists on a subprotocol the server doesn't negotiate. The app follows the backend's events for its whole lifetime and refreshes the affected lists. After a reconnect it fetches them again, since the server doesn't replay missed events.
 - **Requests retry only while the backend is down or restarting.** An error the backend reports (for example, a source's site failing) is shown, not retried.
 - **The native Windows title bar stays** (Snap Layouts, the usual caption buttons). The sidebar's anime/manga switch is remembered between sessions.
+- **A repo's type is worked out by the app.** It tries anime or manga, guessing from the URL. If the backend says the repo's extensions are of the other kind, it tries that kind instead. You can also pick the type yourself. The backend didn't need to change for this.
+- **Refreshing works per kind:** all anime repos, all manga repos, or everything, because the backend refreshes a kind at a time. Removing a repo asks first and says which installed extensions will stop loading.
+- **The trust prompt** shows the extension, its repo and its signing-certificate hash (with Copy), and warns that a trusted extension runs with your rights. It also opens by itself after you install an extension whose certificate isn't trusted, as in Mihon.
+- **18+ extensions are hidden from the Available list** until you turn on "Show 18+". The app remembers the setting. Installed ones always show.
+- **Long lists stay fast:** the extension list only draws the rows on screen (Keiyoushi lists 1469 extensions).
 
 Still open:
 

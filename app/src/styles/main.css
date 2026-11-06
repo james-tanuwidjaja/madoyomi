@@ -19,6 +19,10 @@ body {
   margin: 0;
 }
 
+a {
+  color: var(--color-accent);
+}
+
 code {
   font-family: var(--font-family-mono);
   font-size: 0.92em;
@@ -62,4 +66,120 @@ code {
 
 .btn-accent:hover {
   background: var(--color-accent-hover);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.btn-accent:disabled:hover {
+  background: var(--color-accent);
+}
+
+/* Small buttons inside list rows. */
+.btn-small {
+  min-height: 26px;
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-caption);
+}
+
+/* Text fields and native selects (Fluent "TextBox"/"ComboBox"). */
+.field {
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-bottom-color: var(--color-text-tertiary);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.field:focus {
+  border-bottom: 2px solid var(--color-accent);
+  outline: none;
+}
+
+/* Badges in list rows: neutral, or .warn / .danger / .ok. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-regular);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.badge.warn {
+  color: var(--color-warning);
+}
+
+.badge.danger {
+  color: var(--color-danger);
+}
+
+.badge.ok {
+  color: var(--color-success);
+}
+
+/* Dialogs (Reka Dialog/AlertDialog, portalled to <body>). */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--color-overlay);
+}
+
+.dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 51;
+  display: grid;
+  gap: var(--space-4);
+  width: min(560px, calc(100vw - 2 * var(--space-6)));
+  max-height: calc(100vh - 2 * var(--space-6));
+  overflow: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-dialog);
+  transform: translate(-50%, -50%);
+}
+
+.dialog-title {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-subtitle);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dialog-description {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Flyouts (Reka Popover). */
+.flyout {
+  z-index: 40;
+  max-width: 520px;
+  max-height: 360px;
+  overflow: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-flyout);
 }

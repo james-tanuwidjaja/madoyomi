@@ -36,6 +36,14 @@ export const useEventsStore = defineStore("events", () => {
     push({ at: Date.now(), kind: "storeRefreshed", event });
   }
 
+  /** Forgets the last step of `pkgName` (a new action starts, so an old `FAILED` no longer applies). */
+  function clearInstall(pkgName: string) {
+    if (!(pkgName in installProgress.value)) return;
+    const next = { ...installProgress.value };
+    delete next[pkgName];
+    installProgress.value = next;
+  }
+
   return {
     installProgress,
     recent,
@@ -43,5 +51,6 @@ export const useEventsStore = defineStore("events", () => {
     connections,
     recordInstall,
     recordStoreRefresh,
+    clearInstall,
   };
 });

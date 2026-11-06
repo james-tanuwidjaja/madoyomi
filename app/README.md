@@ -17,31 +17,33 @@ cd src-tauri; cargo test; cargo clippy --all-targets   # Rust shell tests and li
 - `src/`: Vue app
   - `api/`: the backend API.
     - `client.ts`: GraphQL with the token, `ApiError`, and `assetUrl` for binary routes.
+    - `errorText.ts`: a readable sentence for each error code (shown by `ErrorNotice`).
     - `types.ts`: hand-written types.
     - `operations/`: the GraphQL documents and typed calls.
     - `ws.ts`: our `graphql-transport-ws` client.
     - `realtime.ts`: the vue-query defaults and the app-wide event subscriptions.
-  - `composables/`: vue-query hooks (`useExtensionStores`, `useExtensions`, `useSources`, `useSourceFilters`, `useSourceBrowse` (infinite), `useAnime`/`useEpisodes`, `useManga`/`useChapters`) and the query keys.
-  - `stores/`: Pinia: `backend` (the shell), `events` (live events, socket state), `mediaKind` (the anime/manga switch, persisted).
+  - `composables/`: vue-query hooks (`useExtensionStores`, `useExtensions`, the repo mutations `useAddRepo` (with the type detection, `addRepoDetectingKind`), `useRemoveRepo`, `useRefreshRepos`, the extension mutations `useExtensionAction`, `useTrustExtension`, and `useExtensionActionState` (each package's latest action, from the mutation cache), `useSources`, `useSourceFilters`, `useSourceBrowse` (infinite), `useAnime`/`useEpisodes`, `useManga`/`useChapters`) and the query keys.
+  - `stores/`: Pinia: `backend` (the shell), `events` (live events, the latest install step per package, socket state), `mediaKind` (the anime/manga switch, persisted), `extensionFilters` (the Extensions tab and filters; "Show 18+" persisted).
   - `router/`: the routes.
-  - `components/`: the shell (`AppShell`, `ShellFooter`), `BackendGate`, and the page building blocks.
+  - `components/`: the shell (`AppShell`, `ShellFooter`), `BackendGate`, the page building blocks (`PageLayout` with `fill` for a page with its own scroll area, `ErrorNotice`, `PagePlaceholder`), `VirtualList` (TanStack Virtual above 60 rows), `ExtensionRow` and `TrustDialog`.
+  - `test/`: test helpers: `mountView` (Pinia, vue-query and a memory router, attached to `<body>` for Reka's portals), `fixtures`, `withSetup`, `fakeSocket`, `backendStatus`.
   - `views/`: one per route.
   - `styles/tokens.css`: the design tokens.
 - `src-tauri/`: Rust shell (window, backend sidecar lifecycle in `src/sidecar.rs`, later the updater)
 
 ## Routes
 
-| Route                               | View                                   | Status                                                       |
-| ----------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
-| `/` → `/library`                    | `LibraryView`                          | placeholder (Stage 5)                                        |
-| `/browse`                           | `BrowseView`                           | lists the sources of the current kind; full screen Stage 4   |
-| `/browse/:sourceId`                 | `SourceView`                           | placeholder (Stage 4)                                        |
-| `/anime/:id`, `/manga/:id`          | `AnimeDetailsView`, `MangaDetailsView` | placeholder (Stage 5); they set the anime/manga switch       |
-| `/extensions`                       | `ExtensionsView`                       | placeholder (Stage 3), links to Repos                        |
-| `/repos`                            | `ReposView`                            | lists the repos, "Refresh all", live events; full in Stage 3 |
-| `/downloads`                        | `DownloadsView`                        | placeholder (Phase 6)                                        |
-| `/settings`, `/settings/source/:id` | `SettingsView`, `SourceSettingsView`   | placeholder (Stage 6)                                        |
-| anything else                       | `NotFoundView`                         |                                                              |
+| Route                               | View                                   | Status                                                         |
+| ----------------------------------- | -------------------------------------- | -------------------------------------------------------------- |
+| `/` → `/library`                    | `LibraryView`                          | placeholder (Stage 5)                                          |
+| `/browse`                           | `BrowseView`                           | lists the sources of the current kind; full screen Stage 4     |
+| `/browse/:sourceId`                 | `SourceView`                           | placeholder (Stage 4)                                          |
+| `/anime/:id`, `/manga/:id`          | `AnimeDetailsView`, `MangaDetailsView` | placeholder (Stage 5); they set the anime/manga switch         |
+| `/extensions`                       | `ExtensionsView`                       | done (Stage 3): tabs, filters, install/update/uninstall, trust |
+| `/repos`                            | `ReposView`                            | done (Stage 3): add (type detected), remove, refresh, events   |
+| `/downloads`                        | `DownloadsView`                        | placeholder (Phase 6)                                          |
+| `/settings`, `/settings/source/:id` | `SettingsView`, `SourceSettingsView`   | placeholder (Stage 6)                                          |
+| anything else                       | `NotFoundView`                         |                                                                |
 
 The routes of one kind (`/browse/:sourceId`, `/anime/:id`, `/manga/:id`, `/settings/source/:id`) go back to their section's list when the switch changes kind.
 
@@ -54,7 +56,7 @@ $env:MADOYOMI_LIVE_URL = 'http://127.0.0.1:<port>'; $env:MADOYOMI_LIVE_TOKEN = '
 pnpm vitest run src/api/__tests__/operations.live.spec.ts
 ```
 
-It validates every document in `src/api/operations/` against the server's schema, checks that a wrong token gets 401, and receives `extensionStoreRefreshed` through `ws.ts` after a repo refresh (that needs at least one repo). Run it after changing an operation or a type.
+It validates every document in `src/api/operations/` against the server's schema, checks that a wrong token gets 401, checks that adding yuzono as a manga repo is refused with `REPO_TYPE_MISMATCH` and the packages (what the Repos screen's type detection relies on; it fetches the index and writes nothing), and receives `extensionStoreRefreshed` through `ws.ts` after a repo refresh (that needs at least one repo). Run it after changing an operation or a type.
 
 ## Backend sidecar
 
