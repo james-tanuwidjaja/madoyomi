@@ -67,14 +67,14 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 - [x] Startup splash + failure screen (Stage 1)
 
 ### API layer
-- [ ] Typed `client.ts` with error model
-- [ ] `types.ts` for all backend models
-- [ ] Reconnecting WebSocket + query invalidation
-- [ ] vue-query hooks incl. infinite queries
+- [x] Typed `client.ts` with error model (Stage 2: `ApiError` with `code`, `details`, `path`, `status` from GraphQL `extensions`, the REST body, a failed fetch and a request while not ready; token-bearing asset URLs)
+- [x] `types.ts` for all backend models (Stage 2: hand-written, every document validated against the live schema by `operations.live.spec.ts`)
+- [x] Reconnecting WebSocket + query invalidation (Stage 2: our own `graphql-transport-ws` client in `ws.ts`, no subprotocol; verified live across a backend kill)
+- [x] vue-query hooks incl. infinite queries (Stage 2: `composables/`, `useSourceBrowse` pages a browse mutation)
 
 ### Navigation
-- [ ] App shell + sidebar + anime/manga toggle
-- [ ] All routes wired
+- [x] App shell + sidebar + anime/manga toggle (Stage 2: Reka `ToggleGroup`, persisted; the native title bar is the drag region)
+- [x] All routes wired (Stage 2: every step-10 route as a placeholder, plus `/downloads` and not-found; route-level smoke test)
 
 ### Screens
 - [ ] Repos screen
@@ -122,6 +122,7 @@ Each stage ends in something verifiable and a commit:
    - vue-query hooks, including infinite queries for paged source results;
    - the app shell: sidebar, anime/manga toggle, drag region; every route of step 10 as a placeholder; Reka UI added.
    - Verified by client tests against a mocked fetch/WebSocket, a route-level smoke test, and a live query in `pnpm tauri dev`.
+   - *Done* (2026-11-07): vitest for the client, the protocol, the realtime dispatch, the hooks and the routes; a live-only spec against the real server (every document validated, the token, a subscription event); a live `pnpm tauri dev` with a backend kill (§10). The Repos and Browse placeholders already show real data, and Repos has a "Refresh all" and the live events. Stage 3 builds on them.
 3. **Repos and Extensions** (steps 11–12): repos list/add (type auto-detected, with override)/remove/refresh. Extensions with available/installed/updates tabs, search, language and NSFW filters, install/update/uninstall with live progress (`extensionInstallProgress`), and `TrustDialog` (package, cert hash, warning). Verified live: add yuzono and Keiyoushi, install and trust one extension of each kind.
 4. **Browse and Source, with `FilterRenderer`** (steps 13–14, 18, 20–21): the source list grouped by language with pinned favourites; Popular/Latest/Search; the filter sheet; an infinite `VirtualGrid` of `MediaCard`s. Covers load through the backend's thumbnail routes (`/api/v1/anime/{id}/thumbnail`, upstream's manga thumbnail), which already apply the source's headers, so step 21 needs no new proxy. Verified with `FilterRenderer` unit tests on shared fixtures, and live with a filtered search for both kinds.
 5. **Details and Library** (steps 15–16, 20): details for anime and manga, with a virtualized `EpisodeList`/`ChapterList` (1000+ entries), sort and filter; add to library; the Library grid with a sort and an empty state.
@@ -153,6 +154,43 @@ Decided in the stage (defaults, not asked):
 - **UI gate.** Until the backend is first ready, `BackendGate` shows a full-screen splash or failure. After that, the views stay mounted and a restart shows an overlay over them, so screen state survives a backend crash.
 - **Browser mode.** Plain `pnpm dev` renders the app with a "no backend" banner. With `VITE_MADOYOMI_URL` and `VITE_MADOYOMI_TOKEN` (in the gitignored `app/.env.local`) it uses a running server instead, e.g. one from `tools/run-server.ps1` (CORS allows `http://localhost:1420`).
 
+### Stage 2 (2026-11-07)
+
+Decided in the stage (defaults, not asked):
+- **Hand-written types, no codegen.** `api/types.ts` has the fields the UI asks for, named as in the server's Kotlin types. Codegen would need a running server or a committed schema dump, and a rerun whenever the schema changes, which is a build step for every developer. Instead, every operation document lives in `api/operations/` and **`src/api/__tests__/operations.live.spec.ts`** checks them against the real server. It introspects the schema and runs graphql-js's `validate()` on every document. It also runs the real client with and without the token, and receives `extensionStoreRefreshed` through the real WebSocket client. It is skipped unless `MADOYOMI_LIVE_URL` and `MADOYOMI_LIVE_TOKEN` are set, like the server's env-gated live tests. `graphql` is a devDependency for this spec only.
+- **Union fields are aliased by kind.** Upstream's `Filter` and `Preference` unions have fields of the same name and different types (`default`, `currentValue`), which one selection can't hold. They are `selectDefault`, `checkBoxDefault`, `listCurrentValue`, … in the documents and in `types.ts`.
+- **Our own `graphql-transport-ws` client (`api/ws.ts`, ~250 lines), not the `graphql-ws` library.** That library always asks for the `graphql-transport-ws` subprotocol. The server negotiates none, so the browser fails the handshake, and working around it needs a wrapper class anyway. The protocol is small:
+  - one socket for every subscription, `new WebSocket(url)` with no protocols argument, the token in `?token=`;
+  - `connection_init` → `connection_ack` (10 s timeout) → `subscribe` for each active operation, again after every reconnect;
+  - it answers `ping` with `pong`, pings every 20 s itself, and treats a missing `pong` (10 s) as a dead socket;
+  - backoff 0.5, 1, 2, 4, 8, 10 s, reset by an ack;
+  - `setEndpoint(url)` re-points at once (a restart's new port), and `setEndpoint(null)` closes and waits while the backend is down.
+- **One subscription of each event for the app's lifetime** (`api/realtime.ts`, started in `main.ts`), with no `pkgName`/`type` filter.
+  - The events go into a Pinia store (`stores/events.ts`: the latest install step per package, the last 20 events, the socket state) and invalidate queries: a repo refresh invalidates the repos and that kind's extensions; a finished install (`INSTALLED`/`FAILED`) invalidates that kind's extensions and sources.
+  - The server replays nothing, so every **re**connect invalidates the repo, extension and source lists. Views that want progress for one package read the store, and nothing subscribes per view.
+- **Errors.** `ApiError {code, message, details, path, status, kind}`.
+  - A body with `errors[]` is GraphQL at any status (`BAD_REQUEST` when an error has no code). `{code, message, details}` is the REST body, the token filter's 401 included. Anything else is `BAD_RESPONSE`.
+  - Two more client codes: `NETWORK` (no answer) and `BACKEND_UNAVAILABLE`, for a request while the backend isn't ready. That request fails at once and isn't held back: the hooks are disabled while not ready anyway, and a held request would hang a click.
+  - The token never appears in an error message.
+- **Retry and refetch.**
+  - A query retries only `NETWORK`/`BACKEND_UNAVAILABLE` (3 times, 2/4/8 s). A server code is an answer, so it isn't retried. Mutations never retry.
+  - When the backend is ready on a new base URL, the queries in error state are refetched.
+  - `refetchOnWindowFocus` is off app-wide: it's a desktop app, and a browse refetch would hit the source's site.
+- **Hooks** (`composables/`) take refs or getters, and are enabled only while the backend is ready.
+  - staleTime: repos 60 s, extensions 30 s, sources 5 min, filters `Infinity` (an extension update invalidates `sources`, and the filters with it), entries 30 s.
+  - `useSourceBrowse` is an infinite query over `fetchSourceAnime`/`fetchSourceManga`: page N+1 while the last page says `hasNextPage`, with the kind, source, type, query and filters in the key, staleTime 5 min. It isn't aborted when the view goes away: the server has done the work, and the page stays cached.
+- **Asset URLs.** `api.assetUrl(path)` adds `?token=` only to the backend's own server-relative routes (thumbnails, extension icons). An absolute URL (a source's own image) is returned unchanged and never gets the token.
+- **The native Windows title bar stays**, and it is the window's drag region. It keeps Snap Layouts, the caption buttons and their accessibility. A custom bar would need `decorations: false`, `core:window` permissions and a hand-made Snap Layouts flyout, which Tauri doesn't provide. Nothing in `src-tauri` changed.
+- **Shell layout.** A Fluent-like navigation pane: the name, then the anime/manga switch (Reka `ToggleGroup` as a segmented control), then Library, Browse, Extensions and Downloads. Settings and a footer sit at the bottom. The footer has the app version, the server version and URL, and the live-updates dot (it takes over the Stage 1 placeholder home, whose tests moved to `ShellFooter.spec.ts`). The page sits on a raised layer with a rounded top-left corner, as Windows 11 apps do.
+- **The anime/manga switch** is a Pinia store kept in `localStorage` (`madoyomi.kind`, default anime).
+  - `/anime/:id` and `/manga/:id` set it from their route.
+  - `/browse/:sourceId` and `/settings/source/:id` use the current kind.
+  - Switching the kind on one of those four routes goes to that section's list (`/library`, `/browse`, `/settings`), because the page belongs to one kind.
+- **Routes.** `/` redirects to `/library`. Besides step 10's routes there are `/downloads` (the sidebar's placeholder, Phase 6) and a not-found page. Repos opens from a button on Extensions, and the sidebar marks Extensions there. Each placeholder names the stage that builds it.
+  - Repos already lists the real repos, with "Refresh all" and the live events.
+  - Browse already lists the real sources by language.
+  - The later stages replace both.
+
 ## 10. Findings log
 
 ### Stage 1 (2026-11-06)
@@ -176,3 +214,17 @@ Decided in the stage (defaults, not asked):
 - **Missing jar.** With `MADOYOMI_SIDECAR_JAR` pointing at a file that doesn't exist, the failure screen appeared at once ("server jar not found: MADOYOMI_SIDECAR_JAR is …", the log folder, Retry, Open logs), with no restart loop. The first version passed the path to `java -jar` and would have burned through five restarts; it is now checked before the spawn.
 - **Output decoding.** The JVM writes stdout in the Windows code page, not UTF-8. The Phase 0 reader (`BufRead::lines`) stopped at the first invalid byte and would have left the pipe full, blocking the backend. Lines are now decoded leniently (`read_until` + `from_utf8_lossy`), with a test.
 - **Not checked by a click.** I couldn't press the Retry and Open logs buttons in the live window. They are covered by the vitest tests (which check that they call `restart_backend` and `open_backend_logs`) and by the Rust code path. A human check is part of the exit run.
+### Stage 2 (2026-11-07)
+
+- **Baseline before the stage:** `pnpm test`: 3 files, 19 tests; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` clean; `cargo test`: 14; `cargo clippy --all-targets` clean. **After:** `pnpm test`: 10 files, 76 passed + 5 skipped (the live spec). That's client 15, ws 13, realtime 6, hooks 4, routes 15, mediaKind 3, ShellFooter 5 (HomeView's 4 ported, plus 1), backend store 9, BackendGate 6. lint, typecheck and format:check are clean. Nothing in `src-tauri` changed: `cargo build`, `cargo test` (14) and `cargo clippy --all-targets` still pass. Nothing in `server/` changed either, so it wasn't rebuilt (662 tests, smoke 24 from Stage 1 stand).
+- **Live operation spec** (a server from `Start-MadoyomiServer` on a scratch data dir with the yuzono and Keiyoushi repos): 5/5. Every document in `api/operations/` validates against the real schema. A wrong token gets `UNAUTHORIZED`/401. The list queries run. `extensionStoreRefreshed` arrives over our WebSocket client (Node's `WebSocket`, which fails a handshake whose subprotocol isn't echoed, like a browser) after `fetchExtensions`.
+- **Upstream's schema isn't valid by graphql-js's rules:** `DownloadChangedInput` and `LibraryUpdateStatusChangedInput` are input types without fields, which graphql-kotlin emits and graphql-js's `assertValidSchema` refuses. The spec builds the schema with `assumeValid: true`, which skips that check, and our documents are still validated. Nothing the client does depends on those two types.
+- **Live in `pnpm tauri dev`** (`MADOYOMI_DATA_DIR` = that data dir), checked by screenshot. Sidebar clicks were driven with `SetCursorPos` + `mouse_event`, which reach WebView2, unlike in Stage 1, where no click was tried.
+  - The shell: the sidebar, the switch, and the footer with `Madoyomi-Server v0.1.0 · http://127.0.0.1:62305` and a green "Live updates", so the WebSocket was open with the token.
+  - Extensions → Repos: both repos with their counts (249 and 1469 extensions) and last refresh. This was the first authenticated request from the UI.
+  - "Refresh all": the mutation ran, the two `extensionStoreRefreshed` events appeared under "Live events", and the refresh times updated through the invalidation.
+  - Killing the backend's java (pid from `sidecar.log`): the overlay ("Starting the backend… attempt 2"), and the footer went "Offline". The backend was healthy again on port 61065 about 7 s later, the socket reconnected by itself ("Live updates", the new URL), and a second "Refresh all" brought two new events, with no window reload.
+  - Browse in manga mode listed upstream's built-in Local source. Its icon loaded through `assetUrl` (`?token=`), so the binary routes take the query token too.
+  - Closing the window: "backend stopped (exit code 0)". `token=` appears in none of `sidecar.log`, `madoyomi.log` or the dev output: Javalin doesn't log the WebSocket URL.
+- **The Local source shows as "Untrusted".** Upstream's fake "Local Source" extension has no signature hash, so `extension.isTrusted` is false. Stage 4 should treat source id `0` as the built-in local source, not an untrusted one.
+- **A repo's stored URL can differ from the one added.** Adding yuzono's `…/index.min.json` stored `https://github.com/yuzono/anime-repo/raw/repo/index.pb`: the repo manager prefers the protobuf index (Phase 1). Adding the same `index.min.json` again then counts as a new URL, though only one row exists afterwards. Stage 3's add form should show the stored URL and match existing repos by what the server returns.

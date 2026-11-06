@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stage 1 of 7 is done. The desktop app now starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`). It shows a "starting" splash until the backend is healthy, and restarts the backend on its own if it crashes (with an overlay that says so). The screens come next.
+> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stages 1 and 2 of 7 are done. The desktop app starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`). It shows a "starting" splash until the backend is healthy, and restarts the backend on its own if it crashes (with an overlay that says so). The app now has its shell: a sidebar (Library, Browse, Extensions, Downloads, Settings), an anime/manga switch and every route. It talks to the backend through a typed GraphQL client and receives live events over a WebSocket, and both carry on by themselves after a backend restart. The screens come next, starting with Repos and Extensions.
 >
 > The backend in `server/` is a Suwayomi-Server fork, rebranded as Madoyomi-Server. It runs as a local sidecar (loopback only, random port, API token). From its GraphQL API you can:
 > - add Aniyomi and Mihon repos (JSON and protobuf indexes) and list their extensions;
@@ -20,7 +20,7 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 >
 > Filters and preferences round-trip through the API: a filtered search works on all 18 with filters, and a preference change on 19 of 20. **9 of the 10 most-downloaded Keiyoushi manga extensions** read down to a page image ([docs/research/manga-compat.md](docs/research/manga-compat.md)); comix needs a real WebView, which is deferred with the Cloudflare solver. Uninstalling an extension frees its code: of the 20 anime extensions, 1 is still kept after uninstall, by a video connection of its own.
 >
-> The app has no screens yet beyond a placeholder home that shows the backend's version and address (Phase 3), and videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
+> Most screens are still placeholders that say which stage builds them (Phase 3). Repos already lists your repos with a refresh and the live events, and Browse lists your sources. Videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
 
 ---
 
@@ -62,7 +62,7 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 
 | Path | What | Status |
 |---|---|---|
-| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the startup splash and error screens, design tokens, a placeholder home) | Phase 3 in progress |
+| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes, the typed API client and WebSocket in `api/`, vue-query hooks in `composables/`, the startup splash and error screens, design tokens) | Phase 3 in progress |
 | [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phases 1 and 2 done |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
@@ -180,7 +180,7 @@ The script starts the jar the way the app does, on a throwaway data dir under `%
 > [!NOTE]
 > `pnpm tauri dev` also starts the real backend, the newest `server\api\build\Madoyomi-Server-*.jar`. Build it once first: `.\gradlew.bat :api:shadowJar` in `server/` (see [Backend](#backend-server)). The shell runs it with `tools/bin/jdk-21`, a fresh API token per app session and `--data-dir %APPDATA%\Madoyomi`, and keeps its stdin open; the backend exits when the app does.
 > - **Startup.** The window shows "Starting the backend…" until `/health` answers, about 10–12 s (longer on a busy machine; after 30 s it says so). The shell keeps waiting for up to 5 minutes while the JVM is alive.
-> - **Crashes.** If the backend exits or stops answering, the app shows an overlay and restarts it after 1, 2, 4 and 8 s. After 5 failed starts in a row it stops and offers Retry and Open logs. A missing jar shows that error at once.
+> - **Crashes.** If the backend exits or stops answering, the app shows an overlay and restarts it after 1, 2, 4 and 8 s. After 5 failed starts in a row it stops and offers Retry and Open logs. A missing jar shows that error at once. Once the backend is back (on a new port), the UI's requests and its WebSocket move there by themselves, and the sidebar's footer shows "Live updates" again.
 > - **Logs.** `sidecar.log` (the backend's output plus the shell's start, port, health and exit lines) and the server's `madoyomi.log` are in `<data dir>\logs`.
 > - **Environment overrides,** set before `pnpm tauri dev`: `MADOYOMI_SIDECAR_JAR` (another jar), `MADOYOMI_JAVA` (another `java.exe`), `MADOYOMI_DATA_DIR` (another data dir, e.g. a fresh one for testing).
 > - **One server per data dir.** Don't run `pnpm tauri dev` and a server of your own on the same data dir at once (the database is locked). `tools/run-server.ps1` uses `tools/dev-data/`, so the two don't clash.
@@ -196,6 +196,7 @@ Run these from `app/`:
 | `pnpm tauri dev` | Run the desktop app (Vite + Rust shell, hot reload). It starts the backend jar from `server/api/build` (see the note above) |
 | `pnpm dev` | UI only, in a browser at http://localhost:1420 (no backend, unless `VITE_MADOYOMI_URL` and `VITE_MADOYOMI_TOKEN` are set in `.env.local`) |
 | `pnpm test` / `pnpm test:watch` | Run Vitest once / in watch mode |
+| `pnpm vitest run src/api/__tests__/operations.live.spec.ts` | Check the UI's GraphQL operations against a running server: validates every document against its schema, checks the token, and receives a WebSocket event. Set `MADOYOMI_LIVE_URL` and `MADOYOMI_LIVE_TOKEN` (e.g. from `tools/run-server.ps1`) first; otherwise these tests are skipped, as in `pnpm test` |
 | `pnpm lint` / `pnpm lint:fix` | ESLint check / auto-fix |
 | `pnpm format` / `pnpm format:check` | Prettier write / check |
 | `pnpm typecheck` | Type-check with `vue-tsc` |
@@ -230,7 +231,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 | 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ✅ Done (18/20 top anime extensions end to end, filters and preferences through the API, 9/10 of the manga sample; Cloudflare/WebView shim deferred) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
-| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stage 1 of 7 done: the app starts the real backend with a token and data dir, shows a startup splash, and restarts it after a crash; screens next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
+| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stages 1–2 of 7 done: the app starts the real backend and restarts it after a crash; the app shell with every route, the typed API client and live WebSocket events; Repos and Extensions next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
 | 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
 | 5 | **Manga reader:** image proxy and cache, paged, webtoon and double-page modes | ⚪ Not started | [phase-5-manga-reader.md](docs/phases/phase-5-manga-reader.md) |
 | 6 | **Library features:** categories, updates, history, downloads, backup/restore | ⚪ Not started | [phase-6-library-features.md](docs/phases/phase-6-library-features.md) |
@@ -275,6 +276,10 @@ Decided so far in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3
 - **Dark and light themes from the start.** The app follows the Windows setting, and Settings will offer System, Dark or Light.
 - **A Windows 11 / Fluent-like look:** Segoe UI Variable, neutral layered surfaces, small radii, subtle borders, one accent colour, compact density.
 - **The app runs the backend itself.** It gets a new API token every session, which is never logged. Data lives in `%APPDATA%\Madoyomi`, the same place a server started by hand uses. The shell waits patiently while the JVM starts. After a crash it restarts the backend with a backoff (1, 2, 4, 8 s), and after 5 failed starts in a row it stops and offers Retry. Logs are in `%APPDATA%\Madoyomi\logs`.
+- **Hand-written API types, checked against the real server** instead of generated, so there's no codegen step. A live test validates every GraphQL operation the UI sends against the server's schema.
+- **Our own small WebSocket client** for live events, because the common library insists on a subprotocol the server doesn't negotiate. The app follows the backend's events for its whole lifetime and refreshes the affected lists. After a reconnect it fetches them again, since the server doesn't replay missed events.
+- **Requests retry only while the backend is down or restarting.** An error the backend reports (for example, a source's site failing) is shown, not retried.
+- **The native Windows title bar stays** (Snap Layouts, the usual caption buttons). The sidebar's anime/manga switch is remembered between sessions.
 
 Still open:
 
