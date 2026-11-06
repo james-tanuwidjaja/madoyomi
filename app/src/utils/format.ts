@@ -16,3 +16,8 @@ export function formatLang(lang: string): string {
   if (lang === "other" || lang === "localsourcelang") return "Other";
   return lang.toUpperCase();
 }
+
+/** An extension's language as a badge or filter option: like {@link formatLang}, but `all` is "Multi-language". */
+export function formatExtensionLang(lang: string): string {
+  return lang === "all" ? "Multi-language" : formatLang(lang);
+}

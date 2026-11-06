@@ -1,10 +1,13 @@
 <script setup lang="ts">
-/** A page: the title row (with optional actions) and the content below it. */
-defineProps<{ title: string; subtitle?: string }>();
+/**
+ * A page: the title row (with optional actions) and the content below it. With `fill`, the page takes the window's
+ * height and its last child gets what's left, for a page with its own scroll area (a virtualized list).
+ */
+defineProps<{ title: string; subtitle?: string; fill?: boolean }>();
 </script>
 
 <template>
-  <section class="page">
+  <section class="page" :class="{ fill }">
     <header class="page-header">
       <div>
         <h1>{{ title }}</h1>
@@ -25,8 +28,22 @@ defineProps<{ title: string; subtitle?: string }>();
   padding: var(--space-5) var(--space-6);
 }
 
+.page.fill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+.page.fill > :deep(:last-child) {
+  flex: 1;
+  min-height: 0;
+}
+
 .page-header {
   display: flex;
+  flex: none;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);

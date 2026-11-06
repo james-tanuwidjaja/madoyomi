@@ -1,5 +1,13 @@
 import { api } from "../client";
-import type { Extension, ExtensionKind, ExtensionStore, MediaKind } from "../types";
+import type {
+  Extension,
+  ExtensionAction,
+  ExtensionKind,
+  ExtensionStore,
+  MediaKind,
+  RepoIndexFormat,
+  TrustedSignature,
+} from "../types";
 import { extensionKindOf } from "../types";
 
 export const EXTENSION_STORE_FIELDS = /* GraphQL */ `
@@ -38,6 +46,13 @@ export const EXTENSION_FIELDS = /* GraphQL */ `
     isTorrent
     signatureHash
     isTrusted
+    compatIssues {
+      kind
+      target
+      origin
+      context
+      count
+    }
   }
 `;
 
@@ -104,4 +119,113 @@ export async function refreshRepos(kind?: MediaKind): Promise<ExtensionStore[]> 
     { type: kind ? extensionKindOf(kind) : null },
   );
   return data.fetchExtensions.extensionStores;
+}
+
+/**
+ * Adds (or re-adds) a repo of one kind. The server fetches it, checks that every package is of that kind
+ * (`REPO_TYPE_MISMATCH` otherwise, with `details.packages`), trusts its signing key and lists its extensions. The
+ * stored URL is where the index resolved to, which can differ from `indexUrl`.
+ */
+export const ADD_REPO_MUTATION = /* GraphQL */ `
+  mutation AddRepo($indexUrl: String!, $type: ExtensionKind, $format: RepoIndexFormat) {
+    addExtensionStore(input: { indexUrl: $indexUrl, type: $type, format: $format }) {
+      extensionStore {
+        ...ExtensionStoreFields
+      }
+    }
+  }
+  ${EXTENSION_STORE_FIELDS}
+`;
+
+/** Removes the repo stored under `indexUrl`; the payload is the repo as it was. */
+export const REMOVE_REPO_MUTATION = /* GraphQL */ `
+  mutation RemoveRepo($indexUrl: String!) {
+    removeExtensionStore(input: { indexUrl: $indexUrl }) {
+      extensionStore {
+        indexUrl
+        type
+      }
+    }
+  }
+`;
+
+/**
+ * Installs, updates or uninstalls one extension. It resolves when the work is done (the steps arrive meanwhile as
+ * `extensionInstallProgress`), and fails with what it couldn't do (`NOT_FOUND`, `INSTALL_FAILED`, `SIGNATURE_*`, …).
+ */
+export const UPDATE_EXTENSION_MUTATION = /* GraphQL */ `
+  mutation UpdateExtension(
+    $pkgName: String!
+    $install: Boolean
+    $update: Boolean
+    $uninstall: Boolean
+  ) {
+    updateExtension(
+      input: { id: $pkgName, patch: { install: $install, update: $update, uninstall: $uninstall } }
+    ) {
+      extension {
+        ...ExtensionFields
+      }
+    }
+  }
+  ${EXTENSION_FIELDS}
+`;
+
+/** Trusts the signing certificate of an installed extension (either kind) and loads what it signs. */
+export const TRUST_EXTENSION_MUTATION = /* GraphQL */ `
+  mutation TrustExtension($pkgName: String!) {
+    trustExtension(input: { pkgName: $pkgName }) {
+      extension {
+        ...ExtensionFields
+      }
+      trustedSignature {
+        hash
+        origin
+      }
+    }
+  }
+  ${EXTENSION_FIELDS}
+`;
+
+export interface AddRepoInput {
+  indexUrl: string;
+  kind: MediaKind;
+  format?: RepoIndexFormat;
+}
+
+export async function addRepo(input: AddRepoInput): Promise<ExtensionStore> {
+  const data = await api.gql<{ addExtensionStore: { extensionStore: ExtensionStore } }>(
+    ADD_REPO_MUTATION,
+    {
+      indexUrl: input.indexUrl,
+      type: extensionKindOf(input.kind),
+      format: input.format ?? null,
+    },
+  );
+  return data.addExtensionStore.extensionStore;
+}
+
+export async function removeRepo(indexUrl: string): Promise<void> {
+  await api.gql(REMOVE_REPO_MUTATION, { indexUrl });
+}
+
+/** The extension after the action, or null if the action removed its row (an obsolete extension uninstalled). */
+export async function updateExtension(
+  pkgName: string,
+  action: ExtensionAction,
+): Promise<Extension | null> {
+  const data = await api.gql<{ updateExtension: { extension: Extension | null } }>(
+    UPDATE_EXTENSION_MUTATION,
+    { pkgName, [action]: true },
+  );
+  return data.updateExtension.extension;
+}
+
+export async function trustExtension(
+  pkgName: string,
+): Promise<{ extension: Extension; trustedSignature: TrustedSignature | null }> {
+  const data = await api.gql<{
+    trustExtension: { extension: Extension; trustedSignature: TrustedSignature | null };
+  }>(TRUST_EXTENSION_MUTATION, { pkgName });
+  return data.trustExtension;
 }

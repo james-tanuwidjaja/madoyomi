@@ -77,8 +77,8 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 - [x] All routes wired (Stage 2: every step-10 route as a placeholder, plus `/downloads` and not-found; route-level smoke test)
 
 ### Screens
-- [ ] Repos screen
-- [ ] Extensions screen (available/installed/updates) + `TrustDialog`
+- [x] Repos screen (Stage 3: list by kind with the stored URL, count, last refresh, last error and key trust; add by URL with the type detected or chosen; remove after a confirmation; refresh per kind or all; verified live on a fresh data dir, §10)
+- [x] Extensions screen (available/installed/updates) + `TrustDialog` (Stage 3: Reka tabs, search, language, "Show 18+", install/update/uninstall with live steps and readable errors, compat issues, a virtualized list; the trust prompt shown, used and verified live, §10)
 - [ ] Browse (source list)
 - [ ] Source (popular/latest/search + filters)
 - [ ] Details (anime + manga) with episode/chapter list
@@ -90,7 +90,7 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 - [ ] `PreferenceRenderer` (all preference types)
 
 ### Quality
-- [ ] Virtualized grids/lists
+- [ ] Virtualized grids/lists (Stage 3: `VirtualList` for the extension list, 1469 Keiyoushi rows; the source grid and episode/chapter lists follow in Stages 4–5)
 - [ ] Covers via backend image proxy
 - [ ] Component + client tests
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass
@@ -124,6 +124,9 @@ Each stage ends in something verifiable and a commit:
    - Verified by client tests against a mocked fetch/WebSocket, a route-level smoke test, and a live query in `pnpm tauri dev`.
    - *Done* (2026-11-07): vitest for the client, the protocol, the realtime dispatch, the hooks and the routes; a live-only spec against the real server (every document validated, the token, a subscription event); a live `pnpm tauri dev` with a backend kill (§10). The Repos and Browse placeholders already show real data, and Repos has a "Refresh all" and the live events. Stage 3 builds on them.
 3. **Repos and Extensions** (steps 11–12): repos list/add (type auto-detected, with override)/remove/refresh. Extensions with available/installed/updates tabs, search, language and NSFW filters, install/update/uninstall with live progress (`extensionInstallProgress`), and `TrustDialog` (package, cert hash, warning). Verified live: add yuzono and Keiyoushi, install and trust one extension of each kind.
+   - *Done* (2026-11-07): component tests for both screens, `TrustDialog` and `VirtualList`, the type-detection tests, and the live spec's new check that the server refuses a repo of the wrong kind with its packages.
+   - Live in `pnpm tauri dev` from a fresh data dir, driven by clicks and pasted text (§10): both repos added, MangaPill and AnimeGG installed with their steps shown, and the trust prompt reached by removing yuzono. Then a backend kill, after which uninstall and install still worked.
+   - Nothing in `server/` changed.
 4. **Browse and Source, with `FilterRenderer`** (steps 13–14, 18, 20–21): the source list grouped by language with pinned favourites; Popular/Latest/Search; the filter sheet; an infinite `VirtualGrid` of `MediaCard`s. Covers load through the backend's thumbnail routes (`/api/v1/anime/{id}/thumbnail`, upstream's manga thumbnail), which already apply the source's headers, so step 21 needs no new proxy. Verified with `FilterRenderer` unit tests on shared fixtures, and live with a filtered search for both kinds.
 5. **Details and Library** (steps 15–16, 20): details for anime and manga, with a virtualized `EpisodeList`/`ChapterList` (1000+ entries), sort and filter; add to library; the Library grid with a sort and an empty state.
 6. **Settings and `PreferenceRenderer`** (steps 17, 19): general settings (theme System/Dark/Light, language), backend settings (data dir, log folder), and source preferences saved with optimistic updates. Verified by renderer unit tests and a live preference change that takes effect.
@@ -191,6 +194,47 @@ Decided in the stage (defaults, not asked):
   - Browse already lists the real sources by language.
   - The later stages replace both.
 
+### Stage 3 (2026-11-07)
+
+Decided in the stage (defaults, not asked):
+- **No server change.** Everything the two screens need was already in the API (Phase 1 step 17), so `server/` and `server/UPSTREAM.md` are untouched.
+- **The repo type is detected in the UI, with no server change.** `RepoService.add` reads either kind's index format, then checks every package against the kind it was given. A wrong kind fails with `REPO_TYPE_MISMATCH` and `details.packages` before anything is written. So "Detect the type" (`addRepoDetectingKind` in `composables/useExtensions.ts`):
+  - first tries anime if the URL contains "anime" (yuzono's `anime-repo`), otherwise manga (the server's default);
+  - on that one error, tries the other kind once;
+  - doesn't retry the other `REPO_TYPE_MISMATCH`, "already added as a manga repo", which has no `packages`;
+  - doesn't retry a kind the user chose.
+
+  A wrong guess costs one extra download of the index. The live spec checks against the real server that this error carries the packages. The format (Auto/JSON/Protobuf) is an advanced option, Auto by default.
+- **Repos are matched by the URL the server stores** (Stage 2's finding). After an add, the form says "Added" or "Updated" by comparing that URL with the list, and shows the stored URL when it differs from the one typed.
+- **Refresh is per kind, not per repo.** `fetchExtensions` refreshes a whole kind, because pruning listings only runs when every repo of the kind fetched. Each kind's group has its own "Refresh anime/manga repos", next to "Refresh all".
+  - A single-repo refresh would need a server change for little gain: there is one repo per kind so far.
+  - A re-add of the repo isn't a refresh either: it would trust a changed signing key, which a refresh must never do.
+- **Removing a repo asks first** (Reka `AlertDialog`). The prompt says what happens: its uninstalled listings leave, and installed extensions signed with its key stop loading until they are trusted or the repo is re-added.
+- **The Local source's fake extension (`eu.kanade.tachiyomi.source.local`) is left out of the extension lists.** It is built in, not from a repo. Browse still shows its source; Stage 4 treats source id `0` as built in.
+- **Tabs and filters.**
+  - Available, Installed and Updates (Reka `Tabs`), with counts. Installed sorts what needs attention first: untrusted, then updatable.
+  - Search on the name and package. Native `<select>`s for the language ("Multi-language" for `all`), and for the repo type and format. A plain list of strings needs nothing more, and Reka `Select` is left for `FilterRenderer` (Stage 4).
+  - **"Show 18+"** (Reka `Switch`) is off by default and kept in `localStorage` (`madoyomi.showNsfw`). It only hides `NSFW` extensions under Available: what you installed always shows. `MIXED` shows with a "Some 18+" badge.
+  - The tab, search and language last for the session (`stores/extensionFilters.ts`). The search starts over when the anime/manga switch changes.
+  - When a tab has no match, it names the tab that has one ("1 under Installed"), because an extension leaves Available the moment it's installed.
+- **Progress and errors per extension.**
+  - The steps come only from the events store (`installProgress[pkg]`: Downloading, Verifying the signature, Converting).
+  - Each action's own state (pending, error, result) comes from vue-query's mutation cache (`useMutationState` on the `extensionAction` key). It outlives the view, so an install keeps showing after you leave Extensions and come back.
+  - A new action clears the package's old step first (`events.clearInstall`), so an earlier `FAILED` doesn't linger.
+  - A row shows the action's own error, or else a `FAILED` step's code and message.
+- **Readable errors.** `api/errorText.ts` maps each server and client code to one sentence, and `ErrorNotice` shows it above the code and the server's message. `ErrorNotice`'s "Try again" now shows only when the parent passes `@retry`; a form error has nothing to retry.
+- **The trust prompt (`TrustDialog`, Reka `Dialog`)** shows:
+  - the extension, package, version, and the repo (or that no added repo lists it any more);
+  - the certificate's SHA-256, with Copy (it selects the text if the clipboard is refused);
+  - a warning: a trusted extension runs inside the backend with your rights, and trusting the certificate also trusts every other extension it signs.
+
+  Trust calls `trustExtension` and closes. Cancel, Escape or a click outside does nothing. Besides the Trust button on an untrusted row, it **opens by itself when an install the user started ends untrusted**, as Mihon prompts.
+- **`components/VirtualList.vue`.** It wraps `@tanstack/vue-virtual`, measures each row, and has its own scroll area, which fills the page through `PageLayout`'s new `fill` prop.
+  - Below 60 rows it renders them all: as fast for a short list, and simpler.
+  - Keiyoushi's 1469 are virtualized; Stages 4–5 reuse it.
+  - The scroll position resets when the tab or the filters change, not when a row does.
+- **Compat issues** (`compatIssues`, an in-memory lookup on the server) are part of the list fragment. A row with any shows "N API gaps", which opens a Reka `Popover` with each target, kind, origin, context and count.
+
 ## 10. Findings log
 
 ### Stage 1 (2026-11-06)
@@ -228,3 +272,55 @@ Decided in the stage (defaults, not asked):
   - Closing the window: "backend stopped (exit code 0)". `token=` appears in none of `sidecar.log`, `madoyomi.log` or the dev output: Javalin doesn't log the WebSocket URL.
 - **The Local source shows as "Untrusted".** Upstream's fake "Local Source" extension has no signature hash, so `extension.isTrusted` is false. Stage 4 should treat source id `0` as the built-in local source, not an untrusted one.
 - **A repo's stored URL can differ from the one added.** Adding yuzono's `…/index.min.json` stored `https://github.com/yuzono/anime-repo/raw/repo/index.pb`: the repo manager prefers the protobuf index (Phase 1). Adding the same `index.min.json` again then counts as a new URL, though only one row exists afterwards. Stage 3's add form should show the stored URL and match existing repos by what the server returns.
+
+### Stage 3 (2026-11-07)
+
+- **Baseline before the stage:** the same as after Stage 2. `pnpm test` gave 10 files, 76 passed + 5 skipped; lint, typecheck and format:check were clean; `cargo test` 14 and `cargo clippy --all-targets` clean. `tools/smoke-api.ps1 -NoBuild` passed 24/24, rerun at the start on the existing jar.
+- **After the stage:**
+  - `pnpm test`: 14 files, 107 passed + 6 skipped (the live spec). The new ones: hooks 9 (was 4; type detection +5), TrustDialog 5, VirtualList 2, ExtensionsView 11, ReposView 8. Unchanged: client 15, ws 13, realtime 6, routes 15, mediaKind 3, ShellFooter 5, backend store 9, BackendGate 6.
+  - lint, typecheck and format:check are clean.
+  - `cargo build`, `cargo test` (14) and `cargo clippy --all-targets` pass. Nothing in `src-tauri` changed.
+  - Nothing in `server/` changed, so it wasn't rebuilt: Stage 1's 662 tests stand, and the smoke test passed 24/24 at the start.
+- **Live operation spec** against a server from `Start-MadoyomiServer` (scratch data dir, both repos added): **6/6**.
+  - All 19 documents validate, including the new mutations and the `RepoIndexFormat` enum.
+  - Adding yuzono as MANGA fails with `REPO_TYPE_MISMATCH` and a `details.packages` list. That is what the type detection relies on.
+  - `updateExtension`'s patch is passed as three Boolean variables, so the document doesn't depend on the name graphql-kotlin gives the patch's input type.
+- **Live in `pnpm tauri dev` on a fresh `MADOYOMI_DATA_DIR`**, checked by screenshot (window driven as in Stage 2):
+  - **Typing works:** click the field, then put the text on the clipboard and press Ctrl+V with `SendKeys`. The selects were driven with arrow keys and Enter.
+  - **Both repos added in the UI.**
+    - Extensions said "No manga repo yet … add a repo".
+    - Keiyoushi's `index.pb` was added as "a manga repo (type detected), with 1469 extensions".
+    - yuzono's `index.min.json` with the type forced to Manga showed "Couldn't add the repo / The repo's extensions aren't of the kind it was added as / REPO_TYPE_MISMATCH 249 of 249 extensions … are not manga extensions".
+    - The same URL with "Detect the type" was added as "an anime repo (type detected), with 249 extensions. It is stored as `https://github.com/yuzono/anime-repo/raw/repo/index.pb`".
+    - Both showed "Signing key trusted".
+  - **The extension lists.**
+    - Manga Available showed 1069: 1469, less the Local source and the 18+ ones. The icons loaded through `assetUrl`.
+    - Thirty wheel scrolls reached the H's with no stall: the list is virtualized.
+    - Anime showed 183.
+  - **Installs with live steps:**
+    - MangaPill showed "Converting…" with the bar, then moved to Installed (1). It was trusted by Keiyoushi's key, so it was loaded and listed under Browse.
+    - AnimeGG did the same.
+    - The live events list showed DOWNLOADING → VERIFYING → CONVERTING → INSTALLED for both.
+  - **The trust prompt.** Repo keys are trusted on add, so the untrusted case came from the UI itself:
+    - removing yuzono through its confirmation left AnimeGG "Untrusted", with Trust…;
+    - TrustDialog showed AnimeGG (anime), the package, 14.2, "No added repo lists it any more" with the stored URL, the hash `cbec121a…c45905` and the warning;
+    - Copy put the hash on the real clipboard;
+    - "Trust and load it" cleared the badge, with no "Not loaded", so AnimeGG was loaded again;
+    - yuzono was then re-added.
+  - **A backend kill** (pid from `sidecar.log`): healthy again on a new port about 7 s later, with "Live updates" back.
+    - Without a reload, the manga Installed list was there.
+    - MangaPill uninstalled (the action finished before the next screenshot, about 0.3 s).
+    - Reinstalled, it showed "Converting…" again: the events came over the reconnected socket.
+  - **After closing the window:** "backend stopped (exit code 0)". `token=` appears in none of `sidecar.log`, `madoyomi.log` or the dev output.
+  - **Fixed after the first live run, then rechecked live on the same data dir:**
+    - links used the browser's visited purple; they now use the accent;
+    - a long package name ran past the trust dialog's edge; it now wraps;
+    - the search fields had spellcheck squiggles; spellcheck is off;
+    - a search typed for anime stayed when switching to manga; it now starts over;
+    - "Nothing matches" after an install now points to "1 under Installed";
+    - the row badge said "All languages" where the filter says "Multi-language"; both say "Multi-language" now (`formatExtensionLang`).
+- **Not checked live:**
+  - An **update**: neither repo listed a newer version of an installed extension. It is covered by the component tests, and it is the same mutation as install with `update: true`.
+  - A **compat-issue popover**: AnimeGG and MangaPill have no issues. It is covered by the component test.
+  - Removing a repo **and** re-adding it moves AnimeGG's trust from the repo's key (STORE) to the user's (USER, from the trust prompt), as Phase 1 §9 describes. That was not inspected beyond the badges.
+- **Reka in jsdom.** Tabs change on `mousedown` (a pointer press), not on `click`. Dialogs, alert dialogs and popovers portal to `<body>`, so the tests mount with `attachTo: document.body` (`src/test/mountView.ts`). `VirtualList`'s virtual path runs in jsdom once `clientHeight` (the viewport) and `offsetHeight` (the rows) are stubbed.

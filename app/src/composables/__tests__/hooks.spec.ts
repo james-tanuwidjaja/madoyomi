@@ -13,16 +13,20 @@ import type { SourcePage } from "../../api/types";
 const ops = vi.hoisted(() => ({
   browseSource: vi.fn(),
   fetchExtensionStores: vi.fn(),
+  addRepo: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   browseSource: ops.browseSource,
   fetchExtensionStores: ops.fetchExtensionStores,
+  addRepo: ops.addRepo,
 }));
 
 import { useSourceBrowse } from "../useSources";
-import { useExtensionStores } from "../useExtensions";
+import { addRepoDetectingKind, guessRepoKind, useExtensionStores } from "../useExtensions";
+import { ApiError } from "../../api/client";
+import { makeStore } from "../../test/fixtures";
 
 let pinia: Pinia;
 let queryClient: QueryClient;
@@ -139,5 +143,73 @@ describe("useExtensionStores", () => {
     setReady();
     await vi.waitFor(() => expect(result.isSuccess.value).toBe(true));
     expect(ops.fetchExtensionStores).toHaveBeenCalledOnce();
+  });
+});
+
+describe("addRepoDetectingKind", () => {
+  const animeStore = makeStore({ indexUrl: "https://example.org/anime/index.pb", type: "ANIME" });
+  const mismatch = (details: unknown) =>
+    new ApiError({ kind: "graphql", code: "REPO_TYPE_MISMATCH", message: "mismatch", details });
+
+  it("guesses anime from the URL, and manga otherwise", () => {
+    expect(
+      guessRepoKind("https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.min.json"),
+    ).toBe("anime");
+    expect(
+      guessRepoKind("https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb"),
+    ).toBe("manga");
+  });
+
+  it("tries the other kind once after a package mismatch", async () => {
+    ops.addRepo.mockRejectedValueOnce(mismatch({ packages: ["a.animeextension.b"] }));
+    ops.addRepo.mockResolvedValueOnce(animeStore);
+
+    const outcome = await addRepoDetectingKind(
+      { indexUrl: "  https://example.org/repo/index.min.json ", kind: "auto" },
+      [],
+    );
+
+    expect(ops.addRepo.mock.calls.map((c) => c[0])).toEqual([
+      { indexUrl: "https://example.org/repo/index.min.json", kind: "manga", format: undefined },
+      { indexUrl: "https://example.org/repo/index.min.json", kind: "anime", format: undefined },
+    ]);
+    expect(outcome).toEqual({ store: animeStore, kind: "anime", detected: true, existed: false });
+  });
+
+  it("recognises a re-add by the URL the server stored", async () => {
+    ops.addRepo.mockResolvedValue(animeStore);
+
+    const outcome = await addRepoDetectingKind(
+      { indexUrl: "https://example.org/anime/index.min.json", kind: "auto" },
+      [animeStore.indexUrl],
+    );
+
+    expect(outcome.existed).toBe(true);
+  });
+
+  it("doesn't try the other kind when the repo is already added as one", async () => {
+    // RepoService: "… is already added as a manga repo" has no package list
+    ops.addRepo.mockRejectedValue(mismatch({ indexUrl: "x", type: "MANGA" }));
+
+    await expect(
+      addRepoDetectingKind({ indexUrl: "https://example.org/anime/index.pb", kind: "auto" }, []),
+    ).rejects.toMatchObject({ code: "REPO_TYPE_MISMATCH" });
+    expect(ops.addRepo).toHaveBeenCalledOnce();
+  });
+
+  it("doesn't try the other kind when the kind was chosen", async () => {
+    ops.addRepo.mockRejectedValue(mismatch({ packages: ["a.b"] }));
+
+    await expect(
+      addRepoDetectingKind(
+        { indexUrl: "https://example.org/x", kind: "manga", format: "JSON" },
+        [],
+      ),
+    ).rejects.toBeInstanceOf(ApiError);
+    expect(ops.addRepo).toHaveBeenCalledExactlyOnceWith({
+      indexUrl: "https://example.org/x",
+      kind: "manga",
+      format: "JSON",
+    });
   });
 });

@@ -92,6 +92,27 @@ export interface ExtensionStore {
   extensions: { totalCount: number };
 }
 
+export type CompatIssueKind =
+  "MISSING_CLASS" | "MISSING_MEMBER" | "ABSTRACT_METHOD" | "STUB" | "CLASS_NOT_FOUND";
+
+/** `ExtensionCompatIssueType`: one Android or extension API the extension needs and doesn't get. */
+export interface ExtensionCompatIssue {
+  kind: CompatIssueKind;
+  /** The missing class or member, or the stubbed method. */
+  target: string;
+  /** `RUNTIME`: hit by its code; `STATIC`: found by the install-time link check. */
+  origin: "RUNTIME" | "STATIC";
+  /** Where it was first seen: a source operation, or (for `STATIC`) a jar class. */
+  context: string | null;
+  count: LongString;
+}
+
+/** What `updateExtension`'s patch can ask for. */
+export type ExtensionAction = "install" | "update" | "uninstall";
+
+/** The package of upstream's fake "Local source" extension (manga, source id 0): built in, not from a repo. */
+export const LOCAL_SOURCE_PKG = "eu.kanade.tachiyomi.source.local";
+
 /** `ExtensionType`: an extension listed by a repo, installed or not. */
 export interface Extension {
   pkgName: string;
@@ -112,6 +133,14 @@ export interface Extension {
   /** The verified signing-certificate hash; null until installed. */
   signatureHash: string | null;
   isTrusted: boolean;
+  /** Empty for an extension that hasn't run (and after a backend restart, for runtime issues). */
+  compatIssues: ExtensionCompatIssue[];
+}
+
+/** `TrustedSignatureType`, as `trustExtension` returns it. */
+export interface TrustedSignature {
+  hash: string;
+  origin: "STORE" | "USER";
 }
 
 /** `InstallState` of `extensionInstallProgress`. */
