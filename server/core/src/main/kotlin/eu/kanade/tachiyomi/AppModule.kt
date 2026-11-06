@@ -52,7 +52,11 @@ fun createAppModule(app: Application): Module {
 //
 //        addSingletonFactory { LibrarySyncManager(app) }
 
-        single<Json> {
+        // Madoyomi: a new instance per injection (upstream: single). A Json instance caches a schema per serial
+        // descriptor it decodes with (DescriptorSchemaCache, strongly held), and extensions inject this one: the shared
+        // instance kept every extension's descriptors, and with them its class loader after uninstall (Phase 2 §10,
+        // Stage 6). Each extension (and each host user) now has its own, which goes with it
+        factory<Json> {
             Json {
                 ignoreUnknownKeys = true
                 explicitNulls = false

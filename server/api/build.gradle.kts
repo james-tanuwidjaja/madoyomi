@@ -63,6 +63,8 @@ tasks {
             showStandardStreams = false
             events("passed", "skipped", "failed")
         }
+        // as the server jar's manifest (Add-Opens), for madoyomi.core.extension.ExtensionThreads
+        jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED")
         // the same data root setup as core's tests, under api/build
         systemProperty(
             "madoyomi.config.server.rootDir",
@@ -84,6 +86,8 @@ tasks {
                 "Implementation-Version" to getTachideskRevision(),
                 "Multi-Release" to true, // needed for polyglot
                 "X-JBR-Release" to webviewJbrRelease,
+                // Madoyomi: unload reads the Runnable of a thread an extension left running (ExtensionThreads)
+                "Add-Opens" to "java.base/java.lang java.base/java.util.concurrent",
             )
         }
         archiveBaseName.set(rootProject.name)

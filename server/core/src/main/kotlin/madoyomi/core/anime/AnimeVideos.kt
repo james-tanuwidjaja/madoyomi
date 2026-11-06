@@ -110,7 +110,9 @@ object AnimeVideos {
         val (source, episode) = sourceAndEpisode(episodeId)
         val hosters = hostersOf(source, episode)
         val fetch = Fetch(source, hosters, arrayOfNulls(hosters.size))
-        synchronized(cache) { cache[episodeId] = fetch }
+        // only while the source is still the live one: an unload between getting it and here has already run
+        // dropStale, and the fetch would keep the unloaded extension's class loader
+        synchronized(cache) { if (AnimeGetSource.cached(source.id) === source) cache[episodeId] = fetch }
         return coroutineScope {
             hosters.indices.map { index -> async { loadHoster(fetch, index, force = false) } }.awaitAll()
         }

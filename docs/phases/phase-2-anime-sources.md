@@ -73,8 +73,13 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 ### API surface
 - [x] Package layout matches `extensions-lib` exactly (the Aniyomi app's `source-api`, ported in Phase 1. `ExtensionLinkCheck` resolves every reference into the API of AnimeGG (lib 14) and AnimePahe (lib 16); Stage 1, §10)
 - [x] `SAnime`, `SEpisode`, `Video`, `Track`, `AnimesPage` (every field is stored or mapped by the Stage 3 services: `ANIME`/`EPISODE` since M0071, `Video` with headers, subtitle and audio tracks, timestamps and mpv args; AnimeGG end to end through them, §10)
-- [ ] `AnimeSource`, `AnimeCatalogueSource`, `AnimeHttpSource`, `ParsedAnimeHttpSource`
-- [ ] `ConfigurableAnimeSource`, `AnimeSourceFactory`
+- [x] `AnimeSource`, `AnimeCatalogueSource`, `AnimeHttpSource`, `ParsedAnimeHttpSource` (Stage 6):
+  - all 20 of the top 20 are `AnimeHttpSource`s (`compat-scan.md`, "Extension API classes used"), and 18 of them pass the whole chain in the harness;
+  - none extends `ParsedAnimeHttpSource`, so `ParsedAnimeHttpSourceTest` runs a selector-based source through browse (popular, latest, search), details with episodes, and videos against a loopback site;
+  - `AnimeSource`/`AnimeCatalogueSource` are the services' fakes (`FakeAnimeSource`, `AnimeExtensionLoaderTest`)
+- [x] `ConfigurableAnimeSource`, `AnimeSourceFactory` (Stage 6):
+  - all 20 are configurable, and 19 round-trip a preference live (`anime-compat.md`; hentaihaven has none to change);
+  - streamingcommunity, the one factory, gives 4 sources, which the harness and `AnimeRoundTripApiTest` change one by one
 - [x] Source loading + stable source IDs (trusted extensions load at install, at trust and on first use, behind `ExtensionLoadGate`; `ANIME_SOURCE` is reconciled with the live sources. IDs come from the extension: `AnimeHttpSource.generateId`, MD5 of `name/lang/versionId`, e.g. AnimeGG `2247987965040486818`. Stage 1, §9)
 - [x] Suspend and legacy `fetch*` APIs (as needed for the pinned version). One surface, the newest (lib 17), which keeps every lib-14/16 member; it is link-checked against both generations (§9)
 
@@ -82,7 +87,7 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 - [x] Anime-specific stubs added (`SharedPreferences`, `Context`, `Uri`, `Base64`, `Log`, …). The static scan over the top 20 finds no missing class or member. The remaining `"Stub!"`s are in the deep-link `UrlActivity`, one WebView SSL callback (hanime) and `EditTextPreference` binder code: `OnBindEditTextListener` bodies (checked with jadx in AnimePahe and StreamingCommunity) and the `TextWatcher`s they install (the others). Madoyomi never runs any of these (Stage 2, §10). The `androidx.preference` value accessors are implemented; runtime confirmation comes from the Stage 5 harness
 - [x] Missing class/method logger (`ExtensionCompatLog`: class-loader hook, `AnimeSourceCalls` → `EXTENSION_INCOMPATIBLE`, link-check install warnings; Stage 2, §9. On GraphQL as `extension.compatIssues` since Stage 4)
 - [x] Shared OkHttp client, cookie jar, rate limiting (`AnimeExtensionRuntimeTest`: AnimeGG's client is `NetworkHelper`'s, with its cookie jar shared with `android.webkit.CookieManager` both ways; `rateLimit` keeps the jar)
-- [ ] Cloudflare/WebView shim reachable from anime sources
+- [ ] Cloudflare/WebView shim reachable from anime sources. **Deferred** (the "measure first" decision, §9 Stage 5): 1 of the top 20 is Cloudflare-blocked (animepahe), and 18/20 pass without a solver. Its WebView bypass runs and gives up (no KCEF). In the manga sample, comix needs a real WebView too (`manga-compat.md`, WEBVIEW). Left open; a later phase decides KCEF or FlareSolverr
 - [x] Injekt/`NetworkHelper` lookups resolved (the extension's own `injectLazy<NetworkHelper>()` gets the app's instance; same test)
 
 ### Filters & preferences
@@ -105,9 +110,14 @@ Make installed Aniyomi extensions work: implement the `animesource` API surface 
 
 ## 6. Exit criteria
 
-- [x] At least 18 of the top 20 yuzono extensions pass popular → details → episodes → videos (extensions that are broken upstream are excluded and listed). **18 of 20** on 2026-11-06 (`docs/research/anime-compat.md`), with resolve too, and no exclusion needed. The two failures are animepahe (Cloudflare) and hentaihaven (its video host is unreachable).
-- [ ] Filters and preferences round-trip through the API for at least 3 extensions that use them.
-- [ ] No regression in manga sources.
+- [x] At least 18 of the top 20 yuzono extensions pass popular → details → episodes → videos (extensions that are broken upstream are excluded and listed). **18 of 20** on 2026-11-06 (`docs/research/anime-compat.md`), with resolve too, and no exclusion needed. The two failures are animepahe (Cloudflare) and hentaihaven (its video host is unreachable). The same 18 of 20 in Stage 6's final run (2026-11-06 20:18), with the leak fixes in.
+- [x] Filters and preferences round-trip through the API for at least 3 extensions that use them (Stage 6):
+  - `AnimeRoundTripApiTest`, offline: every filter of kickassanime (81 changes), aniwave (112) and hanime (220, with a sort and tri-states) goes through `fetchSourceAnime(SEARCH)` and reaches the source with exactly those states. A preference change of AnimePahe, streamingcommunity (4 sources), hanime and kickassanime goes through `updateAnimeSourcePreference` and is read back from the re-instantiated source;
+  - live, in the harness: a preference round-trip in 19 of 20 extensions (22 of 23 sources), and a filtered search answered by 18 of 18 extensions with filters.
+- [x] No regression in manga sources (Stage 6):
+  - `tools/smoke-api.ps1`'s MangaPill chain passes (24 of 24 steps);
+  - the manga sample passes 9 of 10 through popular, details + chapters, pages and the page image (`docs/research/manga-compat.md`), with 0 failures that are Madoyomi's. comix needs a real WebView (KCEF is off since Phase 1; deferred with the shim above);
+  - every class of the sample verifies after the repair (`compat-scan.md`: 0 verify errors, 0 unrepaired).
 
 ## 7. Risks & notes
 
@@ -153,6 +163,11 @@ Each stage ends in something verifiable and a commit:
    - the one-JVM verdict;
    - the remaining API-surface checklist items;
    - docs closed.
+   - *Done* (2026-11-06):
+     - the extension class loaders alive after uninstalling the top 20 went from 15 to 1, explained in §10;
+     - both repair patterns are fixed;
+     - every exit criterion passes: 18/20, filters and preferences through the API, no manga regression;
+     - one JVM stays. **Phase 2 is done.** The Cloudflare/WebView shim stays deferred (§5).
 
 ## 9. Decision record
 
@@ -234,6 +249,21 @@ Stage 5 (compat harness):
 | **A Cloudflare challenge is `SOURCE_FAILED` with `details.reason = "CLOUDFLARE"`** (`ErrorClassifier`; upstream's `CloudflareInterceptor` message, matched as a constant). | It was `INTERNAL`, a server fault. The site blocked the request, and the UI can say so. |
 | **Cloudflare outcome** (the phase-wide "measure first"): 1 of the top 20 is blocked (animepahe), and the harness passes 18/20 without a solver. Cloudflare-blocked sources are listed as "needs Cloudflare solver" and **deferred**, so there is no Stage 5b. | The decision rule of 2026-11-04: a solver only if Cloudflare pushes the result below 18/20. Cloudflare serves 19 of the 20 sites (rule34video uses DDoS-Guard), and PowerShell's probe gets a challenge on three (animepahe, missav, hentaihaven). Only animepahe challenges the extension's OkHttp, though. |
 | **Dropping a source drops what is cached for it:** `AnimeGetSource`'s unregister paths call `AnimeVideos.dropStale()`. | The harness found 18 of 20 extension class loaders alive after uninstalling all of them, and the kept video fetches held them (§10). |
+
+Stage 6 (fix round):
+
+| Decision | Why |
+|---|---|
+| **Unload stops the threads an extension left running** (`ExtensionThreads`; user decision 2026-11-06: interrupt and log, nothing forced).<br>• A thread is the extension's when its class, `Runnable`, context class loader or a stack frame comes from its loader, or it is a worker of a JDK pool whose thread factory does.<br>• The extension's own pool is shut down; every other thread is interrupted.<br>• A thread still alive after 500 ms gets the sockets its `Runnable` holds closed.<br>• A thread still running after that is left alone and logged. | A live thread keeps its extension's class loader until the process ends. The ones found were all blocked where an interrupt doesn't reach: NanoHTTPD's `accept()` (missav, onetwothreeanime, reanime, streamingcommunity bundle their own) and an idle pool's `take()` (streamingcommunity). Closing what the thread's own objects hold is what the extension's `stop()` would do. |
+| **Extension class loaders are named** (`madoyomi-extension-<n>`), and stack frames are matched by the loader's name. | R8's short class names (`w2`, `v7`) repeat across extensions. Matching frames by class name stopped other extensions' threads in the first try. |
+| **Inherited access-control contexts are dropped**:<br>• `AnimeSourceCalls`' pool threads are created privileged;<br>• at every unload, every live thread's inherited context is cleared, when no SecurityManager is installed;<br>• the shared OkHttp pool's idle connections are evicted. | A thread, and a TLS connection, keeps the access-control context of the stack that created it: the protection domain of every extension frame on it, and so that loader. A pool thread that once ran kickassanime started reanime's server, which then kept kickassanime. JDK 21 uses the context only under a SecurityManager, which Madoyomi never installs. |
+| **`Json` is a factory in Injekt**, not a singleton (a `// Madoyomi:` edit in `AppModule`). | A `Json` instance caches a schema per serial descriptor it decodes, strongly. The shared one held every extension's descriptors, which was 4 of 5 loaders in one heap dump. Each user now has its own instance. |
+| **Weak preference listeners** (`JavaSharedPreferences`, as Android's `SharedPreferencesImpl`); a lazy load that an unload overtook registers nothing (`AnimeGetSource.unloadCount`); a fetch of a source unloaded meanwhile isn't kept; a manga source's cached preference screen and filter list go at unload. | Each held the extension's objects for the process's lifetime, or could put an unloaded extension back. |
+| **The server jar opens `java.lang` and `java.util.concurrent`** to itself (`Add-Opens` in its manifest, `--add-opens` in the tests). | Reading a thread's `Runnable`, a pool worker's pool and a thread's inherited context needs them. A launch without `-jar` must pass them (`server/UPSTREAM.md`, "Startup contract"); without them the stop is interrupt-only. |
+| **`tools/compat-test/lib/HprofLoaderRoots.java`**, a dependency-free HPROF reader. The harness takes a heap dump and reports each kept loader's nearest holder when loaders are still alive after the uninstall and an idle wait (`-SettleSec`). | No heap analyser is installed. A JDK 21 single-file program needs no build, and the next leak is diagnosed by the same run that finds it. |
+| **Two more `Dex2jarRepair` patterns** (mangadex; mangafire, comix, mangakakalot):<br>• a constructor's super call that skips its direct superclass is rewritten to it, and the superclass gets the constructor back;<br>• a `new T` that dex2jar left unfolded before `S.<init>` gets its call rewritten to `T.<init>`. | They are the same R8 constructor removal seen from the subclass, and the same `new` site in dex2jar's other output form. The manga sample now verifies with 0 errors. |
+| **Filters and preferences are verified through GraphQL offline** (`AnimeRoundTripApiTest`), and live in the harness (one preference round-trip per configurable source, one filtered search per extension), neither counted in its pass. | The exit criterion asks for the API. The offline test checks every state reaching the source, and the live steps show the site accepts a filtered request. |
+| **Manga regression check: the harness's manga mode** (`run-compat.ps1 -Kind Manga`, the 10-extension Keiyoushi sample through upstream's manga API into `docs/research/manga-compat.md`; user decision 2026-11-06), plus the smoke test's MangaPill chain. A regression is a failure that is Madoyomi's (`HOST_GAP`, `INTERNAL`, `JVM_ABORT`). | Phase 1 only ran MangaPill. The sample is what users install, and the Stage 2 scan already showed repair gaps there. |
 
 ## 10. Findings log
 
@@ -382,6 +412,54 @@ Stage 5 (compat harness):
 - **Class loaders survive uninstall.**
   - Run 1: after uninstalling all 20, 18 extension class loaders were still alive after a full GC, and 46 classes were unloaded. The two that were collected (animepahe, anizone) are the two that never reached videos: `AnimeVideos` kept the last fetch, and so the source, for up to 10 minutes. Fixed (`AnimeGetSource` drops the fetches with the source; `AnimeVideosTest` checks that a dropped source is collected).
   - Run 2: 15 alive, 253 classes unloaded. **Other holders remain**, about 1.2 MB of metaspace per extension that isn't unloaded.
-  - Not a crash risk; it matters for uninstall and update over a long session. Finding the holders (a heap dump: thread context class loaders of extension-started threads, Injekt, static caches) is Stage 6.
+  - Not a crash risk; it matters for uninstall and update over a long session. The holders were found and fixed in Stage 6 (below): 1 loader left.
 - **Runtime compat issues: none.** The compat log only has the static `STUB`s of the scan (the `EditTextPreference` dialog), and no extension hit a missing class or member at runtime.
 - **Harness gotcha.** PowerShell variables are case-insensitive, so the script's `$results` was its `[string]$Results` parameter, and `+=` concatenated the result objects into one string (the first trial). Renamed `$extResults`.
+
+**2026-11-06: fix round (Stage 6).** The final run is `docs/research/anime-compat.md` (20:18, 12.6 min with a 330 s idle wait at the end). The manga sample is `docs/research/manga-compat.md`, and the scan `docs/research/compat-scan.md`.
+
+| | Stage 5, run 2 | Stage 6 final run |
+|---|---|---|
+| Pass, whole chain incl. resolve | 18 of 20 | **18 of 20** (the same two failures) |
+| Preference round-trip (live) | - | 19 of 20 extensions, 22 of 23 sources (hentaihaven has nothing to change) |
+| Filtered search (live) | - | 18 of 18 extensions with filters |
+| Extension class loaders alive after uninstalling all 20 | 15 (1402 classes) | **1** (reanime, 240 classes), the same after 330 s |
+| Classes unloaded | 253 | 1637 |
+| Live heap: baseline → 20 installed → all uninstalled | 102 → 122 → 113 MB | 101 → 124 → 110 MB |
+| OS threads: peak / after the idle wait | 239 / 195 | 238 / 81 |
+| JVM aborts, hs_err, OutOfMemoryError, exit code | none, none, 0, 0 | none, none, 0, 0 |
+
+- **What kept the class loaders, from heap dumps** (`tools/compat-test/lib/HprofLoaderRoots.java`, the shortest strong path from a GC root). The repro was 3, then 6, then 2 extensions on the jar; each fix was confirmed by the next dump.
+
+  | Holder | Kept | Fix |
+  |---|---|---|
+  | NanoHTTPD listener threads, blocked in `accept()`. missav, onetwothreeanime, reanime and streamingcommunity bundle their own R8-renamed copy, so tracking Madoyomi's `HttpServer` wouldn't see them | its own loader | `ExtensionThreads`: interrupt, then close the server socket the thread's `Runnable` holds |
+  | streamingcommunity's own `ThreadPoolExecutor` (`streamingunity-subs`), idle in `take()` | its own | the pool is shut down when its thread factory is the extension's |
+  | `Thread.inheritedAccessControlContext` of a thread created with an extension's frames on the stack: a source-pool thread, which then started reanime's server (holding kickassanime), and a `DefaultDispatcher` worker (holding reanime) | another extension's loader too | pool threads created privileged; every live thread's inherited context cleared at unload |
+  | the Injekt `Json` singleton's `DescriptorSchemaCache`, keyed by each extension's serial descriptors | 4 of 5 in one dump | `Json` is a factory: each injection gets its own instance |
+  | idle pooled HTTP/2 connections: the TLS context captured the handshake's access-control context | for up to OkHttp's 5-minute keep-alive | the shared pool's idle connections are evicted at unload |
+  | (found reading the code, not in a dump) an extension's preference listeners in `JavaSharedPreferences`; a lazy load overtaken by an uninstall; a video fetch stored after `dropStale`; a manga source's cached preference screen and filter list | | weak listeners as on Android; `unloadCount`; a re-check; dropped at unload |
+
+  - The first try matched stack frames by class name, and R8's names repeat across extensions (`w2`, `v7`), so one extension's uninstall stopped another's threads. Loaders are named now, and frames are matched by the loader's name.
+- **The one left: reanime.** Its last holder is an OkHttp HTTP/2 reader thread (`OkHttp streamwish.com`, one of its video hosters). The connection's TLS context has reanime's protection domain.
+  - It was still alive 330 s after the uninstall, past OkHttp's 5-minute keep-alive, and the eviction at unload didn't close it. So it isn't idle: most likely a stream reanime's proxy opened and never closed when its server stopped. It may also belong to a client of reanime's own (its own connection pool).
+  - This is the extension's own connection. Closing a busy connection could break another extension's request to the same host, so it is left. The cost is 240 classes, about 1.2 MB of metaspace, until restart. The tests: `ExtensionLifecycleTest` checks that the class loaders of an uninstalled AnimeGG and MangaPill are collected, and `ExtensionThreadsTest` covers each kind of thread.
+- **Threads stopped at the final run's uninstall** (server log):
+  - 4 NanoHTTPD listeners (missav, onetwothreeanime, reanime, streamingcommunity), closed through their sockets;
+  - streamingcommunity's pool (4 workers), shut down;
+  - no thread left running, and no other extension's thread touched.
+- **Dex2jarRepair.** Both patterns of Stage 2 are fixed, and the scan shows 0 verify errors and 0 unrepaired sites over all 30 APKs (`Dex2jarRepairCompatTest` on the four).
+  - mangadex: 8 constructors whose super call skipped `u` (R8 removed `u.<init>()V`), now rewritten to `u.<init>`, and `u` gets it back.
+  - mangafire, comix, mangakakalot: dex2jar's `NewTransformer` had kept `new T` and named only `S` in the `<init>` call (javap: `new n0` … `invokespecial Object.<init>`); the call is rewritten to `T.<init>`.
+  - The manga sample with no reachable issue and no verify error went from 6 to 7 of 10. mangadex, mangafire and comix still have their UI or WebView stubs.
+- **Extension API classes used** (scan): every one of the top 20 is a plain `AnimeHttpSource` and every one is a `ConfigurableAnimeSource`; streamingcommunity is the only `AnimeSourceFactory`, and none uses `ParsedAnimeHttpSource` (AnimeGG doesn't either). The manga sample: 10 `HttpSource`, 8 `ConfigurableSource`, 4 `SourceFactory`, no `ParsedHttpSource`.
+- **Manga sample, live** (`run-compat.ps1 -Kind Manga`, 1.3 min):
+  - 9 of 10 pass through popular, details + chapters, pages and the first page image through the server;
+  - every extension loader was collected after the uninstall (0 alive, 705 classes unloaded);
+  - comix fails at popular with "CEF is disabled". It renders comix.to in an `android.webkit.WebView`, and the sidecar runs with KCEF off (phase-1 sidecar defaults). Triaged `webview` and deferred with the shim, not counted as a regression.
+- **Filters and preferences.** The API test sends every filter state of the three extensions through GraphQL. hanime's sort and 64 tri-states included, all arrive exactly. The live preference step changed list values (mirror, quality, title language) and switches (rule34video's `uploader_filter_enabled`), and each was read back from a new instance.
+- **One JVM: the verdict (phase-1 §8).** Over two full runs (Stage 5 and Stage 6) the top 20 ran in one JVM with no abort, no hs_err and no OutOfMemoryError. The live heap stayed within about 25 MB of the baseline, and threads went back to baseline after the idle wait. The uninstall leak is fixed down to one connection the extension keeps open. **One JVM stays; no process isolation.**
+- **Gotchas.**
+  - A non-capturing Kotlin lambda is a cached singleton, so a "can this listener be collected?" test needs a capturing one.
+  - GraphQL union fields (`name` on `Filter`) only work inside `... on` fragments.
+  - In PowerShell, the harness's `$tries` local was its own `-Tries` parameter again (renamed `$attempt`).

@@ -7,14 +7,17 @@ package madoyomi.core.extension
 
 import de.neonew.exposed.migrations.loadMigrationsFrom
 import de.neonew.exposed.migrations.runMigrations
+import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import madoyomi.core.anime.AnimeFilters
 import madoyomi.core.anime.AnimeGetSource
 import madoyomi.core.anime.AnimeSourceAccess
+import madoyomi.core.anime.AnimeSourcePreferences
 import madoyomi.core.anime.model.table.AnimeSourceTable
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
@@ -41,6 +44,9 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.io.TempDir
 import suwayomi.tachidesk.graphql.types.DatabaseType
+import suwayomi.tachidesk.manga.impl.Search
+import suwayomi.tachidesk.manga.impl.Source
+import suwayomi.tachidesk.manga.impl.util.ChildFirstURLClassLoader
 import suwayomi.tachidesk.manga.impl.util.PackageTools
 import suwayomi.tachidesk.manga.impl.util.source.GetSource
 import suwayomi.tachidesk.manga.model.table.ExtensionTable
@@ -51,6 +57,7 @@ import suwayomi.tachidesk.server.serverConfig
 import suwayomi.tachidesk.test.ApplicationTest
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.lang.ref.WeakReference
 import java.nio.file.Path
 import java.util.UUID
 import kotlin.io.path.ExperimentalPathApi
@@ -785,6 +792,59 @@ class ExtensionLifecycleTest {
         assertFalse(ExtensionFiles.pkgDir(ExtensionKind.ANIME, apk.pkg).exists())
         assertFalse(row(apk.pkg)!![ExtensionTable.isInstalled])
         assertEquals(ErrorCode.INSTALL_FAILED, failure { lifecycle.uninstall(apk.pkg, ExtensionKind.ANIME) }.code)
+    }
+
+    /**
+     * Installs AnimeGG and uses it offline the way the API does (live source, filters, preferences), plus a preference
+     * change listener that keeps the source, as an extension's own listener keeps its code. Returns references to the
+     * source and its class loader only, so nothing on the caller's stack keeps them.
+     */
+    private fun installAndUseAnimeGG(apk: TestApks.Apk): Pair<WeakReference<Any>, WeakReference<ClassLoader>> {
+        run { lifecycle.install(apk.pkg, ExtensionKind.ANIME) }
+        val source = run { AnimeGetSource.getSource(ANIMEGG_SOURCE) }
+        assertTrue(AnimeFilters.filtersOf(source).isNotEmpty())
+        run { AnimeSourcePreferences.preferences(ANIMEGG_SOURCE) }
+        (source as ConfigurableAnimeSource).getSourcePreferences().registerOnSharedPreferenceChangeListener { _, _ -> source.name }
+        assertTrue(source.javaClass.classLoader is ChildFirstURLClassLoader)
+        return WeakReference<Any>(source) to WeakReference(source.javaClass.classLoader)
+    }
+
+    @Test
+    fun `an uninstalled anime extension's class loader can be collected`() {
+        val apk = TestApks.apk(TestApks.ANIMEGG)
+        addRepo(
+            repo(ExtensionKind.ANIME, apk.hash),
+            TestRepo.Entry(apk, sources = listOf(ListingSource(7777, "AnimeGG", "en", "https://x"))),
+        )
+        val (source, loader) = installAndUseAnimeGG(apk)
+
+        run { lifecycle.uninstall(apk.pkg, ExtensionKind.ANIME) }
+
+        // what the compat harness counts after uninstalling (jcmd VM.classloader_stats): nothing may keep it
+        GcAssert.assertCollected(source, "nothing keeps the uninstalled source")
+        GcAssert.assertCollected(loader, "nothing keeps the uninstalled extension's class loader (and its classes)")
+    }
+
+    /** Installs MangaPill and uses it as upstream's API does (preferences, the cached filter list); refs only. */
+    private fun installAndUseMangaPill(apk: TestApks.Apk): Pair<WeakReference<Any>, WeakReference<ClassLoader>> {
+        run { lifecycle.install(apk.pkg, ExtensionKind.MANGA) }
+        val sourceId = mangaSources(apk.pkg).first()[SourceTable.id].value
+        val source = run { GetSource.getSourceOrNull(sourceId) }!!
+        run { Source.getSourcePreferencesRaw(sourceId) }
+        run { Search.getFilterList(sourceId, reset = false) }
+        return WeakReference<Any>(source) to WeakReference(source.javaClass.classLoader)
+    }
+
+    @Test
+    fun `an uninstalled manga extension's class loader can be collected`() {
+        val apk = TestApks.apk(TestApks.MANGAPILL)
+        addRepo(repo(ExtensionKind.MANGA, apk.hash), TestRepo.Entry(apk))
+        val (source, loader) = installAndUseMangaPill(apk)
+
+        run { lifecycle.uninstall(apk.pkg, ExtensionKind.MANGA) }
+
+        GcAssert.assertCollected(source, "nothing keeps the uninstalled source")
+        GcAssert.assertCollected(loader, "nothing keeps the uninstalled extension's class loader (and its classes)")
     }
 
     @Test

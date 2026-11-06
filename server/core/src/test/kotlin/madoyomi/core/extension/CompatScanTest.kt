@@ -157,6 +157,7 @@ class CompatScanTest {
             )
             appendLine()
             perExtension(scanned, ok)
+            apiUse(ok)
             byClass(ok)
             byTarget(ok)
             verifyErrors(ok)
@@ -211,6 +212,34 @@ class CompatScanTest {
                 .filter { report.onlyFromActivities(it) != reachable }
                 .map { Use(it.kind, it.target, s, it.referencedFrom) }
         }
+
+    /**
+     * Which classes of the extension API the extensions' own classes extend or implement directly (a multisrc
+     * theme's base class counts for the extension that bundles it): the API surface the checklist ticks rest on.
+     */
+    private fun StringBuilder.apiUse(ok: List<Scanned>) {
+        val anime =
+            listOf("AnimeCatalogueSource", "AnimeHttpSource", "ParsedAnimeHttpSource", "ConfigurableAnimeSource", "AnimeSourceFactory")
+        val manga = listOf("CatalogueSource", "HttpSource", "ParsedHttpSource", "ConfigurableSource", "SourceFactory")
+        appendLine("## Extension API classes used")
+        appendLine()
+        appendLine(
+            "Supertypes the extension's own classes declare directly, so a class reached only through another one " +
+                "(an `AnimeHttpSource` subclass is also an `AnimeCatalogueSource`) is not repeated.",
+        )
+        appendLine()
+        appendLine("| List | Class | Extensions | Which |")
+        appendLine("|---|---|---|---|")
+        listOf("top20" to anime, "manga" to manga).forEach { (list, names) ->
+            val inList = ok.filter { (if (it.listed.isAnime) "top20" else "manga") == list }
+            names.forEach { name ->
+                val users =
+                    inList.filter { s -> s.supertypes.values.any { types -> types.split(", ").any { it == name } } }
+                appendLine("| $list | `$name` | ${users.size} of ${inList.size} | ${users.joinToString { short(it.listed.pkg) }} |")
+            }
+        }
+        appendLine()
+    }
 
     private fun StringBuilder.byClass(ok: List<Scanned>) {
         appendLine("## By class")

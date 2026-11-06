@@ -16,6 +16,7 @@ import madoyomi.core.extension.ExtensionCompatLog
 import madoyomi.core.extension.ExtensionFiles
 import madoyomi.core.extension.ExtensionIncompatibility
 import madoyomi.core.extension.ExtensionLoadGate
+import madoyomi.core.extension.ExtensionThreads
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.eq
@@ -32,6 +33,7 @@ import suwayomi.tachidesk.server.database.dbTransaction
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ExecutionException
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.io.path.absolutePathString
 import kotlin.io.path.exists
 
 /**
@@ -54,13 +56,26 @@ object AnimeExtensionLoader {
                     "The jar of $pkg is missing; reinstall the extension",
                     mapOf("pkgName" to pkg),
                 )
+        val extensionId = extension[ExtensionTable.id].value
+        // an uninstall or update that unloads the extension while this load runs wins: see the activate below
+        val unloadsBefore = AnimeGetSource.unloadCount(extensionId)
         ExtensionLoadGate.permit(jar, extension[ExtensionTable.signatureHash])
         val className = extension[ExtensionTable.classFQName]
         val sources =
             PackageTools.blockJarUsageWhile(listOf(jar)) { loadSources ->
                 instantiate(pkg, className) { loadSources(jar, it) }
             }
-        activate(extension[ExtensionTable.id].value, sources, extension[ExtensionTable.contentWarning])
+        if (!activate(extensionId, sources, extension[ExtensionTable.contentWarning], ifUnloadCount = unloadsBefore)) {
+            // unloaded meanwhile: drop what this load created (its class loader too, if the unload had already
+            // closed the one before), so nothing of the old code stays registered or loaded. Only that loader: a
+            // reinstall of the same version uses the same jar path
+            val loader = sources.firstOrNull()?.javaClass?.classLoader as? java.net.URLClassLoader
+            if (loader != null && PackageTools.jarLoaderMap.remove(jar.absolutePathString(), loader)) {
+                ExtensionThreads.stop(loader, pkg)
+                loader.close()
+            }
+            throw MadoyomiException(ErrorCode.NOT_FOUND, "$pkg was uninstalled or updated while it loaded", mapOf("pkgName" to pkg))
+        }
         logger.info { "Loaded anime extension $pkg: ${sources.joinToString { "${it.name} (${it.id})" }}" }
         return sources
     }
@@ -108,14 +123,16 @@ object AnimeExtensionLoader {
     /**
      * Caches [sources] (all of the extension [extensionId]) in [AnimeGetSource], reconciles `ANIME_SOURCE` with them
      * (rows the extension no longer provides go, new ones are added, the rest updated) and marks the extension
-     * loaded. The anime counterpart of upstream's `Extension.setupJar` reconcile.
+     * loaded. The anime counterpart of upstream's `Extension.setupJar` reconcile. With [ifUnloadCount] (see
+     * [AnimeGetSource.register]) nothing happens, and false is returned, when the extension was unloaded meanwhile.
      */
     fun activate(
         extensionId: Int,
         sources: List<AnimeSource>,
         contentWarning: Int,
-    ) {
-        AnimeGetSource.register(extensionId, sources)
+        ifUnloadCount: Long? = null,
+    ): Boolean {
+        if (!AnimeGetSource.register(extensionId, sources, ifUnloadCount)) return false
         dbTransaction {
             val live = sources.associateBy { it.id }
             val inDb =
@@ -161,6 +178,7 @@ object AnimeExtensionLoader {
                 it[isLoaded] = true
             }
         }
+        return true
     }
 
     private fun baseUrlOf(source: AnimeSource): String? =

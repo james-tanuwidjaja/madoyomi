@@ -1,8 +1,12 @@
-# Manual triage of the compat harness's failures (tools/compat-test/run-compat.ps1), merged into docs/research/anime-compat.md.
+# Manual triage of the compat harness's failures (tools/compat-test/run-compat.ps1), merged into docs/research/anime-compat.md and manga-compat.md.
 # columns: extension (short name or package) <TAB> verdict <TAB> note
 # verdicts: host-gap (ours to fix), upstream-broken (the extension no longer matches its site; broken in Aniyomi too),
 #   cloudflare (needs a Cloudflare solver), site-down (DNS, connection or 5xx at the site), source-error (not narrowed down),
+#   webview (renders in a real WebView, which the sidecar runs without: KCEF is off),
 #   or - (keep the automatic class, just add the note).
-# Redraw the report after an edit: .\tools\compat-test\run-compat.ps1 -ReportOnly
+# Anime and manga share this file (run-compat.ps1 -Kind Manga), keyed by the short name.
+# Redraw a report after an edit: .\tools\compat-test\run-compat.ps1 [-Kind Manga] -ReportOnly
+un-compat.ps1 [-Kind Manga] -ReportOnly
 animepahe	cloudflare	The site answers OkHttp with a Cloudflare challenge (403, Server: cloudflare); the extension's own WebView bypass gives up after about 60 s and upstream's CloudflareInterceptor has no solver (FlareSolverr off). Needs a Cloudflare solver; deferred (Phase 2 section 9, Stage 5).
 hentaihaven	site-down	Browse and details work (OkHttp gets past the site's Cloudflare, PowerShell's probe doesn't). Its only hoster, Octopus, needs octopusmanifest.org, which resolves (195.16.73.90) but refuses TCP 443 from this network (Test-NetConnection, 2026-11-06): the video host is down or blocked here. Not a Madoyomi gap.
+comix	webview	Popular already needs a real WebView: the extension renders comix.to in an android.webkit.WebView (laid out, drawn into a VirtualDisplay/ImageReader, sent MotionEvents; Phase 2 section 10, Stage 2), and the sidecar runs with KCEF off (phase-1 sidecar defaults), so CEFManager answers "CEF is disabled". Deferred with the WebView/Cloudflare shim; even with KCEF, the VirtualDisplay, ImageReader and MotionEvent calls are android-jar stubs (compat-scan.md). Not a regression of the manga API.

@@ -40,7 +40,9 @@ object Search {
         return searchManga.processEntries(sourceId)
     }
 
-    private val filterListCache = mutableMapOf<Long, FilterList>()
+    // Madoyomi: internal (upstream: private), so an unload can drop a source's list (ExtensionUnloader): it is the
+    // extension's objects and would keep its class loader after uninstall
+    internal val filterListCache = mutableMapOf<Long, FilterList>()
 
     private fun getFilterListOf(
         source: Source,
