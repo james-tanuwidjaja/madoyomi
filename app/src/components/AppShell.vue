@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { ToggleGroupItem, ToggleGroupRoot } from "reka-ui";
 import type { AcceptableValue } from "reka-ui";
@@ -25,18 +25,34 @@ const items: { id: NavItem; label: string; to: string }[] = [
 ];
 const settings = { id: "settings" as const, label: "Settings", to: "/settings" };
 
-const active = computed(() => route.meta.nav);
+// The section of the last page that has one of its own. A details page opened from Browse keeps Browse marked rather
+// than jumping to Library (found in the exit run, §10); opened directly, it marks its default.
+const lastSection = ref<NavItem | undefined>();
+watch(
+  () => route.meta,
+  (meta) => {
+    if (!meta.navFromPrevious) lastSection.value = meta.nav;
+  },
+  { immediate: true },
+);
+const active = computed(() =>
+  route.meta.navFromPrevious ? (lastSection.value ?? route.meta.nav) : route.meta.nav,
+);
 
 function onKind(value: AcceptableValue | AcceptableValue[]) {
   // A single toggle group can be emptied by clicking the active item; the switch always has one kind.
   if (value === "anime" || value === "manga") mediaKind.set(value as MediaKind);
 }
 
-// A route of one kind (a details page, a source) doesn't fit the other kind: go to its section's list.
+// A route of one kind (a details page, a source) doesn't fit the other kind: go to its section's list, the one the
+// sidebar marks.
 watch(
   () => mediaKind.kind,
   (kind) => {
-    const target = route.meta.kindScopedTo;
+    let target = route.meta.kindScopedTo;
+    if (route.meta.navFromPrevious) {
+      target = [...items, settings].find((i) => i.id === active.value)?.to ?? target;
+    }
     const routeKind = route.meta.kind;
     if (target && routeKind !== kind) void router.push(target);
   },

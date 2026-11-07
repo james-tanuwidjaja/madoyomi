@@ -100,15 +100,18 @@ class ApplicationDirs(
     val automatedBackupRoot
         get() = serverConfig.backupPath.value.ifBlank { "$dataRoot/backups" }
 
-    val tempThumbnailCacheRoot = "$tempRoot/thumbnails"
-    val tempMangaCacheRoot = "$tempRoot/manga-cache"
+    // Madoyomi: both caches name their files by database id (`<mangaId>.jpg`, `anime-<id>.jpg`, chapter dirs), so they
+    // live in the data dir, next to the database whose ids they use (upstream: `$tempRoot/thumbnails` and
+    // `$tempRoot/manga-cache`, shared by every data dir: a fresh database showed another one's covers).
+    val tempThumbnailCacheRoot = "$dataRoot/cache/thumbnails"
+    val tempMangaCacheRoot = "$dataRoot/cache/manga"
 
     val thumbnailDownloadsRoot
         get() = "$downloadsRoot/thumbnails"
     val mangaDownloadsRoot
         get() = "$downloadsRoot/mangas"
 
-    val cacheDir = "$dataRoot/cache"
+    val cacheDir = "$dataRoot/cache" // Madoyomi: also holds the two id-keyed caches above
 }
 
 @Suppress("DEPRECATION")

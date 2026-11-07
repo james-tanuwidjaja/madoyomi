@@ -108,6 +108,22 @@ describe("routes", () => {
     expect(wrapper.find("main").text()).toContain("Your manga sources");
   });
 
+  it("keeps the section a details page was opened from, and goes back to it when the kind changes", async () => {
+    await mountAt("/browse");
+    await go("/anime/12");
+    expect(activeNav()).toBe("browse");
+    await go("/anime/13"); // a season's link: still from Browse
+    expect(activeNav()).toBe("browse");
+
+    await kindOption("Manga").trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/browse");
+
+    await go("/library");
+    await go("/manga/34");
+    expect(activeNav()).toBe("library");
+  });
+
   it("sets the kind from a details route, and leaves the route when the kind changes", async () => {
     await mountAt("/manga/34");
     const kind = useMediaKindStore();

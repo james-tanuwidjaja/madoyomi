@@ -150,36 +150,29 @@ Milestones:
 - [x] Typed API client + WebSocket (Stage 2: `api/client.ts`, hand-written `types.ts` validated against the live schema, our own `graphql-transport-ws` client that follows backend restarts, vue-query hooks with infinite browse; phase-3 §9, §10)
 - [x] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens (Stage 3: Repos and Extensions with the trust prompt; Stage 4: Browse and Source; Stage 5: Details for both kinds and the Library; Stage 6: Settings and each source's settings; all verified live, phase-3 §10)
 - [x] Generic filter and preference renderers (Stage 4: `FilterRenderer`, verified on shared fixtures and live for both kinds; Stage 6: `PreferenceRenderer`, every preference type by component tests, and live a list, a switch, a multi-select and an edit text taking effect for both kinds)
-- [ ] lint / typecheck / tests pass
+- [x] lint / typecheck / tests pass (Stage 7: `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm test` clean, the live spec against a seeded server, `cargo test` and `cargo clippy`; phase-3 §10)
 
-**Phase 3 in progress (Stage 6 of 7 done, 2026-11-07).** The stage plan is in phase-3 §8. The app has its shell (sidebar, anime/manga switch, every route) and talks to the backend: typed GraphQL, live events over WebSocket, and both kept working across a backend restart. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
+**Phase 3 done (2026-11-07).** Every exit criterion passes, checked live in `pnpm tauri dev` from a fresh, empty data dir, all through the UI (phase-3 §10, "Stage 7"):
+- both repos added (the type detected), KickAssAnime, MangaPill and MangaDex installed with their steps shown, and the trust prompt used;
+- a search, and a filtered search of each kind that changed the results;
+- details with the episodes or chapters, and one of each kind added to the Library;
+- a preference of each kind taking effect;
+- a backend kill: the overlay, then everything working on the new port without a reload;
+- the failure screen's Retry and Open logs.
 
-The first two screens work end to end:
-- **Repos:** add by URL with the type detected, remove after a confirmation, refresh.
-- **Extensions:** available, installed and updates, with search, language and 18+ filters, and install/update/uninstall with live steps.
-- **The trust prompt:** it shows the certificate hash and a warning.
+The app now has every MVP screen:
+- Repos and Extensions, with the trust prompt;
+- Browse and the source pages, with the generic filter renderer and an endless cover grid;
+- Details with virtualized episode and chapter lists, and the Library;
+- Settings, with each source's preferences through the generic preference renderer.
 
-Both were verified live from a fresh data dir, across a backend kill (phase-3 §10).
+The shell runs the real backend with a per-session token and restarts it after a crash. The UI talks to it through typed GraphQL and live WebSocket events that follow a restart (phase-3 §9).
 
-Browsing works too (Stage 4):
-- **Browse:** the sources by language, with pinned ones first (kept on this device), the built-in Local source as such, and unusable sources pointing to Extensions.
-- **Source pages:** Popular, Latest and Search as an endless grid of covers, loaded through the backend's thumbnail routes.
-- **Filters:** the generic `FilterRenderer` in a side sheet, sending only the changes from the source's defaults.
-
-They were verified live for both kinds: filtered searches changed the results, pages loaded by scrolling, and the page kept working after a backend kill (phase-3 §10).
-
-Details and the Library work too (Stage 5):
-- **Details** for both kinds: cover, title, author, status, genres, description and the source. The page refreshes from the source by itself the first time a never-fetched entry is opened, and by a button. A site's failure is shown with the stored data kept.
-- **Episode and chapter lists:** virtualized, with a sort (source order, number, date) and filters (bookmarked, scanlator; watched/read waits for Phase 6). A `Seasons` anime lists its seasons.
-- **The library:** add and remove for both kinds, through a small backend addition for anime (`updateAnime`, upstream's `updateManga` shape). The Library grid sorts by date added or title, and its empty state points to Browse.
-
-They were verified live with 1190 episodes and 1214 chapters, and after a backend kill (phase-3 §10).
-
-Settings work too (Stage 6):
-- **Settings:** the theme (System, Dark or Light, kept and applied before the first paint), the language (English only so far), and the backend's version, address, data folder and log folder, with Open logs.
-- **Source settings** for both kinds, from Settings, a ⚙ on Browse or the source page's Settings button. `PreferenceRenderer` draws every preference type: lists, switches, checkboxes, and edit texts and multi-selects in dialogs. A change shows at once and is saved by itself. A failed save is put back, and a value the extension refuses shows the one it kept. The source then browses again with the new settings.
-
-They were verified live: English titles on KickAssAnime and a Korean-only filter on MangaDex changed what Popular showed, and all of it worked after a backend kill (phase-3 §10). Nothing in the backend changed.
+The exit run's fix round:
+- one backend change: the cover and chapter-page caches moved into the data dir, because they were shared across data dirs and keyed by database id, which showed wrong covers;
+- Retry now finds a jar that was missing at app start;
+- the source page searches what its box shows;
+- a details page keeps the sidebar section it was opened from.
 
 ### Phase 4 — Playback
 Details: [phase-4-playback.md](phases/phase-4-playback.md)
@@ -309,15 +302,9 @@ WS     /ws                                downloads, updates, playback progress 
 
 ## 8. First tasks (start here)
 
-These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06). [Phase 3](phases/phase-3-frontend-mvp.md) is in progress. Done so far:
-- Stage 1: the shell and sidecar lifecycle;
-- Stage 2: the API layer and app shell;
-- Stage 3: Repos and Extensions, with the trust prompt;
-- Stage 4: Browse and Source, with `FilterRenderer`;
-- Stage 5: Details and Library;
-- Stage 6: Settings and `PreferenceRenderer`.
+These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06), and so is [Phase 3](phases/phase-3-frontend-mvp.md) (2026-11-07, seven stages: the shell and sidecar, the API layer, Repos and Extensions, Browse and Source, Details and Library, Settings, and the exit run).
 
-Stage 7 (the exit run, from a fresh data dir) is next.
+[Phase 4](phases/phase-4-playback.md) (playback in mpv) is next. Its first stage reads the phase doc and proposes a stage plan, and it settles the open question of mpv in its own window or embedded (§7).
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

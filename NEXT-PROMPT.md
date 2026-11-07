@@ -1,169 +1,135 @@
-Continue Phase 3 (docs/phases/phase-3-frontend-mvp.md), Stage 7: the exit run (steps 22-23 and §6; the remaining §5 items "Component + client tests" and "`pnpm lint`, `pnpm typecheck`, `pnpm test` pass", every §6 exit criterion from a fresh data dir, a fix round, and Phase 3 closed in PLAN.md and README.md). Follow CLAUDE.md first. Read these before anything else:
+Start Phase 4 (docs/phases/phase-4-playback.md), Stage 1. First read the phase doc and propose its stage plan, as Phase 3 did in its §8 "Stage plan". Then implement Stage 1 of that plan. Follow CLAUDE.md first. Read these before anything else:
 - docs/PLAN.md;
-- the Phase 3 doc, all of it: §4 steps (22, 23), §5 checklist, §6 exit criteria, §8 stage plan, §9 decisions (Stages 1-6), §10 findings (Stages 1-6, especially each stage's "Not checked live" list);
-- server/UPSTREAM.md: "Startup contract" and "API (Phase 1 Stage 7)";
-- the Phase 1 doc's §10 "exit run" and the Phase 2 doc's exit stage, as examples of how an exit run was recorded;
-- README.md (the status box, the Roadmap, the decisions, and the NOTE on pnpm tauri dev);
-- app/README.md (the structure, the routes, the live operation check).
-Never commit. Tick checklist items only once they are done and verified. Plan the stage briefly, then implement it. Ask me only about decisions that are genuinely mine.
+- the Phase 4 doc, all of it: §1-§8. Its checklist is still empty, and §8 holds two open decisions: mpv in a separate window or embedded (PLAN.md §7), and whether the backend or Tauri owns the mpv process;
+- the Phase 0 doc's S4 findings ("S4 (mechanics done …)" and "S3/S4 with a real video", 2026-11-03): the mpv flags that work, `--ytdl=no`, and the named pipe;
+- the Phase 2 doc's §9/§10 on videos (`fetchEpisodeVideos`, `fetchHosterVideos`, `resolveEpisodeVideo`, hosters, `Video` headers, subtitle and audio tracks, lib-16 `mpvArgs`/`timestamps`);
+- server/UPSTREAM.md: "Startup contract", "API (Phase 1 Stage 7)", "Anime sources" (the video mutations), "Library flag (Phase 3)" and "Id-keyed caches in the data dir";
+- the Phase 3 doc's §8 stage plan, §9 decisions (Stages 1-7) and §10 Stage 7 exit run, as an example of a stage plan and of how a stage and an exit run are recorded;
+- README.md (the status box, the Roadmap, the decisions, and the NOTE on pnpm tauri dev) and app/README.md (the structure, the routes, the sidecar).
+Never commit. Tick checklist items only once they are done and verified. Plan the stage briefly, then implement it. Ask me only about decisions that are genuinely mine. The two §8 decisions and the stage plan itself are mine: propose them with a recommendation, and wait for my answer before building on them.
 
-Where things stand (Phases 0-2 done; Phase 3 Stages 1-6 done; Stage 6 on branch feat/phase-3-settings):
+Where things stand (Phases 0-3 done, 2026-11-07; Phase 3 Stage 7, the exit run, on branch feat/phase-3-exit):
 - server/ is a Suwayomi-Server fork @7b061be (Madoyomi-Server v0.1.0), built as server/api/build/Madoyomi-Server-v0.1.0.jar.
   - Every upstream edit has a // Madoyomi: comment and is listed in server/UPSTREAM.md.
-  - Stage 6 changed nothing in server/. The last server change was Stage 5's `updateAnime`/`updateAnimes`.
+  - The last server change was Phase 3 Stage 7's: the thumbnail and chapter-page caches moved from %TEMP%\Madoyomi into <dataDir>/cache/{thumbnails,manga}. They name their files by database id, and a fresh data dir showed another one's covers.
 - The API (server/UPSTREAM.md "Startup contract"):
   - GraphQL at POST /api/graphql with `Authorization: Bearer <token>`.
   - Subscriptions use graphql-transport-ws on ws://127.0.0.1:<port>/api/graphql?token=<token>, with no subprotocol.
-  - REST only for binaries (thumbnails, pages, extension icons). GETs may pass ?token=.
-  - Errors carry {code, details}. SOURCE_FAILED means a source's site failed or was unreachable.
-- The shell (app/src-tauri/src/sidecar.rs, Stage 1):
-  - runs the newest server jar with a per-session token and --data-dir %APPDATA%\Madoyomi (MADOYOMI_DATA_DIR overrides it), and restarts it after a crash (1, 2, 4, 8 s; gives up after 5 failed starts in a row, with Retry);
-  - a missing jar (MADOYOMI_SIDECAR_JAR pointing at nothing) shows the failure screen at once, with Retry and Open logs. Stage 1 never clicked those two buttons live: that human check was left for this exit run.
-- The UI: every screen is done.
-  - The screens:
-    - Repos and Extensions, with the trust prompt (Stage 3);
-    - Browse and the source pages, with FilterRenderer (Stage 4);
-    - Details for both kinds and the Library (Stage 5);
-    - Settings and /settings/source/:id, with PreferenceRenderer (Stage 6).
-  - app/README.md has the structure and the routes.
-  - Stage 6 added:
-    - api/operations/preferences.ts (manga reads, then changes);
-    - composables/usePreferences.ts (optimistic changes in one mutation scope, rolled back on an error, a refusal reported per position; a change drops the source's browse pages and filters, and the source list is read again after its next browse, see `markSourceChanged` in useSources.ts);
-    - components PreferenceRenderer/PreferenceField;
-    - stores/theme.ts and an inline theme script in index.html;
-    - Settings links on Browse rows (⚙) and the source page.
-- §5 still open: "Component + client tests" and "`pnpm lint`, `pnpm typecheck`, `pnpm test` pass" (Quality). PLAN.md's last open Phase 3 milestone is "lint / typecheck / tests pass".
-- §6 status:
-  - "fresh data dir end to end" open;
-  - "Source preferences can be changed in the UI and take effect" ticked in Stage 6 ("Rechecked in the exit run");
-  - "Killing the backend recovers" ticked in Stage 1 ("Rechecked in the exit run").
-- Decided (Phase 3 §9):
-  - Reka UI primitives with our own styles; @tanstack/vue-virtual; dark + light themes; a Fluent-like look; native <select> for a plain list of strings;
-  - Stage 5: the library flag on the server; manga refresh in two calls;
-  - Stage 6: no server change, with the manga preference quirks worked around in the client (read first; upstream's manga side saves before asking the listener and so can't refuse).
+  - REST is only for binaries. GETs may pass ?token=.
+  - Errors carry {code, details}. SOURCE_FAILED means a source's site failed.
+  - The anime video API is in place since Phase 2: `fetchEpisodeVideos`, `fetchHosterVideos` and `resolveEpisodeVideo`, which return `Video` with its URL, headers, subtitle and audio tracks. Nothing about playback is stored yet: there is no `episode_progress` table and no player API.
+- The shell (app/src-tauri/src/sidecar.rs):
+  - runs the newest server jar with a per-session token and --data-dir %APPDATA%\Madoyomi (MADOYOMI_DATA_DIR overrides it);
+  - restarts it after a crash (1, 2, 4, 8 s; gives up after 5 failed starts in a row, with Retry);
+  - since Stage 7, resolves java and the jar for every start, so Retry finds a jar that was missing at app start;
+  - owns the backend through a Job Object, which takes the JVM down when the app dies. Phase 0 S5 noted a tiny gap between spawn and the job assignment. If mpv becomes a child process too, it needs the same care.
+- The UI (app/README.md has the structure and the routes):
+  - every Phase 3 screen is done: Repos, Extensions with the trust prompt, Browse and the source pages with FilterRenderer, Details for both kinds with a virtualized EpisodeList/ChapterList, the Library, Settings and each source's settings with PreferenceRenderer;
+  - episode rows don't act yet. A line above the list says playing comes in Phase 4, and watched marks with Phase 6 (the list's "watched" filter is a placeholder);
+  - Phase 4 adds the Play action, the video picker, the resume prompt and the watched state to this list (components/EntryItemList.vue, EpisodeList.vue, views/AnimeDetailsView.vue, composables/useEntries.ts and useDetailsPage.ts).
+- PLAN.md: Phase 3 is done, with every milestone ticked. Phase 4's five milestones are open. §7 still has "mpv in a separate window (MVP) vs. embedded" open; Phase 4 decides it.
 
-Baseline:
-- server: `.\gradlew.bat build` is green with 667 tests, 0 failures: core 604 (9 skipped), AndroidCompat 7, ext-host 8, api 48. Count them from server/{core,AndroidCompat,ext-host,api}/build/test-results/test/*.xml after a full build. The count must not drop. If the fix round changes server/, rebuild, add tests and list the change in UPSTREAM.md.
-- tools/smoke-api.ps1 -NoBuild: 24 steps pass (rerun at the start of Stage 6, on the Stage 5 jar; rerun at the start of this stage).
-- app: `pnpm test` gives 30 files, 220 passed + 9 skipped.
-  - That's client 15, ws 13, realtime 6, entries 7, preferenceCalls 4, hooks 10, usePreferences 5, routes 15, mediaKind 3, ShellFooter 5, backend store 9, BackendGate 6, TrustDialog 5, VirtualList 2, VirtualGrid 5, EntryItemList 5, FilterRenderer 8, PreferenceRenderer 6, filters 10, entryItems 5, preferences 5, ExtensionsView 11, ReposView 8, BrowseView 7, SourceView 13, AnimeDetailsView 9, MangaDetailsView 6, LibraryView 5, SettingsView 7, SourceSettingsView 5.
-  - The 9 skipped are the live spec.
-  - `pnpm lint`, `pnpm typecheck` and `pnpm format:check` are clean.
-- The live spec (operations.live.spec.ts with MADOYOMI_LIVE_URL/TOKEN): 9/9. The last three are a filtered search per kind, a refresh + library round trip per kind, and a preference round trip per kind. 31 documents validate.
-- app/src-tauri: `cargo test` 14 tests; `cargo clippy --all-targets` clean.
-- Record all of these at the start as this stage's baseline.
+Baseline (after Phase 3 Stage 7; rerun all of it at the start and record it as this stage's baseline):
+- server: `.\gradlew.bat build` is green with 669 tests, 0 failures: core 606 (8 skipped), AndroidCompat 7, ext-host 8, api 48. Count them from server/{core,AndroidCompat,ext-host,api}/build/test-results/test/*.xml after a full build. The count must not drop. Server changes need tests, a rebuild and an UPSTREAM.md entry.
+- tools/smoke-api.ps1 -NoBuild: 24 steps pass (on the Stage 7 jar).
+- app: `pnpm test` gives 33 files, 256 passed + 9 skipped (the live spec). `pnpm lint`, `pnpm typecheck` and `pnpm format:check` are clean.
+- The live spec (operations.live.spec.ts with MADOYOMI_LIVE_URL/TOKEN): 9/9 against a seeded server, with 31 documents validating.
+- app/src-tauri: `cargo test` 15 tests; `cargo clippy --all-targets` and `cargo fmt --check` clean.
 
 Gotchas:
-- Server build: `$env:JAVA_HOME='D:\Projects\madoyomi\tools\bin\jdk-21'; cmd /c "cd /d D:\Projects\madoyomi\server && .\gradlew.bat build --console=plain > <scratchpad log> 2>&1"`, in the background (about 4-6 min).
+- mpv:
+  - it is installed at C:\Program Files\MPV Player\mpv.exe and is on PATH. tools/bin/ has no mpv.exe, although the Phase 4 doc §2 expects one there for dev. Decide where dev and release builds find it (Phase 7 bundles it);
+  - spikes/mpv-play/play.ps1 and header-proxy.mjs are the S4 spike: a local proxy that returns 403 without the right Referer/User-Agent. It is a ready test bed for header handling;
+  - S4 findings: `--referrer=`/`--user-agent=`, one `--http-header-fields-append="Name: value"` per other header (not the comma-joined form), `--sub-files-append=` per subtitle, `--ytdl=no` always, and an IPC pipe of `\\.\pipe\<name>` with a unique name per session;
+  - the Phase 4 doc's step 1 still says "comma-joined" headers. S4 found that form unsafe; fix the doc when you plan.
+- Server build: `$env:JAVA_HOME='D:\Projects\madoyomi\tools\bin\jdk-21'; cmd /c "cd /d D:\Projects\madoyomi\server && .\gradlew.bat build --console=plain > <scratchpad log> 2>&1"`, in the background (about 5-6 min).
   - From the Bash tool: `export JAVA_HOME='D:\Projects\madoyomi\tools\bin\jdk-21' && cmd //c ".\\gradlew.bat build --console=plain"` from server/.
   - Use absolute paths: a relative JAVA_HOME silently falls back to JVM 11.
-  - Write .\gradlew.bat, not gradlew.bat. `.\gradlew.bat :api:shadowJar` builds only the jar; `build` rebuilds the jar too. `pnpm tauri dev` and the seed script use the newest jar.
-  - New server code goes under `madoyomi.*` in `api`; an upstream file edit needs a `// Madoyomi:` comment and an UPSTREAM.md row.
-- From the PowerShell tool, stdin is the null device, so a server started there exits at once. Start-MadoyomiServer in tools/lib/MadoyomiServer.ps1 redirects stdio. It sets $script:base and $script:token, and GqlData runs a query.
-- Seeding a data dir for the live spec (the Stage 6 recipe): a scratchpad seed.ps1, run as `powershell -NoProfile -ExecutionPolicy Bypass -File <script> > <log> 2>&1`:
-  1. dot-source tools/lib/MadoyomiServer.ps1;
-  2. `Start-MadoyomiServer <java> (Resolve-MadoyomiJar <repo> '' -NoBuild) <scratch data dir>`;
-  3. add both repos with GqlData (`addExtensionStore(input: {indexUrl, type})`, if `extensionStores` has none of that type): yuzono `https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.min.json` (ANIME), Keiyoushi `https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb` (MANGA);
-  4. install AnimeGG, MangaPill, KickAssAnime and MangaDex with InstallWithProgress. The packages are `eu.kanade.tachiyomi.animeextension.en.animegg`, `eu.kanade.tachiyomi.extension.en.mangapill`, `eu.kanade.tachiyomi.animeextension.en.kickassanime` and `eu.kanade.tachiyomi.extension.all.mangadex`. **`extensions(condition: {pkgName})` returns more than that package**: filter the nodes by `pkgName` yourself before checking `isInstalled`;
-  5. set $env:MADOYOMI_LIVE_URL=$script:base and $env:MADOYOMI_LIVE_TOKEN=$script:token, and run `cmd /c "pnpm vitest run src/api/__tests__/operations.live.spec.ts --silent=false 2>&1"` from app/;
-  6. Stop-MadoyomiServer (in a `finally`).
+  - Write .\gradlew.bat, not gradlew.bat. `.\gradlew.bat :api:shadowJar` builds only the jar; `build` rebuilds it too.
+  - Don't rebuild while a backend runs from that jar (Windows locks it): close the app first.
+  - New server code goes under `madoyomi.*`; an upstream file edit needs a `// Madoyomi:` comment and an UPSTREAM.md row.
+  - New DB tables are Madoyomi migrations, by the rules in UPSTREAM.md "Database migrations". The highest is M0071_AnimeBrowse, so the next is M0072.
+- PowerShell and servers:
+  - from the PowerShell tool, stdin is the null device, so a server started there exits at once. Start-MadoyomiServer in tools/lib/MadoyomiServer.ps1 redirects stdio, and sets $script:base and $script:token; GqlData runs a query;
+  - the Bash tool can't run `powershell` (exit 127): start PowerShell scripts from the PowerShell tool, as `powershell -NoProfile -ExecutionPolicy Bypass -File <script> > <log> 2>&1`, in the background for long runs.
+- Seeding a data dir for the live spec: a scratchpad seed.ps1 that
+  1. dot-sources tools/lib/MadoyomiServer.ps1;
+  2. runs Start-MadoyomiServer with tools\bin\jdk-21\bin\java.exe, (Resolve-MadoyomiJar <repo> '' -NoBuild) and a scratch data dir;
+  3. adds yuzono (`https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.min.json`, ANIME) and Keiyoushi (`https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb`, MANGA) with `addExtensionStore(input: {indexUrl, type})`, if `extensionStores` has none of that type;
+  4. installs AnimeGG, MangaPill, KickAssAnime and MangaDex with InstallWithProgress, if `extension(pkgName:)` says they aren't installed. The packages are `eu.kanade.tachiyomi.animeextension.en.animegg`, `eu.kanade.tachiyomi.extension.en.mangapill`, `eu.kanade.tachiyomi.animeextension.en.kickassanime` and `eu.kanade.tachiyomi.extension.all.mangadex`;
+  5. sets $env:MADOYOMI_LIVE_URL/TOKEN and runs `cmd /c "pnpm vitest run src/api/__tests__/operations.live.spec.ts --silent=false 2>&1"` from app/;
+  6. runs Stop-MadoyomiServer in a `finally`.
 
-  One server per data dir: H2 locks it. **The exit run's UI check needs a different, empty data dir**: everything there is done through the UI.
-- The exit criterion's "install and trust": adding a repo trusts its signing key, so an install from it is trusted with no prompt. Stage 3 reached the trust prompt from the UI by removing yuzono (its confirmation), which leaves AnimeGG "Untrusted" with Trust…, and then re-adding yuzono. Do the same to show the prompt in the exit run, or record how trust was shown.
+  One server per data dir: H2 locks it.
+- Videos for live checks:
+  - AnimeGG gives MP4s that need its Referer (Phase 0: the host answers 500 without it);
+  - KickAssAnime gives HLS with hosters;
+  - Phase 2's compat report (docs/research/anime-compat.md) lists what each of the top 20 returns, with subtitles and audio tracks;
+  - video URLs expire: resolve them right before launching.
 - Live app checks:
-  - Run `pnpm tauri dev` in the background (Bash tool, with MADOYOMI_DATA_DIR exported, output to a scratchpad log). Wait on <dataDir>/logs/sidecar.log for a "healthy after" line **from this session** (a fresh data dir has no log yet; otherwise count the lines first), then give the window a few seconds before the first click.
-  - Several unrelated java processes are usually running: kill only the pid from sidecar.log ("pid N listening").
-  - Close the app cleanly with (Get-Process madoyomi | ? MainWindowHandle -ne 0).CloseMainWindow().
-  - Explorer windows opened by Open logs can be listed and closed through `(New-Object -ComObject Shell.Application).Windows()` (`LocationURL`, `Quit()`).
-  - F5 reloads the window (only for diagnosis: the checks must pass without a reload).
-- Screenshots, clicks and typing all WORK. Recreate a scratchpad win.ps1 that:
-  - calls SetProcessDPIAware, finds the madoyomi process's MainWindowHandle, ShowWindow(9), SetForegroundWindow, then GetWindowRect;
-  - `-Action shot -Out x.png` does a System.Drawing CopyFromScreen of that rect;
-  - `-Action click -X -Y` does SetCursorPos(rect.L+X, rect.T+Y) + mouse_event(2) / mouse_event(4);
-  - `-Action wheel -X -Y -Delta -120 -Count N` does mouse_event(0x0800) N times (-120 is one notch; -2400 scrolls a long list fast);
-  - `-Action paste -Text <s>` does Set-Clipboard, then SendKeys `^a`, `^v`;
-  - `-Action keys -Text '{ENTER}'` uses SendKeys (`^a{DEL}` clears a field). A native <select> opens on a click and takes `{DOWN}` then `{ENTER}`.
+  - run `pnpm tauri dev` in the background (Bash tool, with MADOYOMI_DATA_DIR exported, output to a scratchpad log). Wait on <dataDir>/logs/sidecar.log for a "healthy after" line **from this session** (count the lines first, or use a fresh dir);
+  - `tauri dev` rebuilds and restarts the app by itself when src-tauri changes;
+  - kill only the pid from sidecar.log ("pid N listening"): other java processes are running;
+  - close the app with (Get-Process madoyomi | ? MainWindowHandle -ne 0).CloseMainWindow();
+  - UI preferences (pins, theme, kind, sorts) live in the WebView's localStorage, so they survive a fresh data dir.
+- Screenshots, clicks and typing work through a scratchpad win.ps1 (recreate it):
+  - SetProcessDPIAware, the madoyomi MainWindowHandle, ShowWindow(9), SetForegroundWindow, GetWindowRect;
+  - `-Action shot -Out x.png` (CopyFromScreen of the rect), `click -X -Y` (SetCursorPos + mouse_event 2/4), `wheel -X -Y -Delta -120 -Count N` (mouse_event 0x0800), `paste -Text` (Set-Clipboard, then SendKeys ^a ^v), and `keys -Text '{ENTER}'`.
 
-  Coordinates are window-relative physical pixels, read off the screenshot. The window is 1296x839 with its frame. Positions:
-  - the sidebar's switch: Anime x≈77 / Manga x≈178, y≈101;
-  - Library y≈153, Browse 191, Extensions 229, Settings y≈714;
-  - the page's actions buttons at y≈72 (the rightmost at about x≈1210; a source page has Settings x≈1117 and All sources x≈1210; a source's settings page has Browse this source x≈1083);
-  - Browse's first source row at y≈190 (pinned or the first language group). MangaDex adds one source per language, so EN is far down: scroll;
-  - on a source page: the tabs at y≈152 (Popular x≈316, Latest 387, Search 454), the search box x≈700, Filters x≈962; the first card at about (356, 300);
-  - on a details page: Add to library x≈520, y≈176; Refresh x≈619 (x≈660 when the entry is in the library: the buttons move);
-  - on Settings: the theme at y≈173 (System x≈960, Dark 1033, Light 1105), Open logs at about (1099, 500), the first source row at y≈618;
-  - on a source's settings page: the rows are about 64 px apart from y≈202, with the controls at x≈1138 (selects) or x≈1218 (switches).
+  Coordinates are window-relative physical pixels, read off the screenshot (the window is 1296x839). Some positions:
+  - the sidebar: Anime x≈77 / Manga x≈178 at y≈101, Library y≈153, Browse 191, Extensions 229, Settings y≈714;
+  - the page's actions at y≈72;
+  - on a details page: Add to library (520, 176) and Refresh x≈619 (x≈660 when in the library); the first episode row is at y≈413, with rows about 61 px apart.
 
-  Text that wraps moves everything below it: take a screenshot before clicking inside a sheet or dialog. Reka tabs react to the mousedown of a click. Don't commit screenshots.
-- Findings that matter here:
-  - Stage 5: AnimeGG and MangaPill give no upload dates; undated rows get the fetch date. KickAssAnime is the anime source whose filters work; AnimeGG's own Genre filter 404s on its site.
-  - Stage 6:
-    - MangaDex's language sources often have an empty Popular;
-    - KickAssAnime's "Use English titles" and MangaDex's "Filter original languages" are visible preferences. Restore whatever you change.
+  An mpv window is a separate process: find it by its own MainWindowHandle to screenshot it. Don't commit screenshots.
 - Reka in jsdom:
-  - Tabs change on `mousedown`. Select opens with Enter on its trigger, and an option is picked with a bubbling Enter keydown, once `scrollIntoView`, `hasPointerCapture` and `releasePointerCapture` are stubbed (see FilterRenderer.spec.ts).
-  - Collapsible opens on click. Switch, Checkbox and ToggleGroup items react to `click`.
-  - Dialogs portal to <body> (mountView attaches there).
-  - The virtualizers run in jsdom once clientHeight/clientWidth, offsetHeight and, for VirtualGrid's end check, scrollHeight are stubbed.
-- The live spec runs in Node with its own `createApiClient`: the typed calls in operations/ use the app's Pinia-backed `api`, so call the documents through the spec's `client` there. graphql-js refuses upstream's schema (two input types without fields), so the live spec builds it with assumeValid: true. Keep that.
-- TypeScript 6 loads no @types by default: in app code there's no `process` and no Array.prototype.at (lib ES2020). `h()` doesn't take a generic SFC: mount it through `as unknown as Component`. ESLint warns about a second component defined in a spec file, and flags unused destructured variables (build a copy and `delete` the key instead). ESLint's `vue/no-side-effects-in-computed-properties` reads any method called `sort` as Array.prototype.sort.
-- The route smoke test (src/__tests__/routes.spec.ts) needs an `h1` in `main` on every route without a backend: keep a title while loading.
-- PowerShell:
-  - variables are case-insensitive (`$pid` is read-only: use `$procId`);
-  - a function's pipeline output is its return value;
-  - PS 5.1 has no `??`;
-  - with $ErrorActionPreference='Stop', any native stderr line aborts the script;
-  - keep .ps1 files ASCII;
-  - write files with [IO.File]::WriteAllText + UTF8Encoding($false) or the Write tool.
-- Shell edits: backslashes inside perl -e / sed replacements get mangled, and Bash heredocs with many quotes can fail to parse. A perl script file fed with `perl script.pl < in > out` works for multi-line replacements; the Write/Edit tools are safer for code. `pnpm format` rewrites files: read them again before an Edit.
-- A vitest `--reporter=json` run without a valid --outputFile writes app/.vitest/: delete it, never commit it.
-- The token must stay out of logs and URLs, except where the contract needs ?token= (img src, WebSocket). Never print it in test output or docs. Check sidecar.log, madoyomi.log and the dev output for `token=` at the end.
-- Adding npm packages needs network access; pnpm-lock.yaml changes are expected and are text.
+  - Tabs change on `mousedown`. Select opens with Enter on its trigger, once `scrollIntoView`, `hasPointerCapture` and `releasePointerCapture` are stubbed;
+  - Dialogs portal to <body> (mountView attaches there);
+  - the virtualizers need clientHeight/clientWidth, offsetHeight and scrollHeight stubbed.
+- TypeScript, ESLint and tests:
+  - TypeScript 6 loads no @types in app code: there's no `process` (reach it through globalThis), no `node:` types (import them untyped through `as string`), no `replaceAll` or `at` (lib ES2020);
+  - Vite refuses a `?raw` import from outside app/;
+  - `h()` doesn't take a generic SFC: mount it through `as unknown as Component`;
+  - the route smoke test needs an `h1` in `main` on every route without a backend;
+  - ESLint reads any method called `sort` as Array.prototype.sort in computeds;
+  - `pnpm format` rewrites files: read them again before an Edit;
+  - a vitest `--reporter=json` run without a valid --outputFile writes app/.vitest/: delete it, never commit it.
+- Shell edits: Bash heredocs with many quotes or backticks fail to parse. Use the Write/Edit tools, or write a scratchpad file and `cat >>` it.
+- PowerShell: variables are case-insensitive (`$pid` is read-only: use `$procId`); a function's pipeline output is its return value; PS 5.1 has no `??`; keep .ps1 files ASCII.
+- The token must stay out of logs and URLs, except where the contract needs ?token= (img src, WebSocket). If mpv ever fetches through the backend (a proxy fallback), keep the token out of mpv's command line and logs. Check sidecar.log, madoyomi.log, the dev output and any mpv log for `token=` at the end.
+- Adding npm packages or Gradle dependencies needs network access; lockfile changes are expected and are text.
 - Python and gh are not installed.
 
-Tasks (Stage 7):
-0. FIRST, before any edit: `git switch main`, `git pull`, then `git switch -c feat/phase-3-exit`. Never edit on main. (If feat/phase-3-settings isn't merged yet, stop and tell me.)
-1. Baseline: rerun everything in "Baseline" (smoke included) and record it.
-2. Step 22, tests: check that each area step 22 names is covered: FilterRenderer and PreferenceRenderer unit tests, API client error handling, the route smoke test. Fill real gaps found in the §10 "Not checked live" lists that a test can cover; don't add tests for their own sake. Tick "Component + client tests" when that holds.
-3. Step 23 and the §6 exit run, from a **fresh, empty** MADOYOMI_DATA_DIR in `pnpm tauri dev`, all in the UI by clicks and screenshots:
-   - add both repos (Repos, type detected);
-   - install one anime and one manga extension (e.g. KickAssAnime and MangaPill) with their steps shown, and show the trust prompt (see the gotcha);
-   - browse and search each with filters (a filtered search that changes the results);
-   - open details, see the episodes/chapters, and add one of each to the library; the Library shows them;
-   - change a source preference of each kind and see it take effect (recheck), then restore it;
-   - kill the backend: the overlay, the recovery on a new port, and the screens still working without a reload (recheck);
-   - the failure screen's Retry and Open logs (Stage 1's open item), e.g. with MADOYOMI_SIDECAR_JAR pointing at a missing jar;
-   - at the end, no `token=` in the logs.
-4. Fix round: fix what the exit run finds (UI or, if needed, server: then rebuild, add tests, UPSTREAM.md), and recheck each fix live.
-5. Run `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm test`, the live spec against a seeded server, and `cargo build`/`cargo test`/`cargo clippy --all-targets`. Tick §5 "`pnpm lint`, `pnpm typecheck`, `pnpm test` pass" when they do.
-6. Phase doc:
-   - §5 and §6 ticks (only verified items);
-   - §8 stage 7 *Done*, with a phase-done line;
-   - §9 decisions and §10 findings of the exit run, including what wasn't checked and why.
-7. docs/PLAN.md:
-   - tick "lint / typecheck / tests pass" when verified. Mark Phase 3 done (with the date and a summary like Phase 2's) only if every §6 exit criterion passes;
-   - update §8 "First tasks" (Phase 4 next) and §6 risks / §7 open decisions if anything changed. The mpv window question stays open: Phase 4 decides it.
-8. README.md status:
-   - the warning box, the Roadmap row for Phase 3 (✅ done, if so), the NOTE about pnpm tauri dev if behaviour changes, the commands tables for any new or changed command, and the "Decided so far in Phase 3" list (rename it "Decided in Phase 3" if the phase is done);
-   - make it match the phase doc and PLAN.md;
-   - also update app/README.md if anything in it changed.
-9. At the end, write the ready-to-paste prompt for the next stage (Phase 4 Stage 1: read docs/phases/phase-4-playback.md and propose its stage plan first) into NEXT-PROMPT.md in the repo root (overwrite it), and repeat it in your final message.
+Tasks (Phase 4 Stage 1):
+0. FIRST, before any edit: `git switch main`, `git pull`, then `git switch -c feat/phase-4-<topic>` (the topic of Stage 1, e.g. feat/phase-4-launcher). Never edit on main. (If feat/phase-3-exit isn't merged yet, stop and tell me.)
+1. Baseline: rerun everything in "Baseline" (smoke and the live spec included) and record it.
+2. Read the Phase 4 doc and propose:
+   - its stage plan (each stage ending in something verifiable, as Phase 3's §8);
+   - the two §8 decisions, with a recommendation each;
+   - where mpv comes from in dev and release.
+
+   Ask me, then write the agreed plan into the Phase 4 doc's §8 and the decisions into §9 (create §9/§10 as in Phase 3). Fix the doc's step 1 header form to match S4's findings.
+3. Implement Stage 1 of the agreed plan, with its tests (server and/or app, as the stage needs), and verify it live in `pnpm tauri dev` if the stage reaches the UI.
+4. Phase doc: §5 ticks (only verified items), §8 (stage 1 *Done* with a summary), §9 decisions, and §10 findings, including what wasn't checked live and why.
+5. docs/PLAN.md: Phase 4 in progress, with a short status like Phase 3's ("Stage 1 of N done"). Tick a milestone only if every phase-doc item behind it is verified. Update §8 "First tasks", §6 risks and §7 open decisions: close the mpv window question with the decision.
+6. README.md: the status box, the Roadmap row for Phase 4 (🟡 In progress), the commands tables for any new or changed command, a "Decided so far in Phase 4" list, and the NOTE on pnpm tauri dev if mpv changes what it needs. Make it match the phase doc and PLAN.md. Update app/README.md if the structure or routes change, and server/UPSTREAM.md for any server change.
+7. At the end, write the ready-to-paste prompt for the next stage into NEXT-PROMPT.md in the repo root (overwrite it), and repeat it in your final message.
 
 Verify:
 - Checks:
-  - `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm test` pass, with at least 220 tests (the live spec skipped);
+  - `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm test` pass, with at least 256 tests (the live spec skipped);
   - the live spec passes 9/9 (or more) against a seeded server;
-  - `cargo build`, `cargo test` (at least 14) and `cargo clippy --all-targets` pass.
-- The exit run: every §6 criterion checked from a fresh data dir in `pnpm tauri dev`, with screenshots (not committed) and the findings in §10.
-- If anything in server/ changed: `.\gradlew.bat build` is still green (at least 667 tests plus the new ones), tools/smoke-api.ps1 -NoBuild still passes (24 steps), and server/UPSTREAM.md lists the change.
-- docs/PLAN.md: every Phase 3 milestone is ticked if and only if its phase-doc items are verified, and the phase status in §4/§8 matches the phase doc.
-- README.md's status box, Roadmap row and decisions match the Phase 3 doc and PLAN.md.
+  - `cargo build`, `cargo test` (at least 15) and `cargo clippy --all-targets` pass.
+- If anything in server/ changed: `.\gradlew.bat build` is green (at least 669 tests plus the new ones), tools/smoke-api.ps1 -NoBuild still passes (24 steps), and server/UPSTREAM.md lists the change (new tables as migrations).
+- The Phase 4 doc has the agreed stage plan (§8) and decisions (§9), and its §5 ticks are only verified items.
+- docs/PLAN.md: Phase 4's milestones are ticked if and only if their phase-doc items are verified, §4/§8 show Phase 4 in progress, and §7 matches the decision taken.
+- README.md's status box, Roadmap row and decisions match the Phase 4 doc and PLAN.md.
 - NEXT-PROMPT.md in the repo root holds the next stage's prompt.
-- `git status`: on branch feat/phase-3-exit, with only text files. None of these:
-  - jars, APKs, .pb files, fonts, test images, DB files;
+- `git status`: on the feat/phase-4-… branch, with only text files. None of these:
+  - jars, APKs, .pb files, fonts, test images, DB files, mpv binaries or video files;
   - hs_err logs, heap dumps, screenshots;
   - node_modules, target/, dist/, app/.vitest/, .env.local;
-  - tools/compat-test/out, tools/dev-data.
+  - tools/compat-test/out, tools/dev-data, spikes/mpv-play/out.
 
 Standing rules:
 - Start every stage by switching to a new feature branch off an up-to-date main (git switch main, git pull, git switch -c feat/phase-N-<topic>) before any edit. Never edit on main.

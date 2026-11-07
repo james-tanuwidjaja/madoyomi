@@ -69,6 +69,8 @@ function applyFilters(next: FilterState) {
   const isDefault = filterChanges(filterList.value, next).length === 0;
   st.filters = isDefault ? null : next;
   st.signature = isDefault ? null : signature.value;
+  // The search is what the box shows, even if it wasn't submitted with Enter (found in the exit run, §10).
+  st.query = typed.value.trim();
   st.tab = "SEARCH";
 }
 
@@ -95,6 +97,11 @@ watch(
   () => state.value.query,
   (q) => (typed.value = q),
 );
+// An emptied box (its × or deleting the text) drops the submitted search, so the results never belong to a query
+// the box no longer shows. A new query still waits for Enter.
+watch(typed, (t) => {
+  if (!t.trim() && state.value.query) state.value.query = "";
+});
 
 function submitSearch() {
   state.value.query = typed.value.trim();
