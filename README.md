@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stages 1–4 of 7 are done.
+> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stages 1–5 of 7 are done.
 >
 > The desktop app:
 > - starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`);
@@ -25,13 +25,18 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 > - a source shows its Popular, Latest and Search results as an endless grid of covers that loads the next page as you scroll;
 > - its filters (selects, sorts, checkboxes, include/exclude genres, text, groups) open in a side sheet, with Apply and Reset. Each source keeps its tab, search and filters while the app runs.
 >
-> Details and the Library come next. A cover links to its details page, which is still a placeholder.
+> **And you can open an entry and keep it in your Library:**
+> - a cover opens the entry's details: cover, title, author, status, genres, description and its source. An entry that was never fetched is refreshed from its source when you first open it, and a Refresh button asks again. If the source's site fails, the page says so and keeps what is stored;
+> - its episodes or chapters, even 1000+ of them, scroll smoothly. Sort them by the source's order, number or upload date, either way, and filter them by bookmark or scanlator (watched/read marks come with Phase 6). An anime split into seasons lists its seasons, each with its own page;
+> - "Add to library" and "Remove from library", for both kinds. The Library shows your saved anime or manga as a grid of covers, sorted by title or by date added. An empty Library points to Browse.
+>
+> Episodes don't play and chapters don't open yet (Phases 4 and 5).
 >
 > The backend in `server/` is a Suwayomi-Server fork, rebranded as Madoyomi-Server. It runs as a local sidecar (loopback only, random port, API token). From its GraphQL API you can:
 > - add Aniyomi and Mihon repos (JSON and protobuf indexes) and list their extensions;
 > - install, update, trust and uninstall extensions of both kinds (from their signed APKs only; only trusted ones get loaded);
 > - browse and read manga sources, as in Suwayomi;
-> - browse anime sources: popular, latest, search with filters, details with episodes (or seasons), and the videos of an episode with their headers, subtitle and audio tracks. Source preferences can be changed, and anime thumbnails are served through the backend;
+> - browse anime sources: popular, latest, search with filters, details with episodes (or seasons), and the videos of an episode with their headers, subtitle and audio tracks. Source preferences can be changed, anime thumbnails are served through the backend, and anime can be added to and removed from the library (`updateAnime`, as upstream's `updateManga`);
 > - see per extension which Android or extension APIs it needs and doesn't get (`compatIssues`).
 >
 > **18 of the 20 most-downloaded yuzono anime extensions** work end to end against their real sites (install, browse, details and episodes, videos, a resolved video URL), measured by the compatibility harness ([docs/research/anime-compat.md](docs/research/anime-compat.md)). The two that don't:
@@ -40,7 +45,7 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 >
 > Filters and preferences round-trip through the API: a filtered search works on all 18 with filters, and a preference change on 19 of 20. **9 of the 10 most-downloaded Keiyoushi manga extensions** read down to a page image ([docs/research/manga-compat.md](docs/research/manga-compat.md)); comix needs a real WebView, which is deferred with the Cloudflare solver. Uninstalling an extension frees its code: of the 20 anime extensions, 1 is still kept after uninstall, by a video connection of its own.
 >
-> Repos, Extensions, Browse and the source pages are done. Details, Library and Settings are still placeholders that say which stage builds them (Phase 3). Videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
+> Repos, Extensions, Browse, the source pages, Details and the Library are done. Settings is still a placeholder that says which stage builds it (Phase 3 Stage 6). Videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
 
 ---
 
@@ -251,7 +256,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 | 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ✅ Done (18/20 top anime extensions end to end, filters and preferences through the API, 9/10 of the manga sample; Cloudflare/WebView shim deferred) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
-| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stages 1–4 of 7 done: the app starts the real backend and restarts it after a crash; the app shell with every route, the typed API client and live WebSocket events; the Repos and Extensions screens with the trust prompt; Browse and the source pages with the filter renderer and an endless cover grid; Details and Library next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
+| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stages 1–5 of 7 done: the app starts the real backend and restarts it after a crash; the app shell with every route, the typed API client and live WebSocket events; the Repos and Extensions screens with the trust prompt; Browse and the source pages with the filter renderer and an endless cover grid; Details for both kinds with a virtualized episode/chapter list, and the Library; Settings and the preference renderer next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
 | 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
 | 5 | **Manga reader:** image proxy and cache, paged, webtoon and double-page modes | ⚪ Not started | [phase-5-manga-reader.md](docs/phases/phase-5-manga-reader.md) |
 | 6 | **Library features:** categories, updates, history, downloads, backup/restore | ⚪ Not started | [phase-6-library-features.md](docs/phases/phase-6-library-features.md) |
@@ -311,6 +316,11 @@ Decided so far in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3
 - **The filter controls** are Reka's Select (for selects and sort fields, with an Ascending/Descending button), checkboxes, a three-state checkbox (include ✓, exclude ✕, ignore) and collapsible groups.
 - **A source the backend can't use isn't opened.** An untrusted or unloaded one points to Extensions (its Installed tab, searched for that extension), where the trust prompt or the error is. The built-in Local source is never shown as untrusted.
 - **Result grids stay fast too:** only the rows on screen are drawn, the column count follows the window width, and the next page loads when you near the end. Covers come from the backend's thumbnail routes, which apply the source's headers, so no separate image proxy was needed.
+- **Details refresh by themselves only once.** An entry that was never fetched is refreshed from its source the first time you open it in a session; after that only the Refresh button asks the site again. A failure keeps the stored data on screen with a readable error. A source that's missing, untrusted or not loaded isn't asked: the page says why and points to Extensions.
+- **Manga refresh in two steps** (details, then chapters), so the source's own error code reaches the app. The backend's one-call version reports a site failure without its code.
+- **The episode and chapter list's sort is remembered per kind** (default: the source's order, newest first, as in Mihon). Its filters (bookmarked, scanlator, and watched/read, which only Phase 6 records) apply to that entry for the session.
+- **The library flag is the backend's** (a small backend addition, `updateAnime`, as upstream's `updateManga`). Adding or removing an entry also marks its cover on the source pages you already loaded, without browsing the source again.
+- **The Library sorts by date added (newest first) or title**, per kind, remembered between sessions.
 
 Still open:
 

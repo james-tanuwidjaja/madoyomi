@@ -14,6 +14,7 @@ const ops = vi.hoisted(() => ({
   browseSource: vi.fn(),
   fetchExtensionStores: vi.fn(),
   addRepo: vi.fn(),
+  setInLibrary: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -21,12 +22,15 @@ vi.mock("../../api/operations", async (importOriginal) => ({
   browseSource: ops.browseSource,
   fetchExtensionStores: ops.fetchExtensionStores,
   addRepo: ops.addRepo,
+  setInLibrary: ops.setInLibrary,
 }));
 
 import { useSourceBrowse } from "../useSources";
+import { useSetInLibrary } from "../useEntries";
+import { queryKeys } from "../queryKeys";
 import { addRepoDetectingKind, guessRepoKind, useExtensionStores } from "../useExtensions";
 import { ApiError } from "../../api/client";
-import { makeStore } from "../../test/fixtures";
+import { makeAnime, makeStore } from "../../test/fixtures";
 
 let pinia: Pinia;
 let queryClient: QueryClient;
@@ -211,5 +215,45 @@ describe("addRepoDetectingKind", () => {
       kind: "manga",
       format: "JSON",
     });
+  });
+});
+
+describe("useSetInLibrary", () => {
+  it("marks that kind's cached browse cards only, and refetches the library and a season's parent", async () => {
+    setReady();
+    const animeKey = queryKeys.browse({
+      kind: "anime",
+      sourceId: "1",
+      type: "POPULAR",
+      query: null,
+      filters: null,
+    });
+    const mangaKey = queryKeys.browse({
+      kind: "manga",
+      sourceId: "2",
+      type: "POPULAR",
+      query: null,
+      filters: null,
+    });
+    const card = (kind: "anime" | "manga") => ({
+      pages: [{ items: [{ kind, id: 7, title: "X", thumbnailUrl: null, inLibrary: false }] }],
+      pageParams: [1],
+    });
+    queryClient.setQueryData(animeKey, card("anime"));
+    queryClient.setQueryData(mangaKey, card("manga"));
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    ops.setInLibrary.mockResolvedValue(makeAnime({ id: 7, inLibrary: true, parentId: 3 }));
+
+    const { result, unmount: u } = withSetup(() => useSetInLibrary(), { pinia, queryClient });
+    unmount = u;
+    await result.mutateAsync({ kind: "anime", id: 7, inLibrary: true });
+
+    const inLibrary = (key: readonly unknown[]) =>
+      queryClient.getQueryData<{ pages: SourcePage[] }>(key)!.pages[0].items[0].inLibrary;
+    expect(inLibrary(animeKey)).toBe(true);
+    expect(inLibrary(mangaKey)).toBe(false);
+    expect(queryClient.getQueryData(queryKeys.anime(7))).toMatchObject({ inLibrary: true });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.library("anime") });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.seasons(3) });
   });
 });

@@ -81,8 +81,8 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 - [x] Extensions screen (available/installed/updates) + `TrustDialog` (Stage 3: Reka tabs, search, language, "Show 18+", install/update/uninstall with live steps and readable errors, compat issues, a virtualized list; the trust prompt shown, used and verified live, §10)
 - [x] Browse (source list) (Stage 4: the current kind's sources by language, pinned ones first (kept in `localStorage`), the Local source as built in, an untrusted or unloaded source not opened and pointing to Extensions; verified live for both kinds, §10)
 - [x] Source (popular/latest/search + filters) (Stage 4: Reka tabs with Latest only when `supportsLatest` is true, a search box, the filter sheet with Apply and Reset, an endless `VirtualGrid` of `MediaCard`s, readable errors with a retry, the state per source for the session; verified live for both kinds, including a filtered search that changed the results, page 2 by scrolling and a backend kill, §10)
-- [ ] Details (anime + manga) with episode/chapter list
-- [ ] Library
+- [x] Details (anime + manga) with episode/chapter list (Stage 5: cover, title, author/artist, status, genres, source and description; refresh from the source by a button and by itself on the first open of an uninitialized entry; the source's error shown with the stored data kept; add to and remove from the library; a virtualized `EpisodeList`/`ChapterList` with a sort (source order, number, date, either way) and filters (watched/read as a Phase 6 placeholder, bookmarked, scanlator); a `Seasons` anime lists its seasons as cards (by the component tests only: no installed source has one); verified live for both kinds with 1190 episodes and 1214 chapters scrolled, and after a backend kill, §10)
+- [x] Library (Stage 5: a `VirtualGrid` of `MediaCard`s of the current kind's library, sorted by date added or title, either way, per kind; an empty state that links to Browse; the browse cards' "In library" mark follows add/remove; verified live for both kinds and after a backend kill, §10)
 - [ ] Settings + source preferences
 
 ### Renderers
@@ -90,8 +90,8 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 - [ ] `PreferenceRenderer` (all preference types)
 
 ### Quality
-- [ ] Virtualized grids/lists (Stage 3: `VirtualList` for the extension list, 1469 Keiyoushi rows; Stage 4: `VirtualGrid` for the source results, verified live over many pages; the library grid and episode/chapter lists follow in Stage 5)
-- [ ] Covers via backend image proxy (Stage 4: the source grid's covers load through the backend's thumbnail routes, `/api/v1/anime/{id}/thumbnail` and upstream's manga one, which apply the source's headers, so no new proxy was needed; verified live for both kinds and after a backend restart. The details and library covers follow in Stage 5)
+- [x] Virtualized grids/lists (Stage 3: `VirtualList` for the extension list, 1469 Keiyoushi rows; Stage 4: `VirtualGrid` for the source results, verified live over many pages; Stage 5: the Library grid (`VirtualGrid`) and the episode/chapter lists (`VirtualList`, tested with 1500 rows; live with 1190 episodes and 1214 chapters scrolled end to end), §10)
+- [x] Covers via backend image proxy (Stage 4: the source grid's covers load through the backend's thumbnail routes, `/api/v1/anime/{id}/thumbnail` and upstream's manga one, which apply the source's headers, so no new proxy was needed; verified live for both kinds and after a backend restart. Stage 5: the details and Library covers use the same routes through `useAssetUrl`, verified live for both kinds and after a backend kill, §10)
 - [ ] Component + client tests
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass
 
@@ -135,6 +135,11 @@ Each stage ends in something verifiable and a commit:
      - live in `pnpm tauri dev` for both kinds (§10): pins, Popular, Search, filtered searches that changed the results, pages loaded by scrolling, and the source page working on after a backend kill.
    - Nothing in `server/` changed.
 5. **Details and Library** (steps 15–16, 20): details for anime and manga, with a virtualized `EpisodeList`/`ChapterList` (1000+ entries), sort and filter; add to library; the Library grid with a sort and an empty state.
+   - *Done* (2026-11-07):
+     - one server addition, `updateAnime`/`updateAnimes` (the library flag for anime), with `AnimeLibraryApiTest`;
+     - unit tests of the list's sort and filters, component tests of the list (1500 rows), both details views and the Library, the refresh calls over a mocked client, and a hook test;
+     - the live spec's new refresh and library round trip (8/8);
+     - live in `pnpm tauri dev` for both kinds (§10): an automatic first refresh, 1190 episodes and 1214 chapters scrolled, sort and scanlator filter, add and remove, the Library's sorts, the browse card's mark, and all of it after a backend kill.
 6. **Settings and `PreferenceRenderer`** (steps 17, 19): general settings (theme System/Dark/Light, language), backend settings (data dir, log folder), and source preferences saved with optimistic updates. Verified by renderer unit tests and a live preference change that takes effect.
 7. **Exit run** (steps 22–23 and §6): every exit criterion from a fresh data dir, the remaining tests, a fix round, and the phase closed in PLAN.md and README.md.
 
@@ -294,6 +299,47 @@ Decided in the stage (defaults, not asked):
   - The existing realtime logic refetches failed queries when the backend is back.
 - **`MediaCard.vue`**: the cover from `useAssetUrl(thumbnailUrl)` (the backend's thumbnail route with `?token=`, which follows a restart), lazy-loaded, 2:3. When there is no URL or the image fails, it shows the title's first letter. The title is clamped to two lines, with an "In library" badge, linking to `/anime/:id` or `/manga/:id`.
 
+### Stage 5 (2026-11-07)
+
+Decided in the stage (defaults, not asked):
+- **One server addition: `updateAnime`/`updateAnimes`** (`madoyomi.api.graphql.AnimeMutation`, in the shape of upstream's `updateManga`/`updateMangas`; server/UPSTREAM.md "Library flag (Phase 3)"). Nothing set `ANIME.in_library` before.
+  - Adding sets `added_at` to now. Removing keeps it, as upstream keeps `inLibraryAt`.
+  - An unknown id is `NOT_FOUND`, and nothing is written.
+  - Upstream's queueing of uninitialized entries for a library update and its thumbnail move are left to Phase 6. The UI refreshes an uninitialized entry when it is opened.
+- **The anime refresh is one call, the manga refresh two.**
+  - Anime: `fetchAnimeAndEpisodes` through `api.gqlResult`. A source failure comes back as a partial result: the stored data and the error.
+  - Manga: upstream's `fetchManga`, then `fetchChapters` (`refreshManga` in `api/operations/entries.ts`). Upstream's `fetchMangaAndChapters` would do both in one call, but it reports its partial error through `toGraphQLError()`, without `extensions.code`, so our instrumentation makes it `INTERNAL`. The two calls are classified like any resolver error, so a site's failure arrives as `SOURCE_FAILED`.
+  - A failed details fetch stops there. The page then gets what is stored (read again) with the error. A transient error (the backend down) or `NOT_FOUND` throws instead.
+- **When a details page refreshes** (`composables/useDetailsPage.ts`):
+  - by itself only when the entry was never fetched (`initialized` false), and only once per entry per app session (`claimAutoRefresh`), so a failing site isn't asked on every visit;
+  - otherwise by the Refresh button.
+  - The result, which is the stored data even when the source failed, is written into the entry, episodes/chapters and seasons queries. Nothing is fetched twice.
+  - The source's error shows as `ErrorNotice` ("Couldn't refresh from <source>", with Try again) above the stored data.
+- **A source that can't be used isn't asked.** A details page finds the entry's source in the kind's source list (`sourceAccess`).
+  - When the source is missing, untrusted or not loaded, the page doesn't refresh, the Refresh button is disabled, and a notice says why. For an untrusted or unloaded source there is "Open in Extensions".
+  - Without this, upstream's manga refresh of a missing source fails with a null pointer ("Missing source", `INTERNAL`).
+  - The source's name links to its page only while the source can be browsed.
+- **The episode/chapter list** (`EntryItemList.vue`, behind `EpisodeList`/`ChapterList`; logic in `utils/entryItems.ts`):
+  - the sort: the source's order, the number or the upload date, either way, with ties broken by the source's order. It is kept per kind in `localStorage` (`madoyomi.itemSort`). The default is the source's order, newest first, as in Mihon;
+  - the filters: watched/read (a placeholder until Phase 6 records progress, and the list says so), bookmarked only, and a scanlator, shown only when the entry has two or more. They are per entry, for the session (`stores/itemList.ts`): a scanlator belongs to one entry, and a filter left on would hide the next entry's list;
+  - native `<select>`s, as decided for plain lists of strings in Stage 3;
+  - a `VirtualList` (rows of about 56 px); the scroll goes back to the top when the sort or the filters change;
+  - rows don't act yet. A line above the list says that playing comes in Phase 4 and reading in Phase 5.
+- **A `Seasons` anime** shows its seasons (`anime(id).seasons`) as a `VirtualGrid` of `MediaCard`s, each linking to its own details. A season names the entry it belongs to ("Season 1 of …", linking to it).
+- **The library change patches what is cached** (`useSetInLibrary`):
+  - the entry's query gets the stored entry;
+  - every cached browse page of that kind gets the new mark on that card (`setQueriesData`, no refetch, so the source isn't browsed again);
+  - the library list is refetched, and so is a season's parent's season list.
+- **The Library** (`LibraryView.vue`): `animes`/`mangas` with `condition: {inLibrary: true}`, sorted in the UI.
+  - The sort is by date added or title, either way, per kind, kept in `localStorage` (`madoyomi.librarySort`).
+  - A new sort key starts in its natural direction: newest first for dates, A to Z for titles. The default is date added, newest first.
+  - The cards hide the "In library" badge (`MediaCard`'s `hideLibraryBadge`). The count is in the subtitle.
+  - An empty library says how to add entries and links to Browse.
+- **Details pages have their own heading** (`EntryHeader.vue`).
+  - `PageLayout`'s title is optional now: a page without a title or actions has no title row.
+  - While the entry loads, or without a backend, the page shows "Anime"/"Manga" as its title, so the route smoke test still finds a heading.
+- **Link-styled buttons** (`RouterLink class="btn"`) are no longer underlined (`.btn` gets `text-decoration: none`). The Library's empty state was the first such link that was underlined.
+
 ## 10. Findings log
 
 ### Stage 1 (2026-11-06)
@@ -434,3 +480,56 @@ Decided in the stage (defaults, not asked):
   - a source with `supportsLatest` false: neither source lacks Latest. It is covered by the component tests;
   - a next-page error: no site failed mid-scroll. It is covered by the component test.
 - **Reka in jsdom.** `Select` opens on Enter on its trigger, and an option is chosen with Enter on it (`keydown`, bubbling), once `scrollIntoView`, `hasPointerCapture` and `releasePointerCapture` are stubbed. `Collapsible` opens on click. The tri-state's `Checkbox` reacts to `click`.
+
+### Stage 5 (2026-11-07)
+
+- **Baseline before the stage** (the same as after Stage 4):
+  - `pnpm test`: 19 files, 148 passed + 7 skipped;
+  - lint, typecheck and format:check clean;
+  - `cargo test` 14 and `cargo clippy --all-targets` clean;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24 at the start, on the Stage 4 jar.
+- **After the stage:**
+  - `pnpm test`: 25 files, 186 passed + 8 skipped (the live spec). The new ones: entryItems 5, EntryItemList 5, AnimeDetailsView 9, MangaDetailsView 6, entries (the refresh and library calls over a mocked client) 7, LibraryView 5, hooks 10 (was 9: `useSetInLibrary`). The other files are unchanged; routes 15 still passes.
+  - lint, typecheck and format:check are clean.
+  - `cargo build`, `cargo test` (14) and `cargo clippy --all-targets` pass. Nothing in `src-tauri` changed.
+- **Server:**
+  - `.\gradlew.bat build` is green with **667 tests, 0 failures**: core 604 (9 skipped in this run's results), AndroidCompat 7, ext-host 8, api 48 (was 43: `AnimeLibraryApiTest` 5);
+  - ktlint is clean;
+  - the jar was rebuilt by the same build, and `tools/smoke-api.ps1 -NoBuild` passed **24/24** on it.
+- **Live operation spec: 8/8.** The server came from `Start-MadoyomiServer` on a fresh scratch data dir with both repos, AnimeGG, MangaPill and KickAssAnime.
+  - All 27 documents validate, including the new ones.
+  - The new refresh-and-library test:
+    - AnimeGG's first Popular entry (One Piece) came back with 1167 episodes, and MangaPill's with 405 chapters;
+    - both went into their library list with an `inLibraryAt` and out again;
+    - the filtered search gave the same results as in Stage 4.
+- **Live in `pnpm tauri dev`** (`MADOYOMI_DATA_DIR` = that data dir), driven by clicks, wheel, keys and pasted text, checked by screenshot:
+  - **Library, empty:** "Your manga library is empty", the hint, and "Browse manga sources".
+  - **Anime details, AnimeGG → Detective Conan** (never fetched):
+    - the page opened with the stored cover and title, "Refreshing…" and "Fetching the episodes from AnimeGG…";
+    - after the refresh it showed "Ongoing", Adventure, the description clamped with More, and **1,190 episodes**, newest first;
+    - 30 wheel scrolls of 2400 reached episode 233 without a stall;
+    - "↑ Ascending" put Episode 1 first and scrolled back to the top.
+  - **Add to library:** the button turned into "Remove from library" with an "In library" badge. Back on AnimeGG's Popular, the Conan card had "In library" with no new browse.
+  - **Bleach** (366 episodes) was added too. Its scanlator filter (AnimeGG puts the versions there: "SUBBED, SD, SD, DUBBED", "DUBBED", …) set to DUBBED gave "366 episodes · 9 shown", and Clear filters undid it.
+  - **The anime Library:** "2 saved anime". Date added, newest first, gave Bleach, Conan; "Oldest first" gave Conan, Bleach; Title gave A to Z.
+  - **Manga, MangaPill → search "one piece" → One Piece** (never fetched):
+    - refreshed by itself (details, then chapters), with "Ongoing", six genres and **1,214 chapters**;
+    - 50 wheel scrolls reached Chapter 2, the end of the list;
+    - More showed the whole description, and Less clamped it again;
+    - added, it was in the manga Library ("1 saved manga"), which kept its own sort (Date added) while anime stayed on Title.
+  - **A backend kill** (pid from `sidecar.log`): healthy again on a new port 7 s later. Without a reload:
+    - the One Piece card opened its details, cover included;
+    - Refresh ran ("Refreshing…") against the new port;
+    - "Remove from library" worked, and the manga Library showed the empty state;
+    - the anime Library still listed both, refetched from the new port.
+  - **After closing the window:** "backend stopped (exit code 0)". `token=` appears in none of `sidecar.log`, `madoyomi.log` or the dev output.
+- **Upload dates are the first fetch's date for these sources.** Every episode and chapter showed the day of the first fetch. AnimeGG and MangaPill give no dates, and the reconcile then gives an undated new row the newest known date, or the fetch time when none has one (upstream's chapter reconcile, which Phase 2's `AnimeDetails` ported). Sorting by date then follows the order of the fetches. That's how the server stores it, not the UI.
+- **Fixed after the first live run:** the Library's empty-state link, a `RouterLink` styled as `.btn`, was underlined. `.btn` now has `text-decoration: none`, rechecked live.
+- **Not checked live:**
+  - a `Seasons` anime: none of the installed sources has one. It is covered by the component tests (the season cards and their links, and a season's link to its parent);
+  - a refresh error on screen: no site failed during the live run. It is covered by the component tests (`SOURCE_FAILED` kept with the data, `NETWORK` after a kill) and the `refreshManga` tests;
+  - an untrusted or missing source on a details page: none was installed that way. It is covered by the component tests;
+  - a Library above 60 entries (the grid's virtual path): only 2 were added. `VirtualGrid`'s virtual path was verified live in Stage 4, and it is tested.
+- **Found in the tests:**
+  - ESLint's `vue/no-side-effects-in-computed-properties` reads any method called `sort` as `Array.prototype.sort`, so the store method is `sortOf`.
+  - The route smoke test needs a heading on `/anime/:id` without a backend, hence the "Anime"/"Manga" title while the entry loads.

@@ -1,4 +1,13 @@
-import type { Extension, ExtensionStore, MediaKind, Source } from "../api/types";
+import type {
+  Anime,
+  Chapter,
+  Episode,
+  Extension,
+  ExtensionStore,
+  Manga,
+  MediaKind,
+  Source,
+} from "../api/types";
 
 /** A repo as `ExtensionStoreFields` returns it. */
 export function makeStore(overrides: Partial<ExtensionStore> = {}): ExtensionStore {
@@ -90,4 +99,109 @@ export function makePage(from: number, n: number, hasNextPage: boolean, kind: Me
     })),
     hasNextPage,
   };
+}
+
+/** A stored anime of AnimeGG (see {@link makeSource}), fetched (`initialized`) and not in the library. */
+export function makeAnime(overrides: Partial<Anime> = {}): Anime {
+  return {
+    id: 12,
+    sourceId: "2499283573021220255",
+    url: "/series/one-piece",
+    title: "One Piece",
+    thumbnailUrl: "/api/v1/anime/12/thumbnail",
+    initialized: true,
+    inLibrary: false,
+    inLibraryAt: "0",
+    artist: null,
+    author: "Toei Animation",
+    description: "Pirates.",
+    genre: ["Action", "Adventure"],
+    status: "ONGOING",
+    fetchType: "Episodes",
+    seasonNumber: -1,
+    parentId: null,
+    ...overrides,
+  };
+}
+
+/** A stored manga of MangaPill, fetched and not in the library. */
+export function makeManga(overrides: Partial<Manga> = {}): Manga {
+  return {
+    id: 34,
+    sourceId: "3436757651215440337",
+    url: "/manga/2/one-piece",
+    title: "One Piece",
+    thumbnailUrl: "/api/v1/manga/34/thumbnail",
+    initialized: true,
+    inLibrary: false,
+    inLibraryAt: "0",
+    artist: "Eiichiro Oda",
+    author: "Eiichiro Oda",
+    description: "Pirates.",
+    genre: ["Action"],
+    status: "ONGOING",
+    ...overrides,
+  };
+}
+
+/** `n` episodes of `animeId`, episode i (from 1) uploaded on day i, in the source's order (oldest = 1). */
+export function makeEpisodes(n: number, animeId = 12, from = 1): Episode[] {
+  return Array.from({ length: n }, (_, k) => {
+    const i = from + k;
+    return {
+      id: 1000 + i,
+      animeId,
+      url: `/ep/${i}`,
+      name: `Episode ${i}`,
+      episodeNumber: i,
+      scanlator: null,
+      uploadDate: String(Date.UTC(2024, 0, i)),
+      sourceOrder: i,
+      isWatched: false,
+      isBookmarked: false,
+      fillermark: false,
+      lastSecondSeen: "0",
+      totalSeconds: "0",
+      summary: null,
+      previewUrl: null,
+    };
+  });
+}
+
+/** `n` chapters of `mangaId`, like {@link makeEpisodes}. */
+export function makeChapters(n: number, mangaId = 34): Chapter[] {
+  return Array.from({ length: n }, (_, k) => {
+    const i = k + 1;
+    return {
+      id: 5000 + i,
+      mangaId,
+      url: `/ch/${i}`,
+      name: `Chapter ${i}`,
+      chapterNumber: i,
+      scanlator: null,
+      uploadDate: String(Date.UTC(2024, 0, i)),
+      sourceOrder: i,
+      isRead: false,
+      isBookmarked: false,
+      lastPageRead: 0,
+      pageCount: 0,
+    };
+  });
+}
+
+/** MangaPill as a manga source. */
+export function makeMangaSource(overrides: Partial<Source> = {}): Source {
+  return makeSource({
+    kind: "manga",
+    id: "3436757651215440337",
+    name: "MangaPill",
+    baseUrl: "https://mangapill.com",
+    extension: {
+      pkgName: "eu.kanade.tachiyomi.extension.en.mangapill",
+      name: "MangaPill",
+      isTrusted: true,
+      isLoaded: true,
+    },
+    ...overrides,
+  });
 }

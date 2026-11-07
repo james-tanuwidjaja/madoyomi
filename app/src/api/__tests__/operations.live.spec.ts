@@ -31,7 +31,9 @@ import {
  * (Node's WebSocket, which, like a browser's, fails the handshake if a requested subprotocol isn't echoed). The repo
  * refresh needs at least one repo in the server's data dir. The repo-kind check fetches yuzono's index (internet
  * access) and writes nothing: the server refuses the add before storing anything. The filtered search needs an
- * installed, trusted source of either kind (it skips when there is none) and the source's site.
+ * installed, trusted source of either kind (it skips when there is none) and the source's site. The details/library
+ * check refreshes the first Popular entry of one source per kind and adds it to the library and removes it again
+ * (it puts back an entry that was already there).
  */
 
 // TypeScript 6 loads no @types by default, so `process` is reached through globalThis.
@@ -81,7 +83,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
   const client = createApiClient(() => ({ baseUrl: baseUrl!, token: token! }));
 
   it("finds the documents to check", () => {
-    expect(documents.length).toBeGreaterThanOrEqual(19);
+    expect(documents.length).toBeGreaterThanOrEqual(27);
   });
 
   it("validates every operation document against the server's schema", async () => {
@@ -224,6 +226,118 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
         }
       }
       expect(worked, report.join("\n")).toBe(true);
+    }
+    console.info(report.join("\n"));
+    if (kindsTried === 0) ctx.skip();
+  }, 300_000);
+
+  // The details page and the Library (Phase 3 §9 "Stage 5"): a stored entry of each kind (the first of a usable
+  // source's Popular) is refreshed from the source the way the page does it (anime: one call, a partial result on a
+  // source failure; manga: fetchManga, then fetchChapters), then added to the library, found in the library list with
+  // its time, and removed again (an entry that was already in the library is put back). The library round trip is
+  // the database only; the refresh needs the source's site, and a SOURCE_FAILED is recorded as the site's.
+  it("refreshes a stored entry of each kind and puts it in the library and back out", async (ctx) => {
+    const report: string[] = [];
+    let kindsTried = 0;
+    for (const kind of ["anime", "manga"] as const) {
+      const list =
+        kind === "anime"
+          ? (
+              await client.gql<{ animeSources: { nodes: SourceBase[] } }>(
+                operations.ANIME_SOURCES_QUERY,
+              )
+            ).animeSources.nodes
+          : (await client.gql<{ sources: { nodes: SourceBase[] } }>(operations.MANGA_SOURCES_QUERY))
+              .sources.nodes;
+      const source = list.find(
+        (s) => s.id !== "0" && s.extension.isTrusted && s.extension.isLoaded,
+      );
+      if (!source) continue;
+      kindsTried++;
+
+      const input = { source: source.id, type: "POPULAR", page: 1, query: null, filters: null };
+      const entries =
+        kind === "anime"
+          ? (
+              await client.gql<{
+                fetchSourceAnime: { animes: { id: number; inLibrary: boolean }[] };
+              }>(operations.BROWSE_ANIME_MUTATION, { input })
+            ).fetchSourceAnime.animes
+          : (
+              await client.gql<{
+                fetchSourceManga: { mangas: { id: number; inLibrary: boolean }[] };
+              }>(operations.BROWSE_MANGA_MUTATION, { input })
+            ).fetchSourceManga.mangas;
+      expect(entries.length, `${kind} ${source.name} Popular`).toBeGreaterThan(0);
+      const { id, inLibrary: wasInLibrary } = entries[0];
+
+      // The refresh
+      if (kind === "anime") {
+        const { data, errors } = await client.gqlResult<{
+          fetchAnimeAndEpisodes: {
+            anime: { id: number; initialized: boolean };
+            episodes: unknown[];
+          };
+        }>(operations.FETCH_ANIME_AND_EPISODES_MUTATION, { id });
+        expect(data?.fetchAnimeAndEpisodes.anime.id).toBe(id);
+        expect(
+          errors.every((e) => e.code === "SOURCE_FAILED"),
+          String(errors[0]),
+        ).toBe(true);
+        report.push(
+          `anime ${source.name} #${id}: ${
+            errors[0]
+              ? `${errors[0].code} ${errors[0].message}`
+              : `${data!.fetchAnimeAndEpisodes.episodes.length} episodes`
+          }`,
+        );
+      } else {
+        const outcome = await client
+          .gql<{ fetchManga: { manga: { id: number } } }>(operations.FETCH_MANGA_MUTATION, { id })
+          .then(() =>
+            client.gql<{ fetchChapters: { chapters: unknown[] } }>(
+              operations.FETCH_CHAPTERS_MUTATION,
+              { mangaId: id },
+            ),
+          )
+          .then(
+            (d) => `${d.fetchChapters.chapters.length} chapters`,
+            (e: unknown) => {
+              if (e instanceof ApiError && e.code === "SOURCE_FAILED")
+                return `${e.code} ${e.message}`;
+              throw e;
+            },
+          );
+        report.push(`manga ${source.name} #${id}: ${outcome}`);
+      }
+
+      // The library
+      const update =
+        kind === "anime" ? operations.UPDATE_ANIME_MUTATION : operations.UPDATE_MANGA_MUTATION;
+      const library = async () => {
+        const d = await client.gql<
+          Record<string, { nodes: { id: number; inLibraryAt: string }[] }>
+        >(kind === "anime" ? operations.LIBRARY_ANIME_QUERY : operations.LIBRARY_MANGA_QUERY);
+        return d[kind === "anime" ? "animes" : "mangas"].nodes;
+      };
+      try {
+        const added = await client.gql<Record<string, Record<string, { inLibrary: boolean }>>>(
+          update,
+          {
+            id,
+            inLibrary: true,
+          },
+        );
+        expect(Object.values(added)[0][kind].inLibrary).toBe(true);
+        const row = (await library()).find((e) => e.id === id);
+        expect(row, `${kind} #${id} in the library list`).toBeTruthy();
+        expect(Number(row!.inLibraryAt)).toBeGreaterThan(0);
+
+        await client.gql(update, { id, inLibrary: false });
+        expect((await library()).some((e) => e.id === id)).toBe(false);
+      } finally {
+        if (wasInLibrary) await client.gql(update, { id, inLibrary: true });
+      }
     }
     console.info(report.join("\n"));
     if (kindsTried === 0) ctx.skip();

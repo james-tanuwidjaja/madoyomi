@@ -148,11 +148,11 @@ Details: [phase-3-frontend-mvp.md](phases/phase-3-frontend-mvp.md)
 Milestones:
 - [x] Tauri sidecar lifecycle (spawn, handshake, restart) (Stage 1: the real jar with a token and `--data-dir`, `/health` checks, restart with backoff, splash and failure screens; phase-3 §10)
 - [x] Typed API client + WebSocket (Stage 2: `api/client.ts`, hand-written `types.ts` validated against the live schema, our own `graphql-transport-ws` client that follows backend restarts, vue-query hooks with infinite browse; phase-3 §9, §10)
-- [ ] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens (Stage 3: Repos and Extensions with the trust prompt; Stage 4: Browse and Source; all four done and verified live. Details, Library and Settings to come)
+- [ ] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens (Stage 3: Repos and Extensions with the trust prompt; Stage 4: Browse and Source; Stage 5: Details for both kinds and the Library; all six done and verified live. Settings comes in Stage 6)
 - [ ] Generic filter and preference renderers (Stage 4: `FilterRenderer` done, verified on shared fixtures and live for both kinds; `PreferenceRenderer` comes in Stage 6)
 - [ ] lint / typecheck / tests pass
 
-**Phase 3 in progress (Stage 4 of 7 done, 2026-11-07).** The stage plan is in phase-3 §8. The app has its shell (sidebar, anime/manga switch, every route) and talks to the backend: typed GraphQL, live events over WebSocket, and both kept working across a backend restart. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
+**Phase 3 in progress (Stage 5 of 7 done, 2026-11-07).** The stage plan is in phase-3 §8. The app has its shell (sidebar, anime/manga switch, every route) and talks to the backend: typed GraphQL, live events over WebSocket, and both kept working across a backend restart. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
 
 The first two screens work end to end:
 - **Repos:** add by URL with the type detected, remove after a confirmation, refresh.
@@ -167,6 +167,13 @@ Browsing works too (Stage 4):
 - **Filters:** the generic `FilterRenderer` in a side sheet, sending only the changes from the source's defaults.
 
 They were verified live for both kinds: filtered searches changed the results, pages loaded by scrolling, and the page kept working after a backend kill (phase-3 §10).
+
+Details and the Library work too (Stage 5):
+- **Details** for both kinds: cover, title, author, status, genres, description and the source. The page refreshes from the source by itself the first time a never-fetched entry is opened, and by a button. A site's failure is shown with the stored data kept.
+- **Episode and chapter lists:** virtualized, with a sort (source order, number, date) and filters (bookmarked, scanlator; watched/read waits for Phase 6). A `Seasons` anime lists its seasons.
+- **The library:** add and remove for both kinds, through a small backend addition for anime (`updateAnime`, upstream's `updateManga` shape). The Library grid sorts by date added or title, and its empty state points to Browse.
+
+They were verified live with 1190 episodes and 1214 chapters, and after a backend kill (phase-3 §10).
 
 ### Phase 4 — Playback
 Details: [phase-4-playback.md](phases/phase-4-playback.md)
@@ -300,9 +307,10 @@ These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) 
 - Stage 1: the shell and sidecar lifecycle;
 - Stage 2: the API layer and app shell;
 - Stage 3: Repos and Extensions, with the trust prompt;
-- Stage 4: Browse and Source, with `FilterRenderer`.
+- Stage 4: Browse and Source, with `FilterRenderer`;
+- Stage 5: Details and Library.
 
-Stage 5 (Details and Library) is next.
+Stage 6 (Settings and `PreferenceRenderer`) is next.
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

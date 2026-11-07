@@ -27,4 +27,7 @@ export const queryKeys = {
   episodes: (animeId: number) => ["api", "anime", animeId, "episodes"] as const,
   manga: (id: number) => ["api", "manga", id] as const,
   chapters: (mangaId: number) => ["api", "manga", mangaId, "chapters"] as const,
+  seasons: (animeId: number) => ["api", "anime", animeId, "seasons"] as const,
+  library: (kind?: MediaKind) =>
+    kind ? (["api", "library", kind] as const) : (["api", "library"] as const),
 };

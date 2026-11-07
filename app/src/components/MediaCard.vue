@@ -10,7 +10,8 @@ import type { EntrySummary } from "../api/types";
  * `?token=` added by `useAssetUrl`, so it follows a backend restart. Without a cover, or when it fails, the card
  * shows the title's first letter.
  */
-const props = defineProps<{ entry: EntrySummary }>();
+/** `hideLibraryBadge`: for the Library itself, where every card is in it. */
+const props = defineProps<{ entry: EntrySummary; hideLibraryBadge?: boolean }>();
 
 const cover = useAssetUrl(() => props.entry.thumbnailUrl);
 const failed = ref(false);
@@ -38,7 +39,11 @@ const initial = computed(() => props.entry.title.trim().charAt(0).toUpperCase() 
         @error="failed = true"
       />
       <span v-else class="cover-fallback" aria-hidden="true">{{ initial }}</span>
-      <span v-if="entry.inLibrary" class="badge ok in-library" data-testid="in-library">
+      <span
+        v-if="entry.inLibrary && !hideLibraryBadge"
+        class="badge ok in-library"
+        data-testid="in-library"
+      >
         In library
       </span>
     </span>
