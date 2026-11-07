@@ -152,6 +152,16 @@ const ACCESS_BADGE: Partial<Record<SourceAccess, { text: string; title: string }
             >
               Open in Extensions
             </button>
+            <RouterLink
+              v-if="s.isConfigurable === true && canBrowse(sourceAccess(s))"
+              :to="`/settings/source/${s.id}`"
+              class="pin"
+              data-action="source-settings"
+              :aria-label="`${s.name} settings`"
+              title="Settings"
+            >
+              ⚙
+            </RouterLink>
             <button
               type="button"
               class="pin"
@@ -243,6 +253,9 @@ const ACCESS_BADGE: Partial<Record<SourceAccess, { text: string; title: string }
 
 .pin {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: var(--control-height);
   height: var(--control-height);
   padding: 0;
@@ -251,6 +264,7 @@ const ACCESS_BADGE: Partial<Record<SourceAccess, { text: string; title: string }
   background: none;
   color: var(--color-text-secondary);
   font-size: 18px;
+  text-decoration: none;
   cursor: pointer;
 }
 

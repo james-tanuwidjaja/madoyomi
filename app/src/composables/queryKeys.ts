@@ -22,6 +22,8 @@ export const queryKeys = {
     kind ? (["api", "sources", kind] as const) : (["api", "sources"] as const),
   sourceFilters: (kind: MediaKind, sourceId: string) =>
     ["api", "sources", kind, sourceId, "filters"] as const,
+  sourcePreferences: (kind: MediaKind, sourceId: string) =>
+    ["api", "sources", kind, sourceId, "preferences"] as const,
   browse: (key: BrowseKey | null) => ["api", "browse", key] as const,
   anime: (id: number) => ["api", "anime", id] as const,
   episodes: (animeId: number) => ["api", "anime", animeId, "episodes"] as const,

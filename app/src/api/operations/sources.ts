@@ -16,7 +16,7 @@ import type {
  * `sources`/`source`/`fetchSourceManga`. Both answer in the same shapes, normalised here to `Source` and `SourcePage`.
  */
 
-const SOURCE_FIELDS = (on: string) => /* GraphQL */ `
+export const SOURCE_FIELDS = (on: string) => /* GraphQL */ `
   fragment SourceFields on ${on} {
     id
     name
@@ -241,7 +241,7 @@ export async function browseSource(p: BrowseParams, signal?: AbortSignal): Promi
   return toPage(data.fetchSourceManga.mangas, data.fetchSourceManga.hasNextPage);
 }
 
-function notFound(sourceId: string) {
+export function notFound(sourceId: string) {
   // The server's NOT_FOUND, for an id that isn't listed (animeSources filters, it doesn't fail).
   return new ApiError({
     kind: "graphql",

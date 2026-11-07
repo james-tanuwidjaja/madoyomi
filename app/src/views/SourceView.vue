@@ -148,6 +148,14 @@ const subtitle = computed(() => {
 <template>
   <PageLayout :title="source?.name ?? 'Source'" :subtitle="subtitle" fill>
     <template #actions>
+      <RouterLink
+        v-if="usable && source?.isConfigurable === true"
+        :to="`/settings/source/${sourceId}`"
+        class="btn"
+        data-action="source-settings"
+      >
+        Settings
+      </RouterLink>
       <RouterLink to="/browse" class="btn">All sources</RouterLink>
     </template>
 

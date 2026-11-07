@@ -83,11 +83,11 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 - [x] Source (popular/latest/search + filters) (Stage 4: Reka tabs with Latest only when `supportsLatest` is true, a search box, the filter sheet with Apply and Reset, an endless `VirtualGrid` of `MediaCard`s, readable errors with a retry, the state per source for the session; verified live for both kinds, including a filtered search that changed the results, page 2 by scrolling and a backend kill, §10)
 - [x] Details (anime + manga) with episode/chapter list (Stage 5: cover, title, author/artist, status, genres, source and description; refresh from the source by a button and by itself on the first open of an uninitialized entry; the source's error shown with the stored data kept; add to and remove from the library; a virtualized `EpisodeList`/`ChapterList` with a sort (source order, number, date, either way) and filters (watched/read as a Phase 6 placeholder, bookmarked, scanlator); a `Seasons` anime lists its seasons as cards (by the component tests only: no installed source has one); verified live for both kinds with 1190 episodes and 1214 chapters scrolled, and after a backend kill, §10)
 - [x] Library (Stage 5: a `VirtualGrid` of `MediaCard`s of the current kind's library, sorted by date added or title, either way, per kind; an empty state that links to Browse; the browse cards' "In library" mark follows add/remove; verified live for both kinds and after a backend kill, §10)
-- [ ] Settings + source preferences
+- [x] Settings + source preferences (Stage 6: `/settings` with the theme (System/Dark/Light, persisted, applied before the first paint), the language (English only, said so), the backend's state, version, URL, data folder and log folder with Open logs, and the current kind's configurable sources; `/settings/source/:id` with the source's preferences, an unusable source pointing to Extensions; Settings links on Browse rows and the source page; verified live for both kinds and after a backend kill, §10)
 
 ### Renderers
 - [x] `FilterRenderer` (all filter types + reset) (Stage 4: Header, Separator, Text, CheckBox, TriState, Select, Sort, Group; only the changes from the defaults are sent, group members through `groupChange`; round-trip and the server test's change list checked on shared fixtures, and live against KickAssAnime and MangaPill, §10)
-- [ ] `PreferenceRenderer` (all preference types)
+- [x] `PreferenceRenderer` (all preference types) (Stage 6: List (Reka Select, `%s` summaries), EditText (a dialog with its title and message, saved by Enter or Save), Switch, CheckBox, MultiSelect (checkboxes in a dialog, applied on Save), each with its title and summary, disabled and hidden as the extension says; only the changed preference is sent, by its position; optimistic updates with a rollback on an error and the server's value on a refusal; component tests for every type; live: a list, a switch, a multi-select and an edit text on KickAssAnime and MangaDex. A checkbox only by the tests: no installed source has one, §10)
 
 ### Quality
 - [x] Virtualized grids/lists (Stage 3: `VirtualList` for the extension list, 1469 Keiyoushi rows; Stage 4: `VirtualGrid` for the source results, verified live over many pages; Stage 5: the Library grid (`VirtualGrid`) and the episode/chapter lists (`VirtualList`, tested with 1500 rows; live with 1190 episodes and 1214 chapters scrolled end to end), §10)
@@ -98,7 +98,7 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 ## 6. Exit criteria
 
 - [ ] Starting from a fresh data dir, a user can add both repos, install and trust one anime and one manga extension, browse/search with filters, open details, see episodes/chapters and add both to the library, all in the UI.
-- [ ] Source preferences can be changed in the UI and take effect.
+- [x] Source preferences can be changed in the UI and take effect. (Stage 6, §10: KickAssAnime's "Use English titles" turned Popular's titles into English ones and its mirror changed the source's address; MangaDex's "Filter original languages" set to Korean left only Korean titles in Popular. All restored afterwards, the MangaDex one after a backend kill without a reload. Rechecked in the exit run.)
 - [x] Killing the backend process shows an error and recovers automatically. (Stage 1, §10: the overlay shows the exit and the countdown, and the app is back on a new port about 11 s later. Rechecked in the exit run.)
 
 ## 7. Risks & notes
@@ -141,6 +141,11 @@ Each stage ends in something verifiable and a commit:
      - the live spec's new refresh and library round trip (8/8);
      - live in `pnpm tauri dev` for both kinds (§10): an automatic first refresh, 1190 episodes and 1214 chapters scrolled, sort and scanlator filter, add and remove, the Library's sorts, the browse card's mark, and all of it after a backend kill.
 6. **Settings and `PreferenceRenderer`** (steps 17, 19): general settings (theme System/Dark/Light, language), backend settings (data dir, log folder), and source preferences saved with optimistic updates. Verified by renderer unit tests and a live preference change that takes effect.
+   - *Done* (2026-11-07):
+     - unit tests of the preference values and changes, component tests of `PreferenceRenderer` for every type, the optimistic update and its rollback over mocked operations, the calls over a mocked client, and both views;
+     - the live spec's new preference round trip for each kind (9/9);
+     - live in `pnpm tauri dev` (§10): the three themes, Open logs, the Settings links, a preference of each kind taking effect on the source page, and all of it after a backend kill.
+   - Nothing in `server/` changed: the manga quirks are worked around in the client (§9).
 7. **Exit run** (steps 22–23 and §6): every exit criterion from a fresh data dir, the remaining tests, a fix round, and the phase closed in PLAN.md and README.md.
 
 ## 9. Decision record
@@ -340,6 +345,37 @@ Decided in the stage (defaults, not asked):
   - While the entry loads, or without a backend, the page shows "Anime"/"Manga" as its title, so the route smoke test still finds a heading.
 - **Link-styled buttons** (`RouterLink class="btn"`) are no longer underlined (`.btn` gets `text-decoration: none`). The Library's empty state was the first such link that was underlined.
 
+### Stage 6 (2026-11-07)
+
+Decided by the user:
+- **The manga preference quirks are worked around in the client, with no server change.** Upstream's `Source.setSourcePreference` uses the screen its last read cached (`preferenceScreenMap[sourceId]!!`), so a change sent before any read since the server started is a null pointer (`INTERNAL`); a backend restart empties that cache. So the UI's manga change (`updateSourcePreference` in `api/operations/preferences.ts`) reads the preferences first, then sends the change: two calls, like Stage 5's manga refresh. Upstream also saves the value first and then calls the extension's listener, ignoring its answer, so a manga extension can't refuse a value. That stays as upstream has it, recorded in §10. A server fix (build the screen when none is cached; listener first, as on the anime side) was the alternative, at the cost of an upstream edit and a full build.
+
+Decided in the stage (defaults, not asked):
+- **No server change.** The preference API (Phase 2 Stage 4) had everything: both kinds' queries and mutations, `isConfigurable` and the union's types. `server/` and `server/UPSTREAM.md` are untouched.
+- **The documents** (`api/operations/preferences.ts`): `PREFERENCE_FIELDS` with every member's fields aliased by kind (`switchCurrentValue`, `listDefault`, …), the preferences of a source of each kind, and both mutations with the whole input (`UpdateAnimeSourcePreferenceInput`, `UpdateSourcePreferenceInput`). They answer `{preferences, source}`. The live spec validates them (31 documents).
+- **Optimistic updates and their rollback** (`composables/usePreferences.ts`, step 19):
+  - a change writes the new value into the cached list at once, so the control moves on the click;
+  - changes run one at a time and in order, in one vue-query mutation scope (`sourcePreferences`), so the server sees them as they were made. Each one still shows at once, because `onMutate` runs before the scope's wait;
+  - when the last pending change of the source answers, the server's list replaces the cached one. An earlier answer isn't written while a later change waits, so the later value doesn't flicker back;
+  - **a failure** (any error, `BAD_REQUEST` from the server or the backend down) puts the preference back as it was before that change, and then reads the list again when no other change of the source is pending. The row shows the error (`ErrorNotice` with the readable line, no retry: the control is the retry);
+  - **a refusal** isn't an error on the server: the anime side runs the extension's listener first and saves only if it agrees, then answers with what it stored. So the UI compares the answer's value at that position with the one sent (`changeTaken`; a multi-select as a set). When they differ, the cached list already holds the kept value, and the row says "<extension> didn't accept that value and kept <value>";
+  - the status (saving, error, refused) is kept per position for the page. An older change's answer doesn't overwrite a newer change's status.
+- **What a change invalidates.** The server drops the cached source, and its next use is a new instance that reads the new settings. So the UI:
+  - removes the source's cached browse pages, so the source page browses again (the "takes effect" part);
+  - invalidates the source's filters, which an extension may build from its settings;
+  - refetches the kind's source list once after the source's next browse page (`markSourceChanged` in `composables/useSources.ts`). The server stores the new instance's `baseUrl` (a mirror setting changes it) only when that instance loads, at the next browse. The mutation's own `source` is the old row, so patching the list with it would have kept the old address (found live, §10).
+- **The preferences query has no stale time**: one change can change other preferences (a summary, `enabled`, `visible`), so the page reads the list each time it opens.
+- **`PreferenceRenderer`** draws each visible preference with its original position (hidden ones count, as on the server), and `PreferenceField` draws one row: the title, the summary, the control.
+  - Switch: Reka `Switch`. CheckBox: Reka `Checkbox`. List: Reka `Select`, on the entries' indexes (an entry value can be `""`, which a select item can't be). These apply at once.
+  - EditText and MultiSelect open a Reka `Dialog`, as Android's preference dialogs do, with `dialogTitle` (or the title) and `dialogMessage`. The edit text saves on Enter or Save; the multi-select applies its checkboxes on Save and sends the whole set, in the entries' order. Cancel, Escape or a click outside change nothing. A value equal to the stored one sends nothing.
+  - A list's `%s` summary is its current entry (`%%` a percent sign), as Android's `ListPreference` formats it. An edit text without a summary shows its value as the summary; one with a summary shows its value on a line below (found live: otherwise the row doesn't say what is stored).
+  - A disabled preference is greyed out and its control disabled; the server would leave it unchanged anyway.
+- **The theme** (`stores/theme.ts`): System, Dark or Light, kept in `localStorage` (`madoyomi.theme`; System removes the key). It sets `<html data-theme>`, or removes it for System, which tokens.css reads (Stage 1). A small inline script in `index.html` sets the attribute before the first paint, so a chosen theme doesn't flash the other one while the app loads (the CSP is off in `tauri.conf.json`). The control is a Reka `ToggleGroup` drawn like the sidebar's anime/manga switch; a click on the chosen option keeps it.
+- **Language: English only**, and the page says so. There's no i18n layer yet.
+- **The backend section** shows the state, the server's version and URL, and the data and log folders from the status snapshot, with Open logs (`open_backend_logs`). A backend not started by the app (`pnpm dev` with `VITE_MADOYOMI_URL`) has no folders to show, and the page says so.
+- **Source settings are reached three ways:** the Settings page lists the current kind's sources with `isConfigurable` true (by name, then language); Browse rows of such a source have a ⚙ link next to the pin; the source page has a Settings button. A source that can't be used (`isConfigurable` null) isn't listed, and Settings counts those and points to Extensions.
+- **`/settings/source/:id`** uses the current kind, as the source page does. It handles a missing source, an untrusted or unloaded one (Open in Extensions; no preference request, which would fail with `UNTRUSTED`), a source without settings, and a failed read (`ErrorNotice` with Try again). While it loads, the title is "Source settings", so the route smoke test still finds a heading.
+
 ## 10. Findings log
 
 ### Stage 1 (2026-11-06)
@@ -533,3 +569,60 @@ Decided in the stage (defaults, not asked):
 - **Found in the tests:**
   - ESLint's `vue/no-side-effects-in-computed-properties` reads any method called `sort` as `Array.prototype.sort`, so the store method is `sortOf`.
   - The route smoke test needs a heading on `/anime/:id` without a backend, hence the "Anime"/"Manga" title while the entry loads.
+
+### Stage 6 (2026-11-07)
+
+- **Baseline before the stage** (the same as after Stage 5):
+  - `pnpm test`: 25 files, 186 passed + 8 skipped;
+  - lint, typecheck and format:check clean;
+  - `cargo test` 14 and `cargo clippy --all-targets` clean;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24 at the start, on the Stage 5 jar.
+- **After the stage:**
+  - `pnpm test`: 30 files, 220 passed + 9 skipped (the live spec). The new ones: preferences 5, PreferenceRenderer 6, preferenceCalls 4, usePreferences 5, SettingsView 7, SourceSettingsView 5; BrowseView 7 (was 6) and SourceView 13 (was 12) for the Settings links. The other files are unchanged; routes 15 still passes.
+  - lint, typecheck and format:check are clean.
+  - `cargo build`, `cargo test` (14) and `cargo clippy --all-targets` pass. Nothing in `src-tauri` changed.
+  - Nothing in `server/` changed, so it wasn't rebuilt: Stage 5's 667 tests and this stage's smoke run (24/24) stand.
+- **Live operation spec: 9/9.** The server came from `Start-MadoyomiServer` on a fresh scratch data dir with both repos, AnimeGG, MangaPill, KickAssAnime and MangaDex (`eu.kanade.tachiyomi.extension.all.mangadex`).
+  - All 31 documents validate, the four new ones included.
+  - The new preference round trip, for each kind, on the first configurable source with a switch, checkbox or list:
+    - AnimeGG's `preferred_language`, `[SUBBED]` → `[DUBBED]`, taken and read back, then restored;
+    - MangaDex's `thumbnailQuality`, `""` → `.512.jpg`, the same.
+  - The Stage 5 library test took the first usable manga source, which was now a MangaDex language source with an empty Popular (14 of them in a row: ur, da, lt, …). It now tries the next source until one has entries, as the filtered search already did.
+- **Which installed sources have settings:**
+  - AnimeGG: 3 lists (language, server, quality);
+  - KickAssAnime: 7 (the mirror `kaa.lt`/`kaa.to`, "Use English titles", the audio languages, quality, server, and a multi-select of excluded hosts);
+  - MangaDex (each language source): 12 (cover quality, 7 switches, two multi-selects (content rating, original languages) and two edit texts (blocked groups, blocked uploaders));
+  - MangaPill and the Local source: none.
+  - No installed source has a `CheckBoxPreference`, so the checkbox is checked by the component tests only.
+- **Live in `pnpm tauri dev`** (`MADOYOMI_DATA_DIR` = that data dir), driven by clicks, wheel, keys and pasted text, checked by screenshot:
+  - **Settings:** the theme on System (dark, as Windows is), the language, "Running", `Madoyomi-Server v0.1.0 · http://127.0.0.1:57364`, the data and log folders, and the anime sources AnimeGG and KickAssAnime.
+  - **The theme:** Light and Dark switched the whole window at once, and System went back to Windows' dark. Light was still on after a window reload.
+  - **Open logs** opened an Explorer window on `<data dir>\logs`.
+  - **KickAssAnime, a switch:**
+    - Popular first showed the Romaji titles ("Boku no Hero Academia 7th Season", "Mahoutsukai no Yome Season 2");
+    - the source page's Settings button opened its 7 preferences, with the `%s` summaries showing the entries ("kaa.lt", "Japanese", "1080p");
+    - "Use English titles" on moved at once. Back on the source page, Popular browsed again and showed "My Hero Academia Season 7" and "The Ancient Magus' Bride Season 2": **it took effect**.
+  - **KickAssAnime, a list:** the mirror kaa.lt → kaa.to was saved, with the summary following.
+  - **MangaDex, a multi-select:**
+    - Browse's EN group had MangaDex with a ⚙, and MangaPill (no settings) without one;
+    - "Filter original languages" opened its dialog (Japanese, Chinese, Korean). Korean, then Save, showed "Korean";
+    - Popular then had only Korean titles ("Copying Skills With Affinity!", "First Love Trap", …, 4 entries): **it took effect for manga too**.
+  - **MangaDex, an edit text:** "Block groups by UUID" opened its dialog. A pasted UUID saved with Enter and showed under the summary. Cleared, then Enter, it was empty again.
+  - **A backend kill** (pid from `sidecar.log`): healthy again on a new port 10 s later. Without a reload:
+    - MangaDex's settings showed Korean still selected (the extension's own SharedPreferences). Unticked and saved, Popular had its full list again;
+    - KickAssAnime's "Use English titles" off brought back the Romaji titles.
+
+    Every preference changed in the run was back at its first value at the end.
+  - **After closing the window:** "backend stopped (exit code 0)". `token=` appears in none of `sidecar.log`, `madoyomi.log` or the dev output.
+- **Fixed after the first live run:**
+  - **The source's address stayed old after a mirror change.** The mutation answers with the source's stored row, and the server only stores the new instance's `baseUrl` when that instance loads, at the next browse. So the page kept "kaa.lt" while it browsed kaa.to, until a window reload. Now the source list is read again once after that browse (§9). Rechecked live: kaa.to → kaa.lt showed "https://kaa.lt" on the source page without a reload.
+  - **An edit text with a summary didn't show its value.** It now shows it on a line below the summary.
+  - **"Open logs" wrapped onto two lines** beside a long log path. It no longer wraps.
+- **Upstream's manga preference change** (core `manga/impl/Source.kt`, unchanged):
+  - it needs the screen of an earlier read in the same server process (a null pointer otherwise). The UI's read-first covers it, and the change after the backend kill above went through;
+  - it saves the value before calling the extension's listener and ignores its answer, so a manga extension can't refuse a value. The anime side follows Android's order (Phase 2 §9). A refusal is therefore only possible on anime, and none of the values tried live was refused. The refusal line is covered by the component and hook tests.
+- **Not checked live:**
+  - a refused value: none of the extensions refused one. It is covered by the tests (hook, view and renderer);
+  - a failed save: no save failed. It is covered by the hook test (rollback and reread) and the renderer test (the error line);
+  - a checkbox preference: none of the installed sources has one;
+  - the very first paint in a chosen theme: the screenshots can't catch the frame before the app's own styles. The inline script is in `index.html`, and the theme was kept across a reload.

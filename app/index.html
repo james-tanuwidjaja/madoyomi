@@ -5,6 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/tauri.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Madoyomi</title>
+    <script>
+      // The theme chosen in Settings (stores/theme.ts), applied before the first paint.
+      try {
+        var theme = localStorage.getItem("madoyomi.theme");
+        if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
   </head>
 
   <body>
