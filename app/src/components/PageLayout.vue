@@ -1,16 +1,17 @@
 <script setup lang="ts">
 /**
  * A page: the title row (with optional actions) and the content below it. With `fill`, the page takes the window's
- * height and its last child gets what's left, for a page with its own scroll area (a virtualized list).
+ * height and its last child gets what's left, for a page with its own scroll area (a virtualized list). Without a
+ * title or actions there is no title row (a details page has its own heading).
  */
-defineProps<{ title: string; subtitle?: string; fill?: boolean }>();
+defineProps<{ title?: string; subtitle?: string; fill?: boolean }>();
 </script>
 
 <template>
   <section class="page" :class="{ fill }">
-    <header class="page-header">
+    <header v-if="title || $slots.actions" class="page-header">
       <div>
-        <h1>{{ title }}</h1>
+        <h1 v-if="title">{{ title }}</h1>
         <p v-if="subtitle" class="subtitle">{{ subtitle }}</p>
       </div>
       <div v-if="$slots.actions" class="actions"><slot name="actions" /></div>

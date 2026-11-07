@@ -18,7 +18,9 @@ import madoyomi.core.anime.model.table.EpisodeTable
 import madoyomi.core.graphql.MadoyomiGraphQLErrors
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import suwayomi.tachidesk.graphql.directives.RequireAuth
 import suwayomi.tachidesk.graphql.directives.RequirePermissions
 import suwayomi.tachidesk.graphql.mutations.SourceMutation.SourcePreferenceChange
@@ -27,11 +29,12 @@ import suwayomi.tachidesk.graphql.types.Preference
 import suwayomi.tachidesk.server.JavalinSetup.future
 import suwayomi.tachidesk.server.database.dbTransaction
 import suwayomi.tachidesk.server.user.UserPermission
+import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * The anime counterparts of upstream's `fetchSourceManga`, `fetchMangaAndChapters`, `fetchChapterPages` and
+ * The anime counterparts of upstream's `fetchSourceManga`, `fetchMangaAndChapters`, `fetchChapterPages`, `updateManga(s)` and
  * `updateSourcePreference`, over the core services (`madoyomi.core.anime`). Permissions as upstream's.
  */
 class AnimeMutation {
@@ -207,6 +210,69 @@ class AnimeMutation {
                 input.clientMutationId,
                 EpisodeVideoType(AnimeVideos.resolveVideo(input.episodeId, input.hosterIndex, input.videoIndex)),
             )
+        }
+
+    data class UpdateAnimePatch(
+        val inLibrary: Boolean? = null,
+    )
+
+    data class UpdateAnimeInput(
+        val clientMutationId: String? = null,
+        val id: Int,
+        val patch: UpdateAnimePatch,
+    )
+
+    data class UpdateAnimePayload(
+        val clientMutationId: String?,
+        val anime: AnimeType,
+    )
+
+    data class UpdateAnimesInput(
+        val clientMutationId: String? = null,
+        val ids: List<Int>,
+        val patch: UpdateAnimePatch,
+    )
+
+    data class UpdateAnimesPayload(
+        val clientMutationId: String?,
+        val animes: List<AnimeType>,
+    )
+
+    /**
+     * Upstream's `updateMangas` for anime: `inLibrary` sets `in_library`, and adding sets `added_at` (`inLibraryAt`) to
+     * now, while removing keeps it, as upstream does. Every id must exist (`NOT_FOUND` otherwise, before anything is
+     * written). Upstream also queues uninitialized entries for a library update and moves the thumbnail out of the
+     * cache; anime library updates and downloads are Phase 6, and the UI refreshes an uninitialized entry on open.
+     */
+    private fun updateAnimes(
+        ids: List<Int>,
+        patch: UpdateAnimePatch,
+    ) {
+        dbTransaction {
+            ids.distinct().forEach(AnimeEntries::animeRow)
+            val inLibrary = patch.inLibrary ?: return@dbTransaction
+            val now = Instant.now().epochSecond
+            AnimeTable.update({ AnimeTable.id inList ids }) {
+                it[AnimeTable.inLibrary] = inLibrary
+                if (inLibrary) it[AnimeTable.addedAt] = now
+            }
+        }
+    }
+
+    @RequireAuth
+    @GraphQLDescription("Changes an anime entry (inLibrary: add to or remove from the library), as upstream's updateManga")
+    fun updateAnime(input: UpdateAnimeInput): CompletableFuture<UpdateAnimePayload?> =
+        future {
+            updateAnimes(listOf(input.id), input.patch)
+            UpdateAnimePayload(input.clientMutationId, AnimeType(AnimeEntries.animeRow(input.id)))
+        }
+
+    @RequireAuth
+    @GraphQLDescription("Changes several anime entries at once, as upstream's updateMangas")
+    fun updateAnimes(input: UpdateAnimesInput): CompletableFuture<UpdateAnimesPayload?> =
+        future {
+            updateAnimes(input.ids, input.patch)
+            UpdateAnimesPayload(input.clientMutationId, AnimeType.byIds(input.ids.distinct()))
         }
 
     data class UpdateAnimeSourcePreferenceInput(

@@ -47,6 +47,7 @@ code {
   color: var(--color-text);
   font: inherit;
   cursor: pointer;
+  text-decoration: none;
   transition: background-color var(--duration-fast) var(--easing-standard);
 }
 

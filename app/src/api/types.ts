@@ -8,6 +8,8 @@
  * GraphQL `LongString` (a Kotlin Long: source ids, version codes, epoch times) is a `string` here.
  */
 
+import type { ApiError } from "./client";
+
 /** A Kotlin `Long`, sent as a decimal string so it survives JavaScript numbers. */
 export type LongString = string;
 
@@ -345,6 +347,8 @@ interface EntryBase {
   thumbnailUrl: string | null;
   initialized: boolean;
   inLibrary: boolean;
+  /** Epoch seconds when it was last added to the library ("0" if never). Kept when it is removed. */
+  inLibraryAt: LongString;
 }
 
 /** `AnimeType`. A season is an entry with a `parentId`. */
@@ -414,6 +418,36 @@ export interface EntrySummary {
   title: string;
   thumbnailUrl: string | null;
   inLibrary: boolean;
+}
+
+/** A library card: a summary with the time it was added (epoch seconds). */
+export interface LibraryEntry extends EntrySummary {
+  inLibraryAt: number;
+}
+
+/** A season of a `Seasons` anime: an entry of its own, shown as a card. */
+export interface AnimeSeason {
+  id: number;
+  title: string;
+  thumbnailUrl: string | null;
+  inLibrary: boolean;
+  seasonNumber: number;
+}
+
+/**
+ * A refresh from the source, with the data as stored afterwards. `error` is the source's failure, if any: the data
+ * is then what was stored before.
+ */
+export interface AnimeRefresh {
+  anime: Anime;
+  episodes: Episode[];
+  seasons: AnimeSeason[];
+  error: ApiError | null;
+}
+export interface MangaRefresh {
+  manga: Manga;
+  chapters: Chapter[];
+  error: ApiError | null;
 }
 
 /** One page of `fetchSourceAnime`/`fetchSourceManga`. */

@@ -320,7 +320,7 @@ How it behaves:
   - The behaviour and the deviations from upstream are in the Phase 2 doc, §9 "Stage 3".
 - **API (Stage 4).** Madoyomi's GraphQL in `api` wraps the services, in the shapes of upstream's manga operations. The mapping from the PLAN.md §5 sketch is step 16 of the Phase 2 doc, and the decisions are in its §9 "Stage 4".
   - Queries: `anime(id)`, `animes(condition, filter, order, paging)`, `episodes(…)`, and on `AnimeSourceType` `iconUrl`, `supportsLatest`/`isConfigurable` (null while the source can't be used), `filters`, `preferences`, `anime`.
-  - Mutations: `fetchSourceAnime`, `fetchAnimeAndEpisodes` (data plus the source's error), `fetchEpisodeVideos`, `fetchHosterVideos`, `resolveEpisodeVideo`, and `updateAnimeSourcePreference` (`MANAGE_SOURCE_PREFERENCES`).
+  - Mutations: `fetchSourceAnime`, `fetchAnimeAndEpisodes` (data plus the source's error), `fetchEpisodeVideos`, `fetchHosterVideos`, `resolveEpisodeVideo`, and `updateAnimeSourcePreference` (`MANAGE_SOURCE_PREFERENCES`). Phase 3 Stage 5 added `updateAnime`/`updateAnimes` (see "Library flag (Phase 3)" below).
   - `ExtensionType.compatIssues` (the upstream edit above).
   - The types `AnimeType`/`EpisodeType` (upstream's `MangaType`/`ChapterType` shapes) resolve their relations through data loaders registered with the hook above.
   - REST `GET /api/v1/anime/{animeId}/thumbnail` (`madoyomi.api.AnimeHttp`, registered in `Main`'s `javalinSetup` hook): `AnimeThumbnails`, upstream's manga thumbnail flow for anime (the source's client and headers, a details refresh when the URL is gone, upstream's thumbnail cache as `anime-<id>.<ext>`).
@@ -345,6 +345,18 @@ How it behaves:
     - a `new T` that dex2jar left unfolded before an `invokespecial S.<init>` (mangafire, comix, mangakakalot) gets its call rewritten to `T.<init>`;
     - a constructor whose super call skips its direct superclass `U` (R8 removed `U`'s no-op constructor; mangadex's 8 serialization DTOs) calls `U.<init>`, and `U` gets the constructor back.
     - The compat scan's manga sample verifies with 0 errors.
+
+### Library flag (Phase 3)
+
+Madoyomi code only; no upstream file changed. The UI's details page and Library (Phase 3 doc §9 "Stage 5") need to add an anime to the library, which only upstream's manga side could do (`updateManga`).
+- `updateAnime(input: {id, patch: {inLibrary}})` → `{clientMutationId, anime}` and `updateAnimes(input: {ids, patch})` → `{clientMutationId, animes}` (in the given order), in `madoyomi.api.graphql.AnimeMutation`, in the shape of upstream's `updateManga`/`updateMangas` (`@RequireAuth`, as upstream's).
+- How it behaves:
+  - `inLibrary: true` sets `ANIME.in_library` and `added_at` (`inLibraryAt`) to now. `false` clears the flag and keeps `added_at`, as upstream keeps `inLibraryAt`.
+  - Every id must exist: an unknown one is `NOT_FOUND` (`AnimeEntries.animeRow`), and nothing is written. Upstream's `.first()` would be `INTERNAL`.
+  - Not ported:
+    - upstream's queueing of uninitialized entries for a library update. Anime library updates are Phase 6, and the UI refreshes an uninitialized entry when it is opened;
+    - `Library.handleMangaThumbnail`. Anime thumbnails stay in the thumbnail cache, a Phase 6 point (downloads).
+- A browse already leaves an in-library row as it is (`AnimeEntries.upsert`); `AnimeLibraryApiTest` checks that too.
 
 ### New Madoyomi code
 
@@ -404,6 +416,7 @@ How it behaves:
 | `tools/compat-test/lib/HprofLoaderRoots.java`, `run-compat.ps1` additions (Phase 2 Stage 6) | a dependency-free HPROF reader (JDK 21 single-file program) that prints the shortest strong GC-root path to each live `ChildFirstURLClassLoader`. The harness takes a heap dump when extension loaders are still alive after the uninstall and an idle wait (`-SettleSec`, `-NoHeapDump`), and puts the nearest holder of each in the report. The harness also gained a preference round-trip and a filtered search per extension, and `-Kind Manga` (the Keiyoushi sample through upstream's manga API into `docs/research/manga-compat.md`) |
 | `core/src/test/kotlin/madoyomi/core/extension/{ExtensionThreadsTest,Dex2jarRepairCompatTest,GcAssert}.kt`, `core/src/test/kotlin/madoyomi/core/anime/ParsedAnimeHttpSourceTest.kt`, `api/src/test/kotlin/madoyomi/api/AnimeRoundTripApiTest.kt`, `AndroidCompat/src/test/kotlin/.../JavaSharedPreferencesTest.kt` (Phase 2 Stage 6) | Stage 6's tests. `ParsedAnimeHttpSourceTest` runs a Jsoup-selector source (no top-20 extension extends `ParsedAnimeHttpSource`) through browse, details and videos against a loopback site. `ExtensionThreadsTest` compiles "extension" classes at test time with `javax.tools` and loads them through a `ChildFirstURLClassLoader`. `Dex2jarRepairCompatTest` covers the four manga APKs. `AnimeRoundTripApiTest` round-trips filters and preferences of real extensions through GraphQL, offline. Leak tests are in `ExtensionLifecycleTest` (an uninstalled anime and manga extension's class loader is collected), `AnimeVideosTest` and `AnimeExtensionLoaderTest` |
 | `tools/lib/MadoyomiServer.ps1` (Phase 2 Stage 4) | the PowerShell helpers that start the jar as the Tauri shell does and drive its API (steps, GraphQL, WebSocket, install with progress), used by `tools/smoke-api.ps1` |
+| `api/src/main/kotlin/madoyomi/api/graphql/AnimeMutation.kt` (Phase 3 Stage 5 additions), `api/src/test/kotlin/madoyomi/api/AnimeLibraryApiTest.kt` | `updateAnime`/`updateAnimes`, the library flag for anime (see "Library flag (Phase 3)"), and their tests: add, remove, the batch, an unknown id, and a browse leaving an in-library entry as it is |
 | `core/src/test/kotlin/madoyomi/core/anime/*` (Stage 3 additions) | `AnimeBrowseTest`, `AnimeDetailsTest`, `AnimeVideosTest` (scripted fake sources and a scratch H2 per class, `AnimeTestSources.kt`), `AnimeFiltersTest` (every filter of kickassanime, aniwave and hanime from `tools/compat-test/apks/`), `AnimeSourcePreferencesTest` (AnimePahe), and `AnimeServicesLiveTest` (real sites, only with `MADOYOMI_LIVE_SOURCE_TESTS=1`). Tests skip when their APK is missing. Stage 3 also made every madoyomi scratch-database test set its database as the explicit default and restore the previous explicit one (an order dependency, Phase 2 doc §10) |
 | `ext-host/src/test/kotlin/madoyomi/exthost/*`, `core/src/test/kotlin/madoyomi/core/extension/*` | `ApkInspectorTest`, `Dex2jarRepairTest`, `ExtensionLifecycleTest`, `SignatureTrustTest` on the real APKs in the gitignored `tools/apks/` (fetched by `tools/fetch-test-apks.ps1`; tests skip without them). `ExtensionLifecycleLiveTest` installs from the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 | `core/src/test/kotlin/madoyomi/core/repo/*`, `core/src/test/resources/repo/*` | parser, fetcher and service tests. Fixtures are text: trimmed real yuzono `index.min.json`/`repo.json`, and trimmed yuzono and Keiyoushi `index.pb` stored as base64 of the gzipped bytes. `RepoServiceLiveTest` hits the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
