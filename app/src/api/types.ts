@@ -175,11 +175,16 @@ export interface SourceBase {
   contentWarning: ContentWarning;
   /** Server-relative: load it through `assetUrl`. */
   iconUrl: string;
+  /** The site the source reads, if it has one (the Local source has none). */
+  baseUrl: string | null;
   /** Null for an anime source that can't be used (untrusted, not loadable). */
   supportsLatest: boolean | null;
   isConfigurable: boolean | null;
-  extension: { pkgName: string; name: string; isTrusted: boolean };
+  extension: { pkgName: string; name: string; isTrusted: boolean; isLoaded: boolean };
 }
+
+/** Upstream's built-in Local source (manga): its fake extension has no signature, but it is always usable. */
+export const LOCAL_SOURCE_ID = "0";
 
 export interface Source extends SourceBase {
   kind: MediaKind;

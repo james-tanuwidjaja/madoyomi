@@ -79,19 +79,19 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 ### Screens
 - [x] Repos screen (Stage 3: list by kind with the stored URL, count, last refresh, last error and key trust; add by URL with the type detected or chosen; remove after a confirmation; refresh per kind or all; verified live on a fresh data dir, §10)
 - [x] Extensions screen (available/installed/updates) + `TrustDialog` (Stage 3: Reka tabs, search, language, "Show 18+", install/update/uninstall with live steps and readable errors, compat issues, a virtualized list; the trust prompt shown, used and verified live, §10)
-- [ ] Browse (source list)
-- [ ] Source (popular/latest/search + filters)
+- [x] Browse (source list) (Stage 4: the current kind's sources by language, pinned ones first (kept in `localStorage`), the Local source as built in, an untrusted or unloaded source not opened and pointing to Extensions; verified live for both kinds, §10)
+- [x] Source (popular/latest/search + filters) (Stage 4: Reka tabs with Latest only when `supportsLatest` is true, a search box, the filter sheet with Apply and Reset, an endless `VirtualGrid` of `MediaCard`s, readable errors with a retry, the state per source for the session; verified live for both kinds, including a filtered search that changed the results, page 2 by scrolling and a backend kill, §10)
 - [ ] Details (anime + manga) with episode/chapter list
 - [ ] Library
 - [ ] Settings + source preferences
 
 ### Renderers
-- [ ] `FilterRenderer` (all filter types + reset)
+- [x] `FilterRenderer` (all filter types + reset) (Stage 4: Header, Separator, Text, CheckBox, TriState, Select, Sort, Group; only the changes from the defaults are sent, group members through `groupChange`; round-trip and the server test's change list checked on shared fixtures, and live against KickAssAnime and MangaPill, §10)
 - [ ] `PreferenceRenderer` (all preference types)
 
 ### Quality
-- [ ] Virtualized grids/lists (Stage 3: `VirtualList` for the extension list, 1469 Keiyoushi rows; the source grid and episode/chapter lists follow in Stages 4–5)
-- [ ] Covers via backend image proxy
+- [ ] Virtualized grids/lists (Stage 3: `VirtualList` for the extension list, 1469 Keiyoushi rows; Stage 4: `VirtualGrid` for the source results, verified live over many pages; the library grid and episode/chapter lists follow in Stage 5)
+- [ ] Covers via backend image proxy (Stage 4: the source grid's covers load through the backend's thumbnail routes, `/api/v1/anime/{id}/thumbnail` and upstream's manga one, which apply the source's headers, so no new proxy was needed; verified live for both kinds and after a backend restart. The details and library covers follow in Stage 5)
 - [ ] Component + client tests
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass
 
@@ -128,6 +128,12 @@ Each stage ends in something verifiable and a commit:
    - Live in `pnpm tauri dev` from a fresh data dir, driven by clicks and pasted text (§10): both repos added, MangaPill and AnimeGG installed with their steps shown, and the trust prompt reached by removing yuzono. Then a backend kill, after which uninstall and install still worked.
    - Nothing in `server/` changed.
 4. **Browse and Source, with `FilterRenderer`** (steps 13–14, 18, 20–21): the source list grouped by language with pinned favourites; Popular/Latest/Search; the filter sheet; an infinite `VirtualGrid` of `MediaCard`s. Covers load through the backend's thumbnail routes (`/api/v1/anime/{id}/thumbnail`, upstream's manga thumbnail), which already apply the source's headers, so step 21 needs no new proxy. Verified with `FilterRenderer` unit tests on shared fixtures, and live with a filtered search for both kinds.
+   - *Done* (2026-11-07):
+     - unit tests of the filter state on fixtures shared with the server's `AnimeBrowseApiTest`;
+     - component tests for `FilterRenderer`/`FilterSheet`, `VirtualGrid`, Browse and the source page;
+     - the live spec's new filtered search (7/7);
+     - live in `pnpm tauri dev` for both kinds (§10): pins, Popular, Search, filtered searches that changed the results, pages loaded by scrolling, and the source page working on after a backend kill.
+   - Nothing in `server/` changed.
 5. **Details and Library** (steps 15–16, 20): details for anime and manga, with a virtualized `EpisodeList`/`ChapterList` (1000+ entries), sort and filter; add to library; the Library grid with a sort and an empty state.
 6. **Settings and `PreferenceRenderer`** (steps 17, 19): general settings (theme System/Dark/Light, language), backend settings (data dir, log folder), and source preferences saved with optimistic updates. Verified by renderer unit tests and a live preference change that takes effect.
 7. **Exit run** (steps 22–23 and §6): every exit criterion from a fresh data dir, the remaining tests, a fix round, and the phase closed in PLAN.md and README.md.
@@ -235,6 +241,59 @@ Decided in the stage (defaults, not asked):
   - The scroll position resets when the tab or the filters change, not when a row does.
 - **Compat issues** (`compatIssues`, an in-memory lookup on the server) are part of the list fragment. A row with any shows "N API gaps", which opens a Reka `Popover` with each target, kind, origin, context and count.
 
+### Stage 4 (2026-11-07)
+
+Decided in the stage (defaults, not asked):
+- **No server change.** The source fragment gained `baseUrl` and `extension.isLoaded`, which both source types already had. Covers use the existing thumbnail routes. `server/` and `server/UPSTREAM.md` are untouched.
+- **Pinned sources live in `localStorage`** (`madoyomi.pinnedSources`, `{anime: [ids], manga: [ids]}`, in pin order; `stores/pinnedSources.ts`), not on the server:
+  - a pin is a per-device UI preference, like Mihon's `pinnedSources` app preference;
+  - upstream's per-source metadata (`SourceMetaTable`, `setSourceMeta`) exists only for manga sources, so a server setting would have needed a server change for anime;
+  - a pin of an uninstalled source stays and shows again if the source comes back.
+
+  Phase 6's backup can carry the pins if that is wanted (it would read them from the UI).
+- **Browse's order:** Pinned (in pin order), then the languages as before (multi-language first, "other" last, each by name; a pinned source shows only under Pinned, with its language), then "Built in" for the Local source.
+- **Source access** (`utils/sources.ts`): id `0` is `builtIn` (upstream's Local source: its fake extension has no signature, so `isTrusted` is false, but it is always usable). Otherwise a source is `untrusted` (`extension.isTrusted` false) or `notLoaded` (trusted but `isLoaded` false), or `ok`.
+  - Browse doesn't link a source that can't be used. It shows "Untrusted" or "Not loaded" and **"Open in Extensions"**, which opens the Installed tab searched for that package (`composables/useOpenInExtensions.ts`), where the Trust button or the install error is.
+  - The source page, opened by URL, shows the same reason and browses nothing; it doesn't even ask for the filters, which would fail with `UNTRUSTED`.
+- **Filters apply to a search, as on the server and in Mihon.**
+  - `fetchSource*` uses the filters only for `SEARCH`, so Apply switches to the Search tab, with the current query or none.
+  - A filter-only search has `query: ""`. MangaPill and AnimeGG use their filters only without a query (their filter lists say so in a header: "Ignored if using text search!"), so a filter-only search is the usual one.
+  - The Search tab with neither a query nor a filter asks for one and fetches nothing.
+- **Only the changes from the defaults are sent** (`utils/filters.ts`). Upstream's `updateFilterList` applies the changes to a fresh `getFilterList()` per request (core `graphql/types/SourceType.kt`).
+  - A filter at its default sends nothing, and the empty list is the source's defaults.
+  - A group member is `{position: group, groupChange: {position: member, …}}`, one change per member.
+  - Headers and separators never send anything.
+  - `filterStateFromChanges` is the inverse; the tests check the round trip, and that the server test's own change list comes out for the same values.
+- **The filter state is a plain array parallel to the filter list** (a group's entry is its members' values). The query key carries the changes, so a change of filters starts over at page 1.
+- **Per source, for the session** (`stores/sourceBrowse.ts`, keyed `kind:sourceId`): the tab, the submitted search and the applied filter values.
+  - Nothing is persisted.
+  - The filters are stored with `filterSignature(filters)` (each filter's kind, name and options). After an extension update changes them, the old values are dropped rather than sent to positions that now mean something else.
+  - Stored filters wait for the filter list (cached for good after the first load) rather than searching without them.
+- **The filter sheet** (`FilterSheet.vue`) is a Reka `Dialog` drawn as a right-hand side sheet. It edits a copy of the applied values, made each time it opens:
+  - **Apply** applies the copy;
+  - **Reset** puts the defaults back into the copy (Apply then applies them);
+  - Cancel, Escape or a click outside throw the copy away.
+
+  The page also has **"Clear filters"** while filters are applied, and the Filters button shows how many changes are applied.
+- **The controls** (`FilterField.vue`):
+  - Select: Reka `Select`.
+  - Sort: a Reka `Select` for the field plus an Ascending/Descending button. "None" is offered only when the source's default is none. A new field starts descending, as in Mihon; the same field keeps its direction.
+  - TriState: a Reka `Checkbox` we control. A click cycles ignore → include (✓) → exclude (its indeterminate state, drawn as ✕ in the danger colour) → ignore, and its label names the state.
+  - CheckBox: a Reka `Checkbox`. Text: a text field.
+  - Group: a Reka `Collapsible`, closed at first, its header showing how many members are changed.
+  - The select list portals above the sheet (z-index 60).
+- **`VirtualGrid.vue`**: `VirtualList`'s pattern for cards.
+  - The columns come from the scroll area's width (a `ResizeObserver`): as many 150 px columns as fit, with 12 px gaps, stretched to fill.
+  - Above 60 items, rows of cards are virtualized and measured.
+  - It emits `end-reached` within 600 px of the end, on a scroll and after the items change (so a page that doesn't fill the view asks for the next), and never while it has no height.
+  - The page loads the next page on `end-reached` only while `hasNextPage` and nothing is fetching or failed, and there is a "Load more" button as well.
+- **Results are deduplicated by entry id across pages.** Sources repeat entries on the next page, and a repeated key would break the grid.
+- **Errors.**
+  - A failed first page shows `ErrorNotice` ("Couldn't load <source>", the readable line, the code) with Try again.
+  - A failed next page keeps the loaded pages and shows the notice in the footer, retrying that page; scrolling doesn't retry it by itself.
+  - The existing realtime logic refetches failed queries when the backend is back.
+- **`MediaCard.vue`**: the cover from `useAssetUrl(thumbnailUrl)` (the backend's thumbnail route with `?token=`, which follows a restart), lazy-loaded, 2:3. When there is no URL or the image fails, it shows the title's first letter. The title is clamped to two lines, with an "In library" badge, linking to `/anime/:id` or `/manga/:id`.
+
 ## 10. Findings log
 
 ### Stage 1 (2026-11-06)
@@ -324,3 +383,54 @@ Decided in the stage (defaults, not asked):
   - A **compat-issue popover**: AnimeGG and MangaPill have no issues. It is covered by the component test.
   - Removing a repo **and** re-adding it moves AnimeGG's trust from the repo's key (STORE) to the user's (USER, from the trust prompt), as Phase 1 §9 describes. That was not inspected beyond the badges.
 - **Reka in jsdom.** Tabs change on `mousedown` (a pointer press), not on `click`. Dialogs, alert dialogs and popovers portal to `<body>`, so the tests mount with `attachTo: document.body` (`src/test/mountView.ts`). `VirtualList`'s virtual path runs in jsdom once `clientHeight` (the viewport) and `offsetHeight` (the rows) are stubbed.
+
+### Stage 4 (2026-11-07)
+
+- **Baseline before the stage** (the same as after Stage 3):
+  - `pnpm test`: 14 files, 107 passed + 6 skipped;
+  - lint, typecheck and format:check clean;
+  - `cargo test` 14 and `cargo clippy --all-targets` clean.
+- **After the stage:**
+  - `pnpm test`: 19 files, 148 passed + 7 skipped (the live spec). The new ones: filters 10, FilterRenderer/FilterSheet 8, VirtualGrid 5, BrowseView 6, SourceView 12. Unchanged: client 15, ws 13, realtime 6, hooks 9, routes 15, mediaKind 3, ShellFooter 5, backend store 9, BackendGate 6, TrustDialog 5, VirtualList 2, ExtensionsView 11, ReposView 8.
+  - lint, typecheck and format:check are clean.
+  - `cargo build`, `cargo test` (14) and `cargo clippy --all-targets` pass. Nothing in `src-tauri` changed.
+  - Nothing in `server/` changed, so it wasn't rebuilt: Stage 1's 662 tests and Stage 3's smoke run (24/24) stand.
+- **Live operation spec: 7/7.** The server came from `Start-MadoyomiServer` on a scratch data dir with both repos, AnimeGG, MangaPill and KickAssAnime.
+  - The source fragment's new fields validate.
+  - The new filtered search: for each kind it changes one filter of an installed source through `filterChanges` and searches with an empty query. The output:
+    - AnimeGG `[{position: 1, selectState: 1}]` → `SOURCE_FAILED HTTP error 404`, so the next source was tried;
+    - KickAssAnime `[{position: 1, selectState: 1}]` → 30 entries;
+    - MangaPill `[{position: 2, selectState: 1}]` → 50 entries (0 unfiltered).
+- **AnimeGG's own filter is broken on its site.** Its only filter, a Genre select labelled in Spanish ("<Seleccionar>", "Películas", "Series", under the header "La busqueda por texto ignora el filtro"), gives an HTTP 404 for every value. The extension builds a URL the site doesn't have; Madoyomi sends the change as it should (the same change works on other sources). This is an extension problem, not ours. The live spec tries the next source of the kind when a site fails.
+- **Sources use their filters only without a query.** A search with an empty query and no filters returns nothing on AnimeGG and MangaPill (0 entries each), while KickAssAnime returns its list (30). MangaPill and AnimeGG say in a header that a text search ignores the filters. A filter-only search is therefore the usual filtered search, which is why the Search tab accepts filters without a query.
+- **Live in `pnpm tauri dev`** (`MADOYOMI_DATA_DIR` = that data dir), driven by clicks, wheel and pasted text, checked by screenshot:
+  - **Browse, anime:** AnimeGG and KickAssAnime under EN. Pinning KickAssAnime moved it to "Pinned", with "KickAssAnime · EN" and a filled star.
+  - **Browse, manga:** MangaPill under EN and the Local source under "Built in", with a "Built in" badge and no "Untrusted". No pinned group: pins are per kind.
+  - **KickAssAnime:**
+    - Popular, Latest and Search tabs (`supportsLatest` true), with "EN · https://kaa.lt";
+    - Popular as six columns of covers loaded through the anime thumbnail route;
+    - wheel scrolling kept loading pages, and the scrollbar thumb jumped back as each one arrived;
+    - a search for "naruto" gave the Naruto titles.
+  - **KickAssAnime filters:** the sheet showed its Genre group, Year/Status/Type selects, a separator and a header.
+    - Type → Movie, Apply: only films (Akira, the 5-toubun movie, Bakemono no Ko), with "Filters 1" and "Clear filters".
+    - Reopened, the sheet said "1 filter changed".
+    - Genre group → Comedy, Apply: comedy films (City Hunter and Crayon Shin-chan movies), "Filters 2".
+  - **MangaPill:**
+    - Popular: 10 entries, "10 entries, the end of the list", the covers through upstream's manga thumbnail route;
+    - a search for "one" loaded page 2 when scrolled, with "Loading more…" in the footer.
+  - **MangaPill filters:**
+    - Genres group: Action included (✓) and Comedy excluded (✕), "Genres 2", "3 filters changed".
+    - Reset brought back "The source's defaults".
+    - Type → Novel, Apply: only light novels (One Piece Novel A, the Kimetsu no Yaiba novels), where the unfiltered empty search finds nothing.
+    - Type → Manhwa (alone, with Action and without Comedy, or with "solo") gave "Nothing matches". Replaying the same change against the server gave 0 entries for Manhwa and 50 for Manga, so that is MangaPill's site, not the UI.
+  - **A backend kill** (pid from `sidecar.log`): healthy again on a new port about 7 s later.
+    - Without a reload, on the same MangaPill page, a search for "solo" ran against the new port.
+    - "Clear filters" then gave 8 entries.
+    - One cover that failed to load showed its title's initial.
+  - **After closing the window:** "backend stopped (exit code 0)". `token=` appears in none of `sidecar.log`, `madoyomi.log` or the dev output.
+- **Fixed after the first live run:** a closed filter group was 12 px taller than its header. Reka's `CollapsibleContent` keeps its element with `hidden=""` (only the children unmount), and our `display: grid` overrode the `hidden`. `.group-content[hidden]` is now `display: none`, and this was rechecked live.
+- **Not checked live:**
+  - an untrusted or unloaded source: none was installed. It is covered by the component tests of both views;
+  - a source with `supportsLatest` false: neither source lacks Latest. It is covered by the component tests;
+  - a next-page error: no site failed mid-scroll. It is covered by the component test.
+- **Reka in jsdom.** `Select` opens on Enter on its trigger, and an option is chosen with Enter on it (`keydown`, bubbling), once `scrollIntoView`, `hasPointerCapture` and `releasePointerCapture` are stubbed. `Collapsible` opens on click. The tri-state's `Checkbox` reacts to `click`.

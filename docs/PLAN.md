@@ -148,11 +148,11 @@ Details: [phase-3-frontend-mvp.md](phases/phase-3-frontend-mvp.md)
 Milestones:
 - [x] Tauri sidecar lifecycle (spawn, handshake, restart) (Stage 1: the real jar with a token and `--data-dir`, `/health` checks, restart with backoff, splash and failure screens; phase-3 §10)
 - [x] Typed API client + WebSocket (Stage 2: `api/client.ts`, hand-written `types.ts` validated against the live schema, our own `graphql-transport-ws` client that follows backend restarts, vue-query hooks with infinite browse; phase-3 §9, §10)
-- [ ] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens (Stage 3: Repos and Extensions with the trust prompt done and verified live; Browse, Source, Details, Library and Settings to come)
-- [ ] Generic filter and preference renderers
+- [ ] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens (Stage 3: Repos and Extensions with the trust prompt; Stage 4: Browse and Source; all four done and verified live. Details, Library and Settings to come)
+- [ ] Generic filter and preference renderers (Stage 4: `FilterRenderer` done, verified on shared fixtures and live for both kinds; `PreferenceRenderer` comes in Stage 6)
 - [ ] lint / typecheck / tests pass
 
-**Phase 3 in progress (Stage 3 of 7 done, 2026-11-07).** The stage plan is in phase-3 §8. The app has its shell (sidebar, anime/manga switch, every route) and talks to the backend: typed GraphQL, live events over WebSocket, and both kept working across a backend restart. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
+**Phase 3 in progress (Stage 4 of 7 done, 2026-11-07).** The stage plan is in phase-3 §8. The app has its shell (sidebar, anime/manga switch, every route) and talks to the backend: typed GraphQL, live events over WebSocket, and both kept working across a backend restart. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
 
 The first two screens work end to end:
 - **Repos:** add by URL with the type detected, remove after a confirmation, refresh.
@@ -160,6 +160,13 @@ The first two screens work end to end:
 - **The trust prompt:** it shows the certificate hash and a warning.
 
 Both were verified live from a fresh data dir, across a backend kill (phase-3 §10).
+
+Browsing works too (Stage 4):
+- **Browse:** the sources by language, with pinned ones first (kept on this device), the built-in Local source as such, and unusable sources pointing to Extensions.
+- **Source pages:** Popular, Latest and Search as an endless grid of covers, loaded through the backend's thumbnail routes.
+- **Filters:** the generic `FilterRenderer` in a side sheet, sending only the changes from the source's defaults.
+
+They were verified live for both kinds: filtered searches changed the results, pages loaded by scrolling, and the page kept working after a backend kill (phase-3 §10).
 
 ### Phase 4 — Playback
 Details: [phase-4-playback.md](phases/phase-4-playback.md)
@@ -292,9 +299,10 @@ WS     /ws                                downloads, updates, playback progress 
 These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06). [Phase 3](phases/phase-3-frontend-mvp.md) is in progress. Done so far:
 - Stage 1: the shell and sidecar lifecycle;
 - Stage 2: the API layer and app shell;
-- Stage 3: Repos and Extensions, with the trust prompt.
+- Stage 3: Repos and Extensions, with the trust prompt;
+- Stage 4: Browse and Source, with `FilterRenderer`.
 
-Stage 4 (Browse and Source, with `FilterRenderer`) is next.
+Stage 5 (Details and Library) is next.
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

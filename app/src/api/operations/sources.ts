@@ -23,12 +23,14 @@ const SOURCE_FIELDS = (on: string) => /* GraphQL */ `
     lang
     contentWarning
     iconUrl
+    baseUrl
     supportsLatest
     isConfigurable
     extension {
       pkgName
       name
       isTrusted
+      isLoaded
     }
   }
 `;
