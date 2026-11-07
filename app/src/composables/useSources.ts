@@ -1,5 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter } from "vue";
-import { useInfiniteQuery, useQuery } from "@tanstack/vue-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useBackendStore } from "../stores/backend";
 import { browseSource, fetchSourceFilters, fetchSources } from "../api/operations";
 import type { BrowseType, FilterChange, MediaKind } from "../api/types";
@@ -30,6 +30,18 @@ export function useSourceFilters(
   });
 }
 
+/*
+ * Sources whose settings changed since their last browse. The server loads a new instance of such a source at its
+ * next browse and only then stores the instance's `baseUrl` (a mirror setting changes it), so the source list is
+ * read again after that browse.
+ */
+const changedSources = new Set<string>();
+
+/** Marks a source whose preferences changed (composables/usePreferences.ts). */
+export function markSourceChanged(kind: MediaKind, sourceId: string) {
+  changedSources.add(`${kind}:${sourceId}`);
+}
+
 export interface BrowseParams {
   kind: MediaKind;
   sourceId: string;
@@ -57,6 +69,7 @@ function browseKey(p: BrowseParams): BrowseKey {
  * cached for a return visit (5 min).
  */
 export function useSourceBrowse(params: MaybeRefOrGetter<BrowseParams | null>) {
+  const queryClient = useQueryClient();
   const backend = useBackendStore();
   const key = computed(() => {
     const p = toValue(params);
@@ -64,9 +77,9 @@ export function useSourceBrowse(params: MaybeRefOrGetter<BrowseParams | null>) {
   });
   return useInfiniteQuery({
     queryKey: computed(() => queryKeys.browse(key.value)),
-    queryFn: ({ queryKey, pageParam }) => {
+    queryFn: async ({ queryKey, pageParam }) => {
       const k = queryKey[2] as BrowseKey;
-      return browseSource({
+      const page = await browseSource({
         kind: k.kind,
         sourceId: k.sourceId,
         type: k.type,
@@ -74,6 +87,10 @@ export function useSourceBrowse(params: MaybeRefOrGetter<BrowseParams | null>) {
         query: k.query ?? undefined,
         filters: k.filters ?? undefined,
       });
+      if (changedSources.delete(`${k.kind}:${k.sourceId}`)) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.sources(k.kind), exact: true });
+      }
+      return page;
     },
     initialPageParam: 1,
     getNextPageParam: (last, pages) => (last.hasNextPage ? pages.length + 1 : undefined),

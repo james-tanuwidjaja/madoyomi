@@ -11,7 +11,8 @@ import {
 import { ApiError, createApiClient } from "../client";
 import { createSubscriptionClient } from "../ws";
 import * as operations from "../operations";
-import type { Filter, SourceBase } from "../types";
+import type { Filter, Preference, SourceBase, SourcePreferenceChange } from "../types";
+import { changeFor, changeTaken, preferenceValue } from "../../utils/preferences";
 import {
   defaultFilterState,
   filterChanges,
@@ -33,7 +34,8 @@ import {
  * access) and writes nothing: the server refuses the add before storing anything. The filtered search needs an
  * installed, trusted source of either kind (it skips when there is none) and the source's site. The details/library
  * check refreshes the first Popular entry of one source per kind and adds it to the library and removes it again
- * (it puts back an entry that was already there).
+ * (it puts back an entry that was already there). The preference check changes one preference of a configurable
+ * source per kind and puts it back.
  */
 
 // TypeScript 6 loads no @types by default, so `process` is reached through globalThis.
@@ -83,7 +85,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
   const client = createApiClient(() => ({ baseUrl: baseUrl!, token: token! }));
 
   it("finds the documents to check", () => {
-    expect(documents.length).toBeGreaterThanOrEqual(27);
+    expect(documents.length).toBeGreaterThanOrEqual(31);
   });
 
   it("validates every operation document against the server's schema", async () => {
@@ -249,15 +251,16 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
             ).animeSources.nodes
           : (await client.gql<{ sources: { nodes: SourceBase[] } }>(operations.MANGA_SOURCES_QUERY))
               .sources.nodes;
-      const source = list.find(
+      const usable = list.filter(
         (s) => s.id !== "0" && s.extension.isTrusted && s.extension.isLoaded,
       );
-      if (!source) continue;
+      if (usable.length === 0) continue;
       kindsTried++;
 
-      const input = { source: source.id, type: "POPULAR", page: 1, query: null, filters: null };
-      const entries =
-        kind === "anime"
+      // the first usable source whose Popular has entries (a MangaDex language source can have none)
+      const popular = async (sourceId: string) => {
+        const input = { source: sourceId, type: "POPULAR", page: 1, query: null, filters: null };
+        return kind === "anime"
           ? (
               await client.gql<{
                 fetchSourceAnime: { animes: { id: number; inLibrary: boolean }[] };
@@ -268,7 +271,16 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
                 fetchSourceManga: { mangas: { id: number; inLibrary: boolean }[] };
               }>(operations.BROWSE_MANGA_MUTATION, { input })
             ).fetchSourceManga.mangas;
-      expect(entries.length, `${kind} ${source.name} Popular`).toBeGreaterThan(0);
+      };
+      let source = usable[0];
+      let entries: { id: number; inLibrary: boolean }[] = [];
+      for (const s of usable) {
+        source = s;
+        entries = await popular(s.id);
+        if (entries.length > 0) break;
+        report.push(`${kind} ${s.name} [${s.lang}]: Popular is empty, trying the next source`);
+      }
+      expect(entries.length, `${kind} Popular of every usable source`).toBeGreaterThan(0);
       const { id, inLibrary: wasInLibrary } = entries[0];
 
       // The refresh
@@ -342,6 +354,108 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.info(report.join("\n"));
     if (kindsTried === 0) ctx.skip();
   }, 300_000);
+
+  // The source settings page (Phase 3 §9 "Stage 6"): one preference of a configurable source of each kind is changed
+  // the way the page does it (manga: read, then change), read back, and restored. Only a switch, checkbox or list
+  // that is enabled and visible is changed. The database and the source's SharedPreferences only, no site.
+  it("changes a preference of a configurable source of each kind, reads it back and restores it", async (ctx) => {
+    const report: string[] = [];
+    let kindsTried = 0;
+    for (const kind of ["anime", "manga"] as const) {
+      const list =
+        kind === "anime"
+          ? (
+              await client.gql<{ animeSources: { nodes: SourceBase[] } }>(
+                operations.ANIME_SOURCES_QUERY,
+              )
+            ).animeSources.nodes
+          : (await client.gql<{ sources: { nodes: SourceBase[] } }>(operations.MANGA_SOURCES_QUERY))
+              .sources.nodes;
+      const configurable = list.filter(
+        (s) =>
+          s.id !== "0" &&
+          s.extension.isTrusted &&
+          s.extension.isLoaded &&
+          s.isConfigurable === true,
+      );
+
+      const read = async (id: string) =>
+        kind === "anime"
+          ? (
+              await client.gql<{ animeSources: { nodes: { preferences: Preference[] }[] } }>(
+                operations.ANIME_SOURCE_PREFERENCES_QUERY,
+                { id },
+              )
+            ).animeSources.nodes[0].preferences
+          : (
+              await client.gql<{ source: { preferences: Preference[] } }>(
+                operations.MANGA_SOURCE_PREFERENCES_QUERY,
+                { id },
+              )
+            ).source.preferences;
+      const change = async (id: string, c: SourcePreferenceChange) => {
+        if (kind === "anime") {
+          const d = await client.gql<{
+            updateAnimeSourcePreference: { preferences: Preference[]; source: { id: string } };
+          }>(operations.UPDATE_ANIME_SOURCE_PREFERENCE_MUTATION, {
+            input: { source: id, change: c },
+          });
+          return d.updateAnimeSourcePreference;
+        }
+        await read(id); // upstream's change needs a read first (operations/preferences.ts)
+        const d = await client.gql<{
+          updateSourcePreference: { preferences: Preference[]; source: { id: string } };
+        }>(operations.UPDATE_MANGA_SOURCE_PREFERENCE_MUTATION, {
+          input: { source: id, change: c },
+        });
+        return d.updateSourcePreference;
+      };
+
+      for (const source of configurable) {
+        const prefs = await read(source.id);
+        const position = prefs.findIndex(
+          (p) =>
+            p.enabled &&
+            p.visible &&
+            (p.__typename === "SwitchPreference" ||
+              p.__typename === "CheckBoxPreference" ||
+              (p.__typename === "ListPreference" && p.entryValues.length > 1)),
+        );
+        if (position < 0) {
+          report.push(`${kind} ${source.name}: no switch, checkbox or list to change`);
+          continue;
+        }
+        kindsTried++;
+        const p = prefs[position];
+        const before = preferenceValue(p);
+        const next =
+          p.__typename === "ListPreference"
+            ? p.entryValues[(p.entryValues.indexOf(before as string) + 1) % p.entryValues.length]
+            : !before;
+        const sent = changeFor(position, p, next);
+        try {
+          const r = await change(source.id, sent);
+          expect(r.source.id).toBe(source.id);
+          const taken = changeTaken(r.preferences[position], sent);
+          const readBack = preferenceValue((await read(source.id))[position]);
+          expect(readBack).toEqual(preferenceValue(r.preferences[position]));
+          report.push(
+            `${kind} ${source.name} #${position} ${p.key}: ${JSON.stringify(before)} → ${JSON.stringify(
+              next,
+            )} ${taken ? "taken" : "refused by the extension"}, read back ${JSON.stringify(readBack)}`,
+          );
+          // a refusal is legitimate, but the extensions tried so far take these values
+          expect(taken, report.join("\n")).toBe(true);
+        } finally {
+          await change(source.id, changeFor(position, p, before));
+        }
+        expect(preferenceValue((await read(source.id))[position])).toEqual(before);
+        break;
+      }
+    }
+    console.info(report.join("\n"));
+    if (kindsTried === 0) ctx.skip();
+  }, 120_000);
 
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];

@@ -280,6 +280,20 @@ describe("SourceView", () => {
     expect(wrapper.vm.$router.currentRoute.value.path).toBe("/extensions");
   });
 
+  it("links to the source's settings only when it has some", async () => {
+    sources = [makeSource({ isConfigurable: true }), noLatest, untrusted];
+    await mountSource();
+    expect(wrapper.find('[data-action="source-settings"]').attributes("href")).toBe(
+      `/settings/source/${animegg.id}`,
+    );
+    wrapper.unmount();
+
+    sources = [animegg, noLatest, untrusted];
+    queryClient.clear();
+    await mountSource();
+    expect(wrapper.find('[data-action="source-settings"]').exists()).toBe(false);
+  });
+
   it("says when the source isn't installed", async () => {
     await mountSource("999");
     expect(wrapper.find('[data-testid="source-missing"]').text()).toContain("isn't installed");

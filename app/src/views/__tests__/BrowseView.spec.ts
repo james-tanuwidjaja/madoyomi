@@ -188,6 +188,16 @@ describe("BrowseView", () => {
     expect(filters.search).toBe("x.stranger");
   });
 
+  it("links a configurable source to its settings", async () => {
+    lists.anime = [makeSource({ id: "21", name: "KickAssAnime", isConfigurable: true }), animegg];
+    await mountBrowse();
+
+    expect(row("21").find('[data-action="source-settings"]').attributes("href")).toBe(
+      "/settings/source/21",
+    );
+    expect(row(animegg.id).find('[data-action="source-settings"]').exists()).toBe(false);
+  });
+
   it("says when there are no sources yet", async () => {
     lists.anime = [];
     await mountBrowse();

@@ -148,11 +148,11 @@ Details: [phase-3-frontend-mvp.md](phases/phase-3-frontend-mvp.md)
 Milestones:
 - [x] Tauri sidecar lifecycle (spawn, handshake, restart) (Stage 1: the real jar with a token and `--data-dir`, `/health` checks, restart with backoff, splash and failure screens; phase-3 §10)
 - [x] Typed API client + WebSocket (Stage 2: `api/client.ts`, hand-written `types.ts` validated against the live schema, our own `graphql-transport-ws` client that follows backend restarts, vue-query hooks with infinite browse; phase-3 §9, §10)
-- [ ] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens (Stage 3: Repos and Extensions with the trust prompt; Stage 4: Browse and Source; Stage 5: Details for both kinds and the Library; all six done and verified live. Settings comes in Stage 6)
-- [ ] Generic filter and preference renderers (Stage 4: `FilterRenderer` done, verified on shared fixtures and live for both kinds; `PreferenceRenderer` comes in Stage 6)
+- [x] Repos, Extensions (with trust prompt), Browse, Source, Details, Library, Settings screens (Stage 3: Repos and Extensions with the trust prompt; Stage 4: Browse and Source; Stage 5: Details for both kinds and the Library; Stage 6: Settings and each source's settings; all verified live, phase-3 §10)
+- [x] Generic filter and preference renderers (Stage 4: `FilterRenderer`, verified on shared fixtures and live for both kinds; Stage 6: `PreferenceRenderer`, every preference type by component tests, and live a list, a switch, a multi-select and an edit text taking effect for both kinds)
 - [ ] lint / typecheck / tests pass
 
-**Phase 3 in progress (Stage 5 of 7 done, 2026-11-07).** The stage plan is in phase-3 §8. The app has its shell (sidebar, anime/manga switch, every route) and talks to the backend: typed GraphQL, live events over WebSocket, and both kept working across a backend restart. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
+**Phase 3 in progress (Stage 6 of 7 done, 2026-11-07).** The stage plan is in phase-3 §8. The app has its shell (sidebar, anime/manga switch, every route) and talks to the backend: typed GraphQL, live events over WebSocket, and both kept working across a backend restart. The UI is built from headless primitives (Reka UI) with our own Fluent-like design tokens, in dark and light themes that follow Windows (phase-3 §9).
 
 The first two screens work end to end:
 - **Repos:** add by URL with the type detected, remove after a confirmation, refresh.
@@ -174,6 +174,12 @@ Details and the Library work too (Stage 5):
 - **The library:** add and remove for both kinds, through a small backend addition for anime (`updateAnime`, upstream's `updateManga` shape). The Library grid sorts by date added or title, and its empty state points to Browse.
 
 They were verified live with 1190 episodes and 1214 chapters, and after a backend kill (phase-3 §10).
+
+Settings work too (Stage 6):
+- **Settings:** the theme (System, Dark or Light, kept and applied before the first paint), the language (English only so far), and the backend's version, address, data folder and log folder, with Open logs.
+- **Source settings** for both kinds, from Settings, a ⚙ on Browse or the source page's Settings button. `PreferenceRenderer` draws every preference type: lists, switches, checkboxes, and edit texts and multi-selects in dialogs. A change shows at once and is saved by itself. A failed save is put back, and a value the extension refuses shows the one it kept. The source then browses again with the new settings.
+
+They were verified live: English titles on KickAssAnime and a Korean-only filter on MangaDex changed what Popular showed, and all of it worked after a backend kill (phase-3 §10). Nothing in the backend changed.
 
 ### Phase 4 — Playback
 Details: [phase-4-playback.md](phases/phase-4-playback.md)
@@ -308,9 +314,10 @@ These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) 
 - Stage 2: the API layer and app shell;
 - Stage 3: Repos and Extensions, with the trust prompt;
 - Stage 4: Browse and Source, with `FilterRenderer`;
-- Stage 5: Details and Library.
+- Stage 5: Details and Library;
+- Stage 6: Settings and `PreferenceRenderer`.
 
-Stage 6 (Settings and `PreferenceRenderer`) is next.
+Stage 7 (the exit run, from a fresh data dir) is next.
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.
