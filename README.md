@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stages 1–3 of 7 are done.
+> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stages 1–4 of 7 are done.
 >
 > The desktop app:
 > - starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`);
@@ -20,7 +20,12 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 > - install, update and uninstall extensions, and watch each step;
 > - get the trust prompt (with the signing certificate and a warning) for an extension whose certificate you haven't trusted yet.
 >
-> Browsing sources comes next.
+> **And you can browse your sources:**
+> - Browse lists your anime or manga sources by language, with the ones you pin at the top. The built-in Local source is marked as such, and a source whose extension isn't trusted or didn't load says so and points to Extensions;
+> - a source shows its Popular, Latest and Search results as an endless grid of covers that loads the next page as you scroll;
+> - its filters (selects, sorts, checkboxes, include/exclude genres, text, groups) open in a side sheet, with Apply and Reset. Each source keeps its tab, search and filters while the app runs.
+>
+> Details and the Library come next. A cover links to its details page, which is still a placeholder.
 >
 > The backend in `server/` is a Suwayomi-Server fork, rebranded as Madoyomi-Server. It runs as a local sidecar (loopback only, random port, API token). From its GraphQL API you can:
 > - add Aniyomi and Mihon repos (JSON and protobuf indexes) and list their extensions;
@@ -35,7 +40,7 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 >
 > Filters and preferences round-trip through the API: a filtered search works on all 18 with filters, and a preference change on 19 of 20. **9 of the 10 most-downloaded Keiyoushi manga extensions** read down to a page image ([docs/research/manga-compat.md](docs/research/manga-compat.md)); comix needs a real WebView, which is deferred with the Cloudflare solver. Uninstalling an extension frees its code: of the 20 anime extensions, 1 is still kept after uninstall, by a video connection of its own.
 >
-> Repos and Extensions are done. The other screens are still placeholders that say which stage builds them (Phase 3); Browse already lists your sources. Videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
+> Repos, Extensions, Browse and the source pages are done. Details, Library and Settings are still placeholders that say which stage builds them (Phase 3). Videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
 
 ---
 
@@ -77,7 +82,7 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 
 | Path | What | Status |
 |---|---|---|
-| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes, the Repos and Extensions screens with the trust prompt, the typed API client and WebSocket in `api/`, vue-query hooks in `composables/`, the startup splash and error screens, design tokens) | Phase 3 in progress |
+| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes, the Repos and Extensions screens with the trust prompt, Browse and the source pages with the filter sheet, the typed API client and WebSocket in `api/`, vue-query hooks in `composables/`, the startup splash and error screens, design tokens) | Phase 3 in progress |
 | [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phases 1 and 2 done |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
@@ -211,7 +216,7 @@ Run these from `app/`:
 | `pnpm tauri dev` | Run the desktop app (Vite + Rust shell, hot reload). It starts the backend jar from `server/api/build` (see the note above) |
 | `pnpm dev` | UI only, in a browser at http://localhost:1420 (no backend, unless `VITE_MADOYOMI_URL` and `VITE_MADOYOMI_TOKEN` are set in `.env.local`) |
 | `pnpm test` / `pnpm test:watch` | Run Vitest once / in watch mode |
-| `pnpm vitest run src/api/__tests__/operations.live.spec.ts` | Check the UI's GraphQL operations against a running server: validates every document against its schema, checks the token, and receives a WebSocket event. Set `MADOYOMI_LIVE_URL` and `MADOYOMI_LIVE_TOKEN` (e.g. from `tools/run-server.ps1`) first; otherwise these tests are skipped, as in `pnpm test` |
+| `pnpm vitest run src/api/__tests__/operations.live.spec.ts` | Check the UI's GraphQL operations against a running server: validates every document against its schema, checks the token, receives a WebSocket event, and runs a filtered search on an installed source of each kind (it needs the source's site). Set `MADOYOMI_LIVE_URL` and `MADOYOMI_LIVE_TOKEN` (e.g. from `tools/run-server.ps1`) first; otherwise these tests are skipped, as in `pnpm test` |
 | `pnpm lint` / `pnpm lint:fix` | ESLint check / auto-fix |
 | `pnpm format` / `pnpm format:check` | Prettier write / check |
 | `pnpm typecheck` | Type-check with `vue-tsc` |
@@ -246,7 +251,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 | 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ✅ Done (18/20 top anime extensions end to end, filters and preferences through the API, 9/10 of the manga sample; Cloudflare/WebView shim deferred) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
-| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stages 1–3 of 7 done: the app starts the real backend and restarts it after a crash; the app shell with every route, the typed API client and live WebSocket events; the Repos and Extensions screens with the trust prompt; Browse and Source next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
+| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stages 1–4 of 7 done: the app starts the real backend and restarts it after a crash; the app shell with every route, the typed API client and live WebSocket events; the Repos and Extensions screens with the trust prompt; Browse and the source pages with the filter renderer and an endless cover grid; Details and Library next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
 | 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
 | 5 | **Manga reader:** image proxy and cache, paged, webtoon and double-page modes | ⚪ Not started | [phase-5-manga-reader.md](docs/phases/phase-5-manga-reader.md) |
 | 6 | **Library features:** categories, updates, history, downloads, backup/restore | ⚪ Not started | [phase-6-library-features.md](docs/phases/phase-6-library-features.md) |
@@ -300,6 +305,12 @@ Decided so far in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3
 - **The trust prompt** shows the extension, its repo and its signing-certificate hash (with Copy), and warns that a trusted extension runs with your rights. It also opens by itself after you install an extension whose certificate isn't trusted, as in Mihon.
 - **18+ extensions are hidden from the Available list** until you turn on "Show 18+". The app remembers the setting. Installed ones always show.
 - **Long lists stay fast:** the extension list only draws the rows on screen (Keiyoushi lists 1469 extensions).
+- **Pinned sources are kept on this device** (like Mihon's pinned sources), per kind. The backend has per-source settings only for manga, so storing pins there would have needed a backend change for anime.
+- **Filters apply to a search**, as on the backend and in Mihon: Apply switches to Search, with or without a query (many sources use their filters only without one). Only the filters you changed from the source's defaults are sent, and the backend applies them to a fresh filter list, so the empty list is the source's defaults. Reset puts the defaults back.
+- **Each source remembers its tab, search and filters while the app runs**, not across restarts. Stored filters are dropped when an extension update changes the source's filter list.
+- **The filter controls** are Reka's Select (for selects and sort fields, with an Ascending/Descending button), checkboxes, a three-state checkbox (include ✓, exclude ✕, ignore) and collapsible groups.
+- **A source the backend can't use isn't opened.** An untrusted or unloaded one points to Extensions (its Installed tab, searched for that extension), where the trust prompt or the error is. The built-in Local source is never shown as untrusted.
+- **Result grids stay fast too:** only the rows on screen are drawn, the column count follows the window width, and the next page loads when you near the end. Covers come from the backend's thumbnail routes, which apply the source's headers, so no separate image proxy was needed.
 
 Still open:
 

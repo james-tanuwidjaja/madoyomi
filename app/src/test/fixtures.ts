@@ -1,4 +1,4 @@
-import type { Extension, ExtensionStore } from "../api/types";
+import type { Extension, ExtensionStore, MediaKind, Source } from "../api/types";
 
 /** A repo as `ExtensionStoreFields` returns it. */
 export function makeStore(overrides: Partial<ExtensionStore> = {}): ExtensionStore {
@@ -53,5 +53,41 @@ export function installed(e: Extension, overrides: Partial<Extension> = {}): Ext
     isLoaded: true,
     signatureHash: "50ab1d722bf6ddac0a4d4b8a02e0c4a2c5d8b8ab3a37b6e0e20a3a9e1ee6aa51",
     ...overrides,
+  };
+}
+
+/** A source as `SourceFields` returns it: AnimeGG, trusted and loaded. */
+export function makeSource(overrides: Partial<Source> = {}): Source {
+  return {
+    kind: "anime",
+    id: "2499283573021220255",
+    name: "AnimeGG",
+    lang: "en",
+    contentWarning: "SAFE",
+    iconUrl: "/api/v1/extension/icon/animegg.apk",
+    baseUrl: "https://www.animegg.org",
+    supportsLatest: true,
+    isConfigurable: false,
+    extension: {
+      pkgName: "eu.kanade.tachiyomi.animeextension.en.animegg",
+      name: "AnimeGG",
+      isTrusted: true,
+      isLoaded: true,
+    },
+    ...overrides,
+  };
+}
+
+/** One browse page of `n` cards with ids from `from`. */
+export function makePage(from: number, n: number, hasNextPage: boolean, kind: MediaKind = "anime") {
+  return {
+    items: Array.from({ length: n }, (_, i) => ({
+      kind,
+      id: from + i,
+      title: `Entry ${from + i}`,
+      thumbnailUrl: `/api/v1/${kind}/${from + i}/thumbnail`,
+      inLibrary: false,
+    })),
+    hasNextPage,
   };
 }
