@@ -105,7 +105,7 @@ Paths below are Madoyomi paths, relative to `server/`.
 |---|---|
 | `AndroidCompat/Config/.../ApplicationRootDir.kt` | `CONFIG_PREFIX = "madoyomi.config"` (so `-Dmadoyomi.config.server.*`); default data dir `%APPDATA%\Madoyomi` on Windows, AppDirs `Madoyomi` elsewhere |
 | `AndroidCompat/Config/.../Logging.kt` | log file `logs/madoyomi.log`, appender name; `debugLogsEnabled` reads the prefixed property |
-| `core/.../server/ServerSetup.kt` | temp dir `<tmp>/Madoyomi`; startup log line uses `BuildConfig.NAME` |
+| `core/.../server/ServerSetup.kt` | temp dir `<tmp>/Madoyomi`; startup log line uses `BuildConfig.NAME`. Since the Phase 3 exit run the two id-keyed caches are in the data dir instead (see "Id-keyed caches in the data dir") |
 | `core/.../server/util/AppExit.kt` | shutdown log line |
 | `core/.../server/database/DBManager.kt` | Hikari pool name |
 | `core/.../graphql/server/TemporaryFileStorage.kt`, `ext-host/.../eu/kanade/tachiyomi/network/NetworkHelper.kt` | temp dir names |
@@ -358,6 +358,26 @@ Madoyomi code only; no upstream file changed. The UI's details page and Library 
     - `Library.handleMangaThumbnail`. Anime thumbnails stay in the thumbnail cache, a Phase 6 point (downloads).
 - A browse already leaves an in-library row as it is (`AnimeEntries.upsert`); `AnimeLibraryApiTest` checks that too.
 
+### Id-keyed caches in the data dir (Phase 3 exit run)
+
+Found in the Phase 3 exit run (Phase 3 doc §10, "Stage 7"). The decision was the user's.
+
+| File | Change |
+|---|---|
+| `core/.../server/ServerSetup.kt` (`ApplicationDirs`) | `tempThumbnailCacheRoot` is `<dataRoot>/cache/thumbnails` and `tempMangaCacheRoot` is `<dataRoot>/cache/manga`. Upstream has `<tmp>/Madoyomi/thumbnails` and `<tmp>/Madoyomi/manga-cache`. |
+
+Why:
+- Both caches name their files by database id: `<mangaId>.<ext>`, Madoyomi's `anime-<id>.<ext>`, and chapter page dirs by manga and chapter id.
+- In the shared temp dir, a fresh data dir served the covers an older data dir had cached for the same ids. The exit run's anime #1 showed another database's One Piece cover.
+- A user would hit this after resetting the data dir, after a reinstall, or with two data dirs.
+- `<dataRoot>/cache` is upstream's existing `cacheDir`. Upstream's WebView-data mutation (`WebviewMutation`, `deleteRecursively`) clears that dir, and these caches with it. That is harmless for caches, and the UI doesn't call it.
+
+Not changed:
+- Everything else in the temp dir stays where it is: extension downloads in random dirs, `webUI-serve` (off), and temporary uploads. None of it is keyed by a database id.
+- Old files in `%TEMP%\Madoyomi\thumbnails` and `manga-cache` are left alone; Windows' temp cleanup may remove them.
+
+Tested in `core/src/test/kotlin/madoyomi/core/storage/IdKeyedCacheDirsTest.kt`.
+
 ### New Madoyomi code
 
 | Path | What |
@@ -417,6 +437,7 @@ Madoyomi code only; no upstream file changed. The UI's details page and Library 
 | `core/src/test/kotlin/madoyomi/core/extension/{ExtensionThreadsTest,Dex2jarRepairCompatTest,GcAssert}.kt`, `core/src/test/kotlin/madoyomi/core/anime/ParsedAnimeHttpSourceTest.kt`, `api/src/test/kotlin/madoyomi/api/AnimeRoundTripApiTest.kt`, `AndroidCompat/src/test/kotlin/.../JavaSharedPreferencesTest.kt` (Phase 2 Stage 6) | Stage 6's tests. `ParsedAnimeHttpSourceTest` runs a Jsoup-selector source (no top-20 extension extends `ParsedAnimeHttpSource`) through browse, details and videos against a loopback site. `ExtensionThreadsTest` compiles "extension" classes at test time with `javax.tools` and loads them through a `ChildFirstURLClassLoader`. `Dex2jarRepairCompatTest` covers the four manga APKs. `AnimeRoundTripApiTest` round-trips filters and preferences of real extensions through GraphQL, offline. Leak tests are in `ExtensionLifecycleTest` (an uninstalled anime and manga extension's class loader is collected), `AnimeVideosTest` and `AnimeExtensionLoaderTest` |
 | `tools/lib/MadoyomiServer.ps1` (Phase 2 Stage 4) | the PowerShell helpers that start the jar as the Tauri shell does and drive its API (steps, GraphQL, WebSocket, install with progress), used by `tools/smoke-api.ps1` |
 | `api/src/main/kotlin/madoyomi/api/graphql/AnimeMutation.kt` (Phase 3 Stage 5 additions), `api/src/test/kotlin/madoyomi/api/AnimeLibraryApiTest.kt` | `updateAnime`/`updateAnimes`, the library flag for anime (see "Library flag (Phase 3)"), and their tests: add, remove, the batch, an unknown id, and a browse leaving an in-library entry as it is |
+| `core/src/test/kotlin/madoyomi/core/storage/IdKeyedCacheDirsTest.kt` (Phase 3 exit run) | the thumbnail and chapter-page caches are in the data dir, and two data dirs share neither (see "Id-keyed caches in the data dir") |
 | `core/src/test/kotlin/madoyomi/core/anime/*` (Stage 3 additions) | `AnimeBrowseTest`, `AnimeDetailsTest`, `AnimeVideosTest` (scripted fake sources and a scratch H2 per class, `AnimeTestSources.kt`), `AnimeFiltersTest` (every filter of kickassanime, aniwave and hanime from `tools/compat-test/apks/`), `AnimeSourcePreferencesTest` (AnimePahe), and `AnimeServicesLiveTest` (real sites, only with `MADOYOMI_LIVE_SOURCE_TESTS=1`). Tests skip when their APK is missing. Stage 3 also made every madoyomi scratch-database test set its database as the explicit default and restore the previous explicit one (an order dependency, Phase 2 doc §10) |
 | `ext-host/src/test/kotlin/madoyomi/exthost/*`, `core/src/test/kotlin/madoyomi/core/extension/*` | `ApkInspectorTest`, `Dex2jarRepairTest`, `ExtensionLifecycleTest`, `SignatureTrustTest` on the real APKs in the gitignored `tools/apks/` (fetched by `tools/fetch-test-apks.ps1`; tests skip without them). `ExtensionLifecycleLiveTest` installs from the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
 | `core/src/test/kotlin/madoyomi/core/repo/*`, `core/src/test/resources/repo/*` | parser, fetcher and service tests. Fixtures are text: trimmed real yuzono `index.min.json`/`repo.json`, and trimmed yuzono and Keiyoushi `index.pb` stored as base64 of the gzipped bytes. `RepoServiceLiveTest` hits the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |

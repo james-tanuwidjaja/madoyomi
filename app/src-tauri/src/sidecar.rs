@@ -501,12 +501,14 @@ fn run_once(
     let started = Instant::now();
     shared.transition(State::Starting, |s| s.attempt = attempt);
 
-    let jar = match &launch.jar {
+    // Resolved for each start, not once: a missing jar is fatal (no restart can fix it), but Retry looks again.
+    let java = resolve_java(launch.resources.as_deref());
+    let jar = match resolve_jar(launch.resources.as_deref()) {
         Ok(jar) => jar,
         Err(e) => {
             return Outcome::Failed(Failure {
                 fatal: true,
-                ..Failure::new(e.clone())
+                ..Failure::new(e)
             });
         }
     };
@@ -517,9 +519,9 @@ fn run_once(
         ));
     }
 
-    let mut cmd = Command::new(&launch.java);
+    let mut cmd = Command::new(&java);
     cmd.arg("-jar")
-        .arg(jar)
+        .arg(&jar)
         .arg("--data-dir")
         .arg(&launch.data_dir)
         .env("MADOYOMI_TOKEN", token)
@@ -540,7 +542,7 @@ fn run_once(
     }
     shared.log.shell(&format!(
         "start attempt {attempt}: {} -jar {} --data-dir {}",
-        launch.java.display(),
+        java.display(),
         jar.display(),
         launch.data_dir.display()
     ));
@@ -550,7 +552,7 @@ fn run_once(
         Err(e) => {
             return Outcome::Failed(Failure {
                 fatal: e.kind() == io::ErrorKind::NotFound,
-                ..Failure::new(format!("could not start {}: {e}", launch.java.display()))
+                ..Failure::new(format!("could not start {}: {e}", java.display()))
             });
         }
     };
@@ -924,9 +926,10 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 // --- launch configuration ---
 
 struct Launch {
-    java: PathBuf,
-    /// The jar, or why there is none (a restart can't fix that).
-    jar: Result<PathBuf, String>,
+    /// Where release builds bundle the JRE and the jar; `None` in debug builds, which use the repo. Java and the jar
+    /// are resolved again for every start (see [`run_once`]), so a Retry finds a jar that was missing at app start,
+    /// and a debug build picks up a jar rebuilt since.
+    resources: Option<PathBuf>,
     data_dir: PathBuf,
     log_dir: PathBuf,
 }
@@ -940,8 +943,7 @@ fn resolve_launch(app: &AppHandle) -> Launch {
     };
     let data_dir = resolve_data_dir(app);
     Launch {
-        java: resolve_java(resources.as_deref()),
-        jar: resolve_jar(resources.as_deref()),
+        resources,
         log_dir: data_dir.join("logs"),
         data_dir,
     }
@@ -998,7 +1000,17 @@ fn resolve_java(resources: Option<&Path>) -> PathBuf {
 /// `MADOYOMI_SIDECAR_JAR`, else the bundled jar (release: `<resources>/server/Madoyomi-Server.jar`), else the newest
 /// `server/api/build/Madoyomi-Server-*.jar` (debug).
 fn resolve_jar(resources: Option<&Path>) -> Result<PathBuf, String> {
-    if let Some(jar) = env_path("MADOYOMI_SIDECAR_JAR") {
+    let dev_build = dev_root().join("server").join("api").join("build");
+    jar_from(env_path("MADOYOMI_SIDECAR_JAR"), resources, &dev_build)
+}
+
+/// [`resolve_jar`] with its inputs given: the override, the resource dir, and the dev build dir.
+fn jar_from(
+    override_jar: Option<PathBuf>,
+    resources: Option<&Path>,
+    dev_build: &Path,
+) -> Result<PathBuf, String> {
+    if let Some(jar) = override_jar {
         return if jar.is_file() {
             Ok(jar)
         } else {
@@ -1020,16 +1032,13 @@ fn resolve_jar(resources: Option<&Path>) -> Result<PathBuf, String> {
                 ))
             }
         }
-        None => {
-            let dir = dev_root().join("server").join("api").join("build");
-            newest_server_jar(&dir).ok_or_else(|| {
-                format!(
-                    "server jar not found in {}: build it with .\\gradlew.bat :api:shadowJar in \
-                     server/, or set MADOYOMI_SIDECAR_JAR",
-                    dir.display()
-                )
-            })
-        }
+        None => newest_server_jar(dev_build).ok_or_else(|| {
+            format!(
+                "server jar not found in {}: build it with .\\gradlew.bat :api:shadowJar in \
+                 server/, or set MADOYOMI_SIDECAR_JAR",
+                dev_build.display()
+            )
+        }),
     }
 }
 
@@ -1419,6 +1428,40 @@ mod tests {
         File::create(dir.join("other.jar")).unwrap();
         assert_eq!(newest_server_jar(&dir), Some(new));
         assert_eq!(newest_server_jar(&dir.join("missing")), None);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_jar_that_appears_later_is_found_on_the_next_resolve() {
+        // Retry resolves the jar again (Phase 3 §10, Stage 7): a jar built after a failed start is used.
+        let dir = std::env::temp_dir().join(format!("madoyomi-jar-later-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let jar = dir.join("server.jar");
+
+        let missing = jar_from(Some(jar.clone()), None, &dir).unwrap_err();
+        assert!(missing.contains("MADOYOMI_SIDECAR_JAR"), "{missing}");
+        File::create(&jar).unwrap();
+        assert_eq!(jar_from(Some(jar.clone()), None, &dir), Ok(jar.clone()));
+
+        // The dev build dir: nothing, then a built jar.
+        let build = dir.join("build");
+        fs::create_dir_all(&build).unwrap();
+        assert!(
+            jar_from(None, None, &build)
+                .unwrap_err()
+                .contains("shadowJar")
+        );
+        let built = build.join("Madoyomi-Server-v0.1.0.jar");
+        File::create(&built).unwrap();
+        assert_eq!(jar_from(None, None, &build), Ok(built));
+
+        // A release build without its bundled jar.
+        assert!(
+            jar_from(None, Some(&dir), &build)
+                .unwrap_err()
+                .contains("reinstall")
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 }

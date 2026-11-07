@@ -92,14 +92,14 @@ Build the Vue 3 UI so a user can do everything from Phases 1–2 without curl: m
 ### Quality
 - [x] Virtualized grids/lists (Stage 3: `VirtualList` for the extension list, 1469 Keiyoushi rows; Stage 4: `VirtualGrid` for the source results, verified live over many pages; Stage 5: the Library grid (`VirtualGrid`) and the episode/chapter lists (`VirtualList`, tested with 1500 rows; live with 1190 episodes and 1214 chapters scrolled end to end), §10)
 - [x] Covers via backend image proxy (Stage 4: the source grid's covers load through the backend's thumbnail routes, `/api/v1/anime/{id}/thumbnail` and upstream's manga one, which apply the source's headers, so no new proxy was needed; verified live for both kinds and after a backend restart. Stage 5: the details and Library covers use the same routes through `useAssetUrl`, verified live for both kinds and after a backend kill, §10)
-- [ ] Component + client tests
-- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass
+- [x] Component + client tests (Stages 1–6: the client's errors (`client.spec.ts`), `FilterRenderer` and `PreferenceRenderer`, every view and component, and the route smoke test (`routes.spec.ts`). Stage 7 checked them against step 22 and every "Not checked live" list, and filled the two real gaps: `errorText.spec.ts` (every server code, read from the Kotlin enum, and every client code has a readable line) and `theme.spec.ts` (`index.html`'s first-paint script). It also added tests for the exit run's fixes. §9, §10)
+- [x] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass (Stage 7: lint, typecheck and format:check clean; `pnpm test` 33 files, 256 passed + 9 skipped (the live spec), which passes 9/9 against a seeded server; `cargo test` 15 and `cargo clippy --all-targets` clean; §10)
 
 ## 6. Exit criteria
 
-- [ ] Starting from a fresh data dir, a user can add both repos, install and trust one anime and one manga extension, browse/search with filters, open details, see episodes/chapters and add both to the library, all in the UI.
-- [x] Source preferences can be changed in the UI and take effect. (Stage 6, §10: KickAssAnime's "Use English titles" turned Popular's titles into English ones and its mirror changed the source's address; MangaDex's "Filter original languages" set to Korean left only Korean titles in Popular. All restored afterwards, the MangaDex one after a backend kill without a reload. Rechecked in the exit run.)
-- [x] Killing the backend process shows an error and recovers automatically. (Stage 1, §10: the overlay shows the exit and the countdown, and the app is back on a new port about 11 s later. Rechecked in the exit run.)
+- [x] Starting from a fresh data dir, a user can add both repos, install and trust one anime and one manga extension, browse/search with filters, open details, see episodes/chapters and add both to the library, all in the UI. (Stage 7, §10: in `pnpm tauri dev` on an empty `MADOYOMI_DATA_DIR`, by clicks and pasted text only. Both repos were added with the type detected. KickAssAnime, MangaPill and MangaDex were installed with their steps shown, and the trust prompt was reached by removing yuzono and used to trust KickAssAnime. There were searches, and filtered searches that changed the results (KickAssAnime Type: Movie, MangaPill Type: Novel). Bungou Stray Dogs 5th Season (11 episodes) and Berserk (405 chapters) went into the Library.)
+- [x] Source preferences can be changed in the UI and take effect. (Stage 6, §10: KickAssAnime's "Use English titles" turned Popular's titles into English ones and its mirror changed the source's address; MangaDex's "Filter original languages" set to Korean left only Korean titles in Popular. All restored afterwards, the MangaDex one after a backend kill without a reload. Rechecked in Stage 7 from the fresh data dir: the same two changes took effect and were restored, the MangaDex one after a backend kill, §10.)
+- [x] Killing the backend process shows an error and recovers automatically. (Stage 1, §10: the overlay shows the exit and the countdown, and the app is back on a new port about 11 s later. Rechecked in Stage 7: back on a new port 7.8 s after the kill, and the Library, a details refresh, a source page and a preference change worked without a reload. The failure screen's Retry and Open logs were clicked live too, §10.)
 
 ## 7. Risks & notes
 
@@ -147,6 +147,17 @@ Each stage ends in something verifiable and a commit:
      - live in `pnpm tauri dev` (§10): the three themes, Open logs, the Settings links, a preference of each kind taking effect on the source page, and all of it after a backend kill.
    - Nothing in `server/` changed: the manga quirks are worked around in the client (§9).
 7. **Exit run** (steps 22–23 and §6): every exit criterion from a fresh data dir, the remaining tests, a fix round, and the phase closed in PLAN.md and README.md.
+   - *Done* (2026-11-07):
+     - step 22's areas were checked, and the two real test gaps filled (`errorText.spec.ts`, `theme.spec.ts`);
+     - every §6 criterion was checked live in `pnpm tauri dev` from an empty data dir, all in the UI, including a backend kill and the failure screen's Retry and Open logs (§10);
+     - the fix round:
+       - one server change, the cover and chapter-page caches moved into the data dir (the user's decision, server/UPSTREAM.md);
+       - the shell resolves the jar for every start, so Retry finds a jar that was missing;
+       - the source page searches what its box shows;
+       - a details page keeps its sidebar section.
+
+       Each fix is tested and was rechecked live.
+     - **Phase 3 is done.**
 
 ## 9. Decision record
 
@@ -375,6 +386,24 @@ Decided in the stage (defaults, not asked):
 - **The backend section** shows the state, the server's version and URL, and the data and log folders from the status snapshot, with Open logs (`open_backend_logs`). A backend not started by the app (`pnpm dev` with `VITE_MADOYOMI_URL`) has no folders to show, and the page says so.
 - **Source settings are reached three ways:** the Settings page lists the current kind's sources with `isConfigurable` true (by name, then language); Browse rows of such a source have a ⚙ link next to the pin; the source page has a Settings button. A source that can't be used (`isConfigurable` null) isn't listed, and Settings counts those and points to Extensions.
 - **`/settings/source/:id`** uses the current kind, as the source page does. It handles a missing source, an untrusted or unloaded one (Open in Extensions; no preference request, which would fail with `UNTRUSTED`), a source without settings, and a failed read (`ErrorNotice` with Try again). While it loads, the title is "Source settings", so the route smoke test still finds a heading.
+
+### Stage 7 (2026-11-07)
+
+Decided by the user:
+- **The id-keyed caches move into the data dir** (`<dataDir>/cache/thumbnails`, `<dataDir>/cache/manga`). Upstream kept them in `%TEMP%\Madoyomi`, shared by every data dir, and named their files by database id, so a fresh data dir showed an older one's covers (§10). This is one upstream edit in `ApplicationDirs` (server/UPSTREAM.md "Id-keyed caches in the data dir"). The alternatives were moving the whole temp root (broader, with no gain: nothing else there is keyed by an id) or recording it for Phase 5/6.
+
+Decided in the stage (defaults, not asked):
+- **Step 22's tests: two real gaps filled, nothing for its own sake.** FilterRenderer, PreferenceRenderer, the client's error handling and the route smoke test were already covered (Stages 2–6). Every "Not checked live" item of Stages 1–6 already had a test, except:
+  - `errorText.spec.ts`: every server code (read from the Kotlin `ErrorCode` enum, so a new server code without a readable line fails) and every client code has a sentence. The client's own list (`SERVER_ERROR_CODES`) must equal the server's;
+  - `theme.spec.ts`: `index.html`'s inline script, run as it is, applies a stored dark or light theme before the app loads and leaves System to Windows. Stage 6 couldn't catch that first frame on a screenshot. It also covers the store's choice and System removing the key.
+- **The shell resolves java and the jar for every start, not once at app start** (`sidecar.rs`: `Launch` keeps the resource dir, `run_once` resolves). A missing jar still fails at once without restarts, but Retry now looks again, so building the jar (or putting it back) and pressing Retry recovers without restarting the app. A debug build's restart also picks up a jar rebuilt since. Found in the exit run (§10).
+- **The search box is what the source page searches.**
+  - Emptying it (its ×, or deleting the text) drops the submitted search, and the Search tab asks for one again.
+  - Apply takes the box's text too, submitted with Enter or not.
+  - Before, × cleared only the box. A filtered search then still used the old query, and the old query came back into the box when the page was opened again (found in the exit run, §10).
+  - A new query still waits for Enter.
+- **A details page keeps the sidebar section it was opened from** (`meta.navFromPrevious`): Browse when opened from a source, Library from the Library. Opened directly, it marks Library as before. Switching the anime/manga kind there goes to that section's list. Before, opening a cover on a source page moved the mark to Library (found in the exit run).
+- **UI preferences stay per device, not per data dir.** The pins, the theme, the kind, the sorts and "Show 18+" live in the WebView's `localStorage`, so a fresh data dir in the same app still has them (the exit run's KickAssAnime was already pinned). This is as decided in Stages 2–6 (per-device UI preferences). Phase 6's backup can carry them if wanted.
 
 ## 10. Findings log
 
@@ -626,3 +655,82 @@ Decided in the stage (defaults, not asked):
   - a failed save: no save failed. It is covered by the hook test (rollback and reread) and the renderer test (the error line);
   - a checkbox preference: none of the installed sources has one;
   - the very first paint in a chosen theme: the screenshots can't catch the frame before the app's own styles. The inline script is in `index.html`, and the theme was kept across a reload.
+
+### Stage 7 (2026-11-07): exit run
+
+- **Baseline before the stage** (the same as after Stage 6, rerun at the start):
+  - `pnpm test`: 220 passed + 9 skipped (the live spec);
+  - lint, typecheck and format:check clean;
+  - `cargo build`, `cargo test` (14) and `cargo clippy --all-targets` clean;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24 on the Stage 5 jar;
+  - the live spec on a freshly seeded scratch server (both repos, AnimeGG, MangaPill, KickAssAnime, MangaDex): 9/9.
+- **After the stage:**
+  - `pnpm test`: 33 files, 256 passed + 9 skipped. The new and changed ones:
+    - errorText 24 (new);
+    - theme 10 (new);
+    - SourceView 14 (was 13: the search box);
+    - routes 16 (was 15: the details page's section).
+
+    The other files are unchanged.
+  - lint, typecheck and format:check are clean.
+  - `cargo build`, `cargo test` (**15**, was 14: the jar found on a later resolve), `cargo clippy --all-targets` and `cargo fmt --check` pass.
+  - **Server:**
+    - `.\gradlew.bat build` is green with **669 tests, 0 failures**: core 606 (8 skipped in this run's results), AndroidCompat 7, ext-host 8, api 48. It was 667; the 2 new ones are `IdKeyedCacheDirsTest`;
+    - ktlint is clean;
+    - the jar was rebuilt by the same build, and `tools/smoke-api.ps1 -NoBuild` passed **24/24** on it;
+    - the live spec passed **9/9** again on that jar.
+- **The exit run, live in `pnpm tauri dev`** on an empty `MADOYOMI_DATA_DIR`. It was driven only by clicks, the wheel, keys and pasted text, and checked by screenshot (not committed):
+  - **First start:** healthy after 8.1 s. Extensions said "No anime repo yet. Madoyomi ships with none: add a repo".
+  - **Repos, type detected:**
+    - Keiyoushi's `index.pb` became "a manga repo (type detected), with 1488 extensions";
+    - yuzono's `index.min.json` became "an anime repo (type detected), with 250 extensions", stored as `https://github.com/yuzono/anime-repo/raw/repo/index.pb`;
+    - both showed "Signing key trusted".
+  - **Installs with their steps:**
+    - KickAssAnime 14.63, MangaPill 1.6.1 and MangaDex 1.6.1 each showed "Converting…" with the bar, then moved to Installed;
+    - the live events listed DOWNLOADING → VERIFYING → CONVERTING → INSTALLED for all three;
+    - MangaDex's "6 API gaps" popover (never seen live before) listed six `STUB` view methods (`View.findViewById`, `TextView.setError`, …), "found at install".
+  - **The trust prompt:**
+    - removing yuzono through its confirmation left KickAssAnime "Untrusted" with Trust…;
+    - TrustDialog showed KickAssAnime (anime), the package, 14.63, "No added repo lists it any more" with the stored URL, the hash `cbec121a…c45905` and the warning;
+    - "Trust and load it" cleared the badge, and yuzono was then re-added.
+  - **Browse and search with filters:**
+    - KickAssAnime: Popular (the covers loaded), and a search for "naruto";
+    - then Filters → Type: Movie → Apply: only films, with "Filters 1";
+    - MangaPill: Popular (10 entries), then Type: Novel → Apply: only light novels, where the unfiltered empty search finds nothing.
+  - **Details and the Library:**
+    - Bungou Stray Dogs 5th Season (KickAssAnime) refreshed by itself with 11 episodes; Berserk (MangaPill) with 405 chapters;
+    - both were added to the library, and each kind's Library listed its one entry ("1 saved anime", "1 saved manga").
+  - **Preferences (recheck):**
+    - KickAssAnime "Use English titles" on: Popular showed "My Hero Academia Season 7" and "Mashle: Magic and Muscles"; it was then turned off again;
+    - MangaDex (EN) "Filter original languages" → Korean: Popular went from mostly Japanese titles to 4 Korean ones.
+  - **A backend kill (recheck)** (pid from `sidecar.log`):
+    - the overlay "Starting the backend…" showed, with the footer "Offline", and the covers fell back to their initials while it was down;
+    - the backend was healthy on a new port 7.8 s after the kill.
+    - Without a reload:
+      - the covers came back, with "Live updates" and the new port in the footer;
+      - MangaDex's setting still showed Korean, was unticked and saved (the manga read-first after a restart), and Popular had its full list again;
+      - Berserk's Refresh ran on the new port;
+      - both Libraries listed their entries;
+      - KickAssAnime's Latest browsed.
+  - **The failure screen** (Stage 1's open item), with `MADOYOMI_SIDECAR_JAR` pointing at a missing file:
+    - the screen appeared at once: "The backend could not start", the path, "stopped restarting it after 1 try", the log folder, Retry and Open logs;
+    - **Retry** logged "restart requested from the UI" and failed again at once, as it should;
+    - **Open logs** opened an Explorer window on `<data dir>\logs`, checked through `Shell.Application`, then closed;
+    - with the jar then put at that path, Retry didn't find it: see the fix below. After the fix, the failure screen, then the jar, then Retry gave "start attempt 1", healthy after 6.6 s, and the app with its Library.
+  - **After closing the window:** "backend stopped (exit code 0)" each time. `token=` appears in none of `sidecar.log`, `sidecar.1.log`, `madoyomi.log` or the four dev outputs.
+- **Fixed in the fix round, each rechecked live:**
+  - **Wrong covers on a fresh data dir** (server).
+    - Bungou Stray Dogs showed a One Piece cover, and so did several Naruto films (others showed Detective Conan, Boruto and Dragon Ball covers). The titles, descriptions and episodes were right.
+    - The cause is upstream's thumbnail cache: `%TEMP%\Madoyomi\thumbnails` names its files by database id (`anime-1.jpg`, `<mangaId>.jpg`) and is shared by every data dir. The fresh database's anime #1 got the `anime-1.jpg` an earlier stage's data dir had cached at 10:13 (652 `anime-*` files were there). The chapter-page cache (`manga-cache`) is keyed the same way.
+    - The user chose to move both into the data dir (§9).
+    - Rechecked on the same data dir with the rebuilt jar: Bungou Stray Dogs showed its own cover, cached as `<data dir>\cache\thumbnails\anime-1.webp`, and the film covers were right.
+  - **Retry never looked for the jar again** (shell). `Backend::start` resolved the jar once and kept the error, so a jar built after a failed start needed an app restart. Java and the jar are now resolved for every start (§9), tested by `a_jar_that_appears_later_is_found_on_the_next_resolve`, and rechecked live as above.
+  - **The search box and the results disagreed** (UI). The search field's × emptied the box but kept the submitted query, so the filtered search above still searched "naruto". When the page was opened again, "naruto" came back into the box. Now an emptied box drops the search, and Apply takes the box's text (§9). Rechecked: × gave "Type a search, or set filters.", and Type: Movie then listed every film, A to Z.
+  - **The sidebar jumped to Library on a details page opened from Browse** (UI). Now it keeps Browse (§9). Rechecked: Akira, opened from KickAssAnime, kept Browse marked, and switching to manga went to manga Browse.
+- **Found, not a bug:** the fresh data dir's Browse already had KickAssAnime pinned, and the Library kept Stage 5's anime sort. Pins, sorts, the theme and the kind live in the WebView's `localStorage`, per device, as decided in Stages 2–6. The source ids are the same across data dirs, so a pin comes back with its source (§9).
+- **Not checked live:**
+  - an extension **update**: neither repo listed a newer version of an installed extension (as in Stage 3). It is covered by the component tests;
+  - a **refused** preference value, a **failed save**, a **checkbox** preference and a **`Seasons`** anime: none of the installed sources has or does one (as in Stages 5–6). They are covered by the tests;
+  - the **five-failures give-up** after repeated crashes: Stage 1 checked it live. This run checked the immediate give-up (a missing jar) and both buttons;
+  - the **first paint** in a chosen theme: still not on a screenshot. It is now covered by `theme.spec.ts`, which runs `index.html`'s script.
+- **Found in the tests:** Vite refuses a `?raw` import from outside `app/` ("Denied ID"), and jsdom's `import.meta.url` isn't a `file:` URL. So `errorText.spec.ts` reads the Kotlin file with `node:fs`, loaded untyped, by a path relative to `app/`. `String.prototype.replaceAll` isn't in the app's ES2020 lib.

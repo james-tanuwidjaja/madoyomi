@@ -5,36 +5,17 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet.** Phase 0 (spikes), **Phase 1 (backend foundation)** and **Phase 2 (anime sources)** are done. **Phase 3 (frontend MVP)** is in progress: the Vue UI on the real backend. Stages 1–6 of 7 are done.
+> **Early development. Not usable yet:** episodes don't play and chapters don't open (Phases 4 and 5). Phase 0 (spikes), **Phase 1 (backend foundation)**, **Phase 2 (anime sources)** and **Phase 3 (frontend MVP)** are done. **Phase 4 (playback in mpv)** is next.
 >
-> The desktop app:
-> - starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`);
-> - shows a "starting" splash until the backend is healthy;
-> - restarts the backend on its own if it crashes, with an overlay that says so;
-> - has its shell: a sidebar (Library, Browse, Extensions, Downloads, Settings), an anime/manga switch and every route;
-> - talks to the backend through a typed GraphQL client and receives live events over a WebSocket, and both carry on by themselves after a backend restart.
+> **The desktop app** starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`). It shows a "starting" splash until the backend is healthy, and restarts the backend on its own if it crashes, with an overlay that says so. If the backend can't start at all, it shows why, with Retry and Open logs. The UI talks to the backend through typed GraphQL and live WebSocket events, and both carry on by themselves after a restart.
 >
-> **You can now manage repos and extensions in the app:**
-> - add a repo by its URL (the app works out whether it's anime or manga), remove it, and refresh it;
-> - browse what your repos offer, with search, a language filter and a "Show 18+" switch;
-> - install, update and uninstall extensions, and watch each step;
-> - get the trust prompt (with the signing certificate and a warning) for an extension whose certificate you haven't trusted yet.
+> **What you can do in the app, for anime and manga:**
+> - **Repos and extensions:** add a repo by its URL (the app works out whether it's anime or manga), remove it, and refresh it. Browse what your repos offer, with search, a language filter and a "Show 18+" switch. Install, update and uninstall extensions and watch each step. The trust prompt shows the signing certificate and a warning for an extension whose certificate you haven't trusted yet.
+> - **Browse your sources:** they're listed by language, with your pins at the top. A source shows its Popular, Latest and Search results as an endless grid of covers. Its filters (selects, sorts, checkboxes, include/exclude genres, text, groups) open in a side sheet, with Apply and Reset.
+> - **Details and the Library:** a cover opens its details, refreshed from the source the first time, with its episodes or chapters (even 1000+ scroll smoothly), sorted and filtered. "Add to library" puts it in the Library, a grid sorted by title or date added.
+> - **Settings:** the theme (System, Dark or Light), the backend's version and folders with Open logs, and each source's own settings (quality, mirror, title language, content filters, …), saved as you change them and used from the source's next page.
 >
-> **And you can browse your sources:**
-> - Browse lists your anime or manga sources by language, with the ones you pin at the top. The built-in Local source is marked as such, and a source whose extension isn't trusted or didn't load says so and points to Extensions;
-> - a source shows its Popular, Latest and Search results as an endless grid of covers that loads the next page as you scroll;
-> - its filters (selects, sorts, checkboxes, include/exclude genres, text, groups) open in a side sheet, with Apply and Reset. Each source keeps its tab, search and filters while the app runs.
->
-> **And you can open an entry and keep it in your Library:**
-> - a cover opens the entry's details: cover, title, author, status, genres, description and its source. An entry that was never fetched is refreshed from its source when you first open it, and a Refresh button asks again. If the source's site fails, the page says so and keeps what is stored;
-> - its episodes or chapters, even 1000+ of them, scroll smoothly. Sort them by the source's order, number or upload date, either way, and filter them by bookmark or scanlator (watched/read marks come with Phase 6). An anime split into seasons lists its seasons, each with its own page;
-> - "Add to library" and "Remove from library", for both kinds. The Library shows your saved anime or manga as a grid of covers, sorted by title or by date added. An empty Library points to Browse.
->
-> **And you can change settings:**
-> - Settings has the theme (System, Dark or Light; English is the only language so far) and the backend's version, address, data folder and log folder, with Open logs;
-> - each source's own settings (quality, mirror, title language, content filters, …), for anime and manga, open from Settings, a ⚙ next to the source in Browse, or the source page. A change is saved as you make it, and the source uses it from its next page.
->
-> Episodes don't play and chapters don't open yet (Phases 4 and 5).
+> All of it was checked from a fresh data dir in the Phase 3 exit run, including a backend crash in the middle ([phase-3 §10](docs/phases/phase-3-frontend-mvp.md#10-findings-log)).
 >
 > The backend in `server/` is a Suwayomi-Server fork, rebranded as Madoyomi-Server. It runs as a local sidecar (loopback only, random port, API token). From its GraphQL API you can:
 > - add Aniyomi and Mihon repos (JSON and protobuf indexes) and list their extensions;
@@ -49,7 +30,7 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 >
 > Filters and preferences round-trip through the API: a filtered search works on all 18 with filters, and a preference change on 19 of 20. **9 of the 10 most-downloaded Keiyoushi manga extensions** read down to a page image ([docs/research/manga-compat.md](docs/research/manga-compat.md)); comix needs a real WebView, which is deferred with the Cloudflare solver. Uninstalling an extension frees its code: of the 20 anime extensions, 1 is still kept after uninstall, by a video connection of its own.
 >
-> Every Phase 3 screen is done: Repos, Extensions, Browse, the source pages, Details, the Library and Settings. The exit run from a fresh data dir comes next (Phase 3 Stage 7). Videos don't play yet (Phase 4). See the [Roadmap](#roadmap).
+> See the [Roadmap](#roadmap).
 
 ---
 
@@ -91,7 +72,7 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 
 | Path | What | Status |
 |---|---|---|
-| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes, the Repos and Extensions screens with the trust prompt, Browse and the source pages with the filter sheet, the typed API client and WebSocket in `api/`, vue-query hooks in `composables/`, the startup splash and error screens, design tokens) | Phase 3 in progress |
+| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes; the Repos, Extensions, Browse, source, Details, Library and Settings screens; the filter and preference renderers; the typed API client and WebSocket in `api/`; vue-query hooks in `composables/`; the startup splash and error screens; design tokens. See [app/README.md](app/README.md)) | Phase 3 done |
 | [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phases 1 and 2 done |
 | `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
@@ -209,7 +190,7 @@ The script starts the jar the way the app does, on a throwaway data dir under `%
 > [!NOTE]
 > `pnpm tauri dev` also starts the real backend, the newest `server\api\build\Madoyomi-Server-*.jar`. Build it once first: `.\gradlew.bat :api:shadowJar` in `server/` (see [Backend](#backend-server)). The shell runs it with `tools/bin/jdk-21`, a fresh API token per app session and `--data-dir %APPDATA%\Madoyomi`, and keeps its stdin open; the backend exits when the app does.
 > - **Startup.** The window shows "Starting the backend…" until `/health` answers, about 10–12 s (longer on a busy machine; after 30 s it says so). The shell keeps waiting for up to 5 minutes while the JVM is alive.
-> - **Crashes.** If the backend exits or stops answering, the app shows an overlay and restarts it after 1, 2, 4 and 8 s. After 5 failed starts in a row it stops and offers Retry and Open logs. A missing jar shows that error at once. Once the backend is back (on a new port), the UI's requests and its WebSocket move there by themselves, and the sidebar's footer shows "Live updates" again.
+> - **Crashes.** If the backend exits or stops answering, the app shows an overlay and restarts it after 1, 2, 4 and 8 s. After 5 failed starts in a row it stops and offers Retry and Open logs. A missing jar shows that error at once, and Retry looks for it again, so building the jar and pressing Retry is enough. Once the backend is back (on a new port), the UI's requests and its WebSocket move there by themselves, and the sidebar's footer shows "Live updates" again.
 > - **Logs.** `sidecar.log` (the backend's output plus the shell's start, port, health and exit lines) and the server's `madoyomi.log` are in `<data dir>\logs`.
 > - **Environment overrides,** set before `pnpm tauri dev`: `MADOYOMI_SIDECAR_JAR` (another jar), `MADOYOMI_JAVA` (another `java.exe`), `MADOYOMI_DATA_DIR` (another data dir, e.g. a fresh one for testing).
 > - **One server per data dir.** Don't run `pnpm tauri dev` and a server of your own on the same data dir at once (the database is locked). `tools/run-server.ps1` uses `tools/dev-data/`, so the two don't clash.
@@ -260,7 +241,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 | 0 | **Spikes:** prove manga extensions, the `index.pb` index, anime extensions, mpv playback and the Tauri sidecar each work on their own | ✅ Done | [phase-0-spikes.md](docs/phases/phase-0-spikes.md) |
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ✅ Done (18/20 top anime extensions end to end, filters and preferences through the API, 9/10 of the manga sample; Cloudflare/WebView shim deferred) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
-| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | 🟡 In progress (Stages 1–6 of 7 done: the app starts the real backend and restarts it after a crash; the app shell with every route, the typed API client and live WebSocket events; the Repos and Extensions screens with the trust prompt; Browse and the source pages with the filter renderer and an endless cover grid; Details for both kinds with a virtualized episode/chapter list, and the Library; Settings with the theme and the backend's folders, and each source's settings through the preference renderer; the exit run next) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
+| 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | ✅ Done (every screen for anime and manga, the generic filter and preference renderers, the backend run and restarted by the app; every exit criterion checked from a fresh data dir in the UI) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
 | 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
 | 5 | **Manga reader:** image proxy and cache, paged, webtoon and double-page modes | ⚪ Not started | [phase-5-manga-reader.md](docs/phases/phase-5-manga-reader.md) |
 | 6 | **Library features:** categories, updates, history, downloads, backup/restore | ⚪ Not started | [phase-6-library-features.md](docs/phases/phase-6-library-features.md) |
@@ -299,7 +280,7 @@ Decided in Phase 2 (see [phase-2-anime-sources.md §9](docs/phases/phase-2-anime
   - Shared objects no longer hold extension objects: each extension gets its own JSON instance, and preference listeners are held weakly, as on Android.
 - **No regression in manga** is checked with the harness's manga mode over the 10 most-downloaded Keiyoushi extensions. A source that needs a real WebView (comix) counts as deferred, not as a regression.
 
-Decided so far in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3-frontend-mvp.md#9-decision-record)):
+Decided in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3-frontend-mvp.md#9-decision-record)):
 
 - **UI components: headless primitives with our own styles.** [Reka UI](https://reka-ui.com/) provides accessible dialogs, selects, tabs, checkboxes and switches. They are styled only through Madoyomi's design tokens, and long lists are virtualized with TanStack Virtual.
 - **Dark and light themes from the start.** The app follows the Windows setting, and Settings offers System, Dark or Light. The choice is kept and applied before the window first paints.
@@ -328,6 +309,9 @@ Decided so far in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3
 - **Source settings save as you change them**, and the change shows at once. Changes go to the backend one at a time, in order. If a save fails, the old value comes back with the error; if the extension refuses a value, the page shows the one it kept. Lists, switches and checkboxes apply at once; a text or a multi-select opens a dialog with Save, as on Android.
 - **A changed setting takes effect on the next page:** the app drops the source's loaded pages, so it browses again with the new settings, and it reads the source's address again after that (a mirror setting changes it).
 - **Manga settings are read before each change.** The backend's manga side (Suwayomi's) needs a read first, and has none right after a restart. It also can't refuse a value the way anime extensions can: it saves first, as upstream does. No backend change was needed.
+
+- **Covers and chapter pages are cached in the data dir** (`<data dir>\cache`), next to the database whose ids name the files. Suwayomi keeps these caches in the temp folder, shared by every data dir, and a fresh data dir showed an older one's covers. A small backend change, found in the exit run.
+- **UI preferences belong to this device, not to the data dir:** pins, the theme, the anime/manga switch, the sorts and "Show 18+" stay when the data dir changes.
 
 Still open:
 

@@ -47,7 +47,7 @@ cd src-tauri; cargo test; cargo clippy --all-targets   # Rust shell tests and li
 | `/settings/source/:id`     | `SourceSettingsView`                   | done (Stage 6): the source's preferences (`PreferenceRenderer`), saved as they change; unusable ones to Extensions |
 | anything else              | `NotFoundView`                         |                                                                                                                    |
 
-The routes of one kind (`/browse/:sourceId`, `/anime/:id`, `/manga/:id`, `/settings/source/:id`) go back to their section's list when the switch changes kind.
+The routes of one kind (`/browse/:sourceId`, `/anime/:id`, `/manga/:id`, `/settings/source/:id`) go back to their section's list when the switch changes kind. A details page (`meta.navFromPrevious`) belongs to the section it was opened from: the sidebar keeps marking Browse or Library, and a kind change goes back to that list. Opened directly, it marks Library.
 
 ## Live check of the API operations
 
@@ -67,6 +67,7 @@ It validates every document in `src/api/operations/` against the server's schema
 - runs `java -jar <jar> --data-dir <dir>` with a per-session random `MADOYOMI_TOKEN`, and keeps the backend's stdin open (the backend exits when it closes);
 - waits for `MADOYOMI_PORT=<port>` as long as the JVM lives (up to 5 min), then for `GET /health`, and checks `/health` every 5 s after that;
 - restarts the backend after an exit or a hang, after 1, 2, 4 and 8 s, and gives up after 5 failed starts in a row (Retry in the UI);
+- resolves java and the jar again for every start: a missing jar fails at once, with no restarts, and Retry looks for it again (so does a restart in a debug build, which then runs a jar rebuilt since);
 - writes the backend's output and its own lifecycle lines to `<data dir>/logs/sidecar.log`.
 
 Environment overrides: `MADOYOMI_SIDECAR_JAR` (jar), `MADOYOMI_JAVA` (`java.exe`; default `../tools/bin/jdk-21`), `MADOYOMI_DATA_DIR` (default `%APPDATA%\Madoyomi`).

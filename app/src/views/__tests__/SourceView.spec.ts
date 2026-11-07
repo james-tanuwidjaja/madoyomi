@@ -199,6 +199,39 @@ describe("SourceView", () => {
     expect(wrapper.find('[data-testid="filter-count"]').exists()).toBe(false);
   });
 
+  it("searches what the box shows: an emptied box drops the search, and Apply takes the box's text", async () => {
+    await mountSource();
+    await search("naruto");
+    expect(lastBrowse()).toMatchObject({ type: "SEARCH", query: "naruto" });
+
+    // The box's ×, or deleting the text: no search is left, so the tab asks for one.
+    const box = wrapper.find('[data-testid="source-search"]');
+    await box.setValue("");
+    await flushPromises();
+    expect(wrapper.find('[data-testid="search-prompt"]').exists()).toBe(true);
+
+    // Filters then search with an empty query, not the old one.
+    const applyCheckbox = async () => {
+      await wrapper.find('[data-action="filters"]').trigger("click");
+      await flushPromises();
+      const sheet = document.body.querySelector<HTMLElement>('[data-testid="filter-sheet"]')!;
+      sheet.querySelector<HTMLElement>("[data-position='3'] [role='checkbox']")!.click();
+      await flushPromises();
+      sheet.querySelector<HTMLElement>("[data-action='apply']")!.click();
+      await flushPromises();
+    };
+    await applyCheckbox();
+    expect(lastBrowse()).toMatchObject({
+      query: "",
+      filters: [{ position: 3, checkBoxState: true }],
+    });
+
+    // Text typed but not submitted goes with the filters.
+    await box.setValue(" one piece ");
+    await applyCheckbox();
+    expect(lastBrowse()).toMatchObject({ query: "one piece", filters: undefined });
+  });
+
   it("loads the next page near the end, shows each entry once, and says when it's the end", async () => {
     // page 2 repeats the last 5 entries of page 1, as sources do
     ops.browseSource.mockImplementation(async (p: { page: number }) =>

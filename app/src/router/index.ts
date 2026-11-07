@@ -16,6 +16,11 @@ declare module "vue-router" {
     title?: string;
     /** The sidebar item to mark active. */
     nav?: NavItem;
+    /**
+     * A page reached from several sections (a details page, from Browse or the Library) keeps marking the section it
+     * was opened from; `nav` is only the default, for a page opened directly.
+     */
+    navFromPrevious?: boolean;
     /** The route's own kind: opening it sets the anime/manga switch. */
     kind?: MediaKind;
     /** Where to go when the switch changes to another kind: the route only makes sense for one kind. */
@@ -50,14 +55,26 @@ export const routes: RouteRecordRaw[] = [
     name: "anime",
     component: () => import("../views/AnimeDetailsView.vue"),
     props: (route) => ({ id: Number(route.params.id) }),
-    meta: { title: "Anime", nav: "library", kind: "anime", kindScopedTo: "/library" },
+    meta: {
+      title: "Anime",
+      nav: "library",
+      navFromPrevious: true,
+      kind: "anime",
+      kindScopedTo: "/library",
+    },
   },
   {
     path: "/manga/:id(\\d+)",
     name: "manga",
     component: () => import("../views/MangaDetailsView.vue"),
     props: (route) => ({ id: Number(route.params.id) }),
-    meta: { title: "Manga", nav: "library", kind: "manga", kindScopedTo: "/library" },
+    meta: {
+      title: "Manga",
+      nav: "library",
+      navFromPrevious: true,
+      kind: "manga",
+      kindScopedTo: "/library",
+    },
   },
   {
     path: "/extensions",
