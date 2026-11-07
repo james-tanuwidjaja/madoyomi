@@ -18,7 +18,8 @@ import VirtualList from "./VirtualList.vue";
  * An entry's episodes or chapters (Phase 3 step 15), behind EpisodeList and ChapterList: a sort (the source's order,
  * the number or the upload date, either way) and filters (watched/read, bookmarked, scanlator), over a VirtualList,
  * so a list of 1000+ rows keeps only what is in view in the DOM. The sort is kept per kind, the filters per entry
- * for the session (stores/itemList.ts). Rows don't act yet: playing and reading come in Phases 4 and 5.
+ * for the session (stores/itemList.ts). A row's actions come from the `actions` slot (EpisodeList: Play), and a
+ * notice above the rows (an action's error) from the `notice` slot. Reading chapters comes in Phase 5.
  */
 const props = defineProps<{
   kind: MediaKind;
@@ -152,6 +153,7 @@ const countLine = computed(() => {
       <span data-testid="item-count">{{ countLine }}</span>
       <span>{{ note }}</span>
     </p>
+    <slot name="notice" />
 
     <p v-if="items.length === 0" class="muted" data-testid="items-none">No {{ noun.many }} yet.</p>
     <p v-else-if="shown.length === 0" class="muted" data-testid="items-filtered-out">
@@ -180,6 +182,7 @@ const countLine = computed(() => {
             <span v-if="item.filler" class="badge warn">Filler</span>
             <span v-if="item.bookmarked" class="badge" data-testid="bookmarked">Bookmarked</span>
             <span v-if="item.done" class="badge ok">{{ doneLabels.done }}</span>
+            <slot name="actions" :item="item" />
           </span>
         </div>
       </template>
@@ -273,6 +276,7 @@ const countLine = computed(() => {
 .badges {
   display: flex;
   flex: none;
+  align-items: center;
   gap: var(--space-1);
 }
 </style>

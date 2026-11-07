@@ -29,7 +29,7 @@ Repos are **user-added** (like Aniyomi): the app ships with no repos or extensio
 │    ├─ Image proxy (applies source headers/cookies)                                 │
 │    └─ WebView/Cloudflare shim (headless browser)                                   │
 │                                                                                    │
-│  Sidecar: mpv.exe  ← JSON IPC (named pipe) driven by backend or Tauri              │
+│  Sidecar: mpv.exe  ← JSON IPC (named pipe), started and driven by the backend      │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -184,11 +184,19 @@ Details: [phase-4-playback.md](phases/phase-4-playback.md)
 - Exit: watch an episode and resume where you stopped.
 
 Milestones:
-- [ ] mpv launcher with headers / subs / audio
+- [x] mpv launcher with headers / subs / audio (Stage 1: `MpvCommand` with S4's header forms and the source's values in a per-session include file, `PlaybackSessions` owning one mpv at a time, `playEpisode`/`stopPlayback`; AnimeGG's MP4 and KickAssAnime's HLS with 8 subtitles and 2 audio tracks played live; phase-4 §10)
 - [ ] Named-pipe IPC + progress saving
 - [ ] Video picker, resume prompt, watched threshold
 - [ ] Next-episode flow
 - [ ] Expired-URL retry / fallback
+
+**Phase 4 in progress: Stage 1 of 6 done (2026-11-07).** The stage plan and the two decisions are in phase-4 §8–§9: mpv plays **in its own window** for the MVP (embedding is a stretch goal), and **the backend owns the mpv process**. Stage 1 added the launcher and the process handling:
+- `madoyomi.core.player` finds mpv (the override, `MADOYOMI_MPV`, PATH), builds its command line and runs one session at a time;
+- the source's headers, tracks and options reach mpv through a per-session include file, not the command line;
+- mpv dies with the app (Job Object) and with the backend (shutdown hook), and a restarted backend ends the mpv a crashed one left;
+- the API has `playEpisode`, `stopPlayback` and `playbackSession`, and each episode row has a Play button (the first video, until Stage 3's picker).
+
+Next: Stage 2, the IPC client and saving progress.
 
 ### Phase 5 — Manga reader
 Details: [phase-5-manga-reader.md](phases/phase-5-manga-reader.md)
@@ -280,7 +288,7 @@ WS     /ws                                downloads, updates, playback progress 
 | Android API surface used by extensions isn't stubbed | Extensions crash | Log missing classes/methods; build a compatibility test suite over the repo |
 | `extensions-lib` version changes (anime lib differs from manga lib) | Breakage across all extensions | Pin versions; support multiple lib versions side by side if needed |
 | Cloudflare / WebView-dependent extensions | Some sources unusable | Headless browser shim; FlareSolverr as fallback. Measured in Phase 2: 1 of the top 20 is blocked (AnimePahe), so the solver is deferred. A real WebView is a separate need: 1 of the 10-extension manga sample (comix) renders its site in one, and the sidecar runs with KCEF off |
-| Video URLs require headers/cookies | 403s in the player | Always pass `Video.headers` to mpv; proxy fallback |
+| Video URLs require headers/cookies | 403s in the player | Always pass `Video.headers` to mpv; proxy fallback. Since Phase 4 Stage 1 every header reaches mpv verbatim through a per-session include file (S4's forms, one `http-header-fields-append` each), checked live with AnimeGG (Referer required) and KickAssAnime (7 headers); the proxy fallback is decided by measurement in Stage 4 |
 | Extensions are arbitrary JVM code | Security | Trust prompt by signing cert; only user-added repos; consider a separate JVM process per extension type. Since Phase 3 Stage 3 the UI's trust prompt shows the certificate hash and warns that a trusted extension runs with the user's rights, and removing a repo asks first and says which extensions stop loading |
 | R8-optimised APKs that dex2jar mistranslates (e.g. Keiyoushi's removed constructors and merged classes) | Extensions fail to load (`VerifyError`) | A bytecode repair pass after dex2jar (`Dex2jarRepair`: constructors restored, frames recomputed with the APK's class hierarchy); the Phase 2 compat scan covers a 10-extension manga sample. It found two more patterns there (a super call that skips a removed constructor; a `new T` dex2jar leaves unfolded), fixed in Stage 6: all 30 APKs verify. Rerun `tools/compat-test/scan.ps1` when the lists are refreshed |
 | Protobuf index schema undocumented | Can't list manga extensions | Reverse-engineer from Mihon's client source; JSON fallback if one exists |
@@ -292,7 +300,7 @@ WS     /ws                                downloads, updates, playback progress 
 
 - [x] Fork Suwayomi-Server, or write a fresh backend reusing its extension-host code? **Fork** (phase-0 §9; confirmed by the S1 run and the S3 harness running on Suwayomi's runtime unchanged).
 - [x] REST, or extend Suwayomi's GraphQL? **Extend GraphQL**, keep REST for binary endpoints (phase-0 §9).
-- [ ] mpv in a separate window (MVP) vs. embedded (later): confirm UX priority
+- [x] mpv in a separate window (MVP) vs. embedded (later)? **A separate window for the MVP**; embedding with `--wid` stays a stretch goal after the Phase 4 exit run. **The backend owns the mpv process** (phase-4 §9, Stage 1).
 - [x] One JVM process for both extension types, or isolated processes? **One JVM** (shared network/DI/stub layer). Crash isolation is deferred: an in-process extension can't be contained without a separate JVM anyway, so the trust gate is the containment. Revisit if Phase 2's compat harness shows hard crashes (phase-1 §8, §9). **Verdict (Phase 2 Stage 6): one JVM stays.** Two harness runs of the top 20 in one JVM had no abort, bounded heap and threads. The class loaders kept after uninstall went from 15 to 1 (a connection reanime keeps open; phase-1 §8, phase-2 §10).
 - [x] UI components and theme? **Headless primitives (Reka UI) with our own styles; dark and light themes that follow Windows; Fluent-like tokens** (phase-3 §9, Stage 1). The window keeps the **native Windows title bar** (Snap Layouts, caption buttons; phase-3 §9, Stage 2).
 - [x] Name: Madoyomi · License: MPL-2.0
@@ -304,7 +312,7 @@ WS     /ws                                downloads, updates, playback progress 
 
 These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06), and so is [Phase 3](phases/phase-3-frontend-mvp.md) (2026-11-07, seven stages: the shell and sidecar, the API layer, Repos and Extensions, Browse and Source, Details and Library, Settings, and the exit run).
 
-[Phase 4](phases/phase-4-playback.md) (playback in mpv) is next. Its first stage reads the phase doc and proposes a stage plan, and it settles the open question of mpv in its own window or embedded (§7).
+[Phase 4](phases/phase-4-playback.md) (playback in mpv) is in progress: Stage 1 of 6 is done (2026-11-07). It settled mpv in its own window, owned by the backend (§7), and added the launcher and Play. Stage 2 adds the IPC client and progress saving.
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

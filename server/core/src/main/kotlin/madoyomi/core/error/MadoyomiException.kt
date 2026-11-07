@@ -54,6 +54,12 @@ enum class ErrorCode(
      */
     EXTENSION_INCOMPATIBLE(501),
 
+    /** mpv was not found (`details.path` and `details.origin` for a configured path that isn't there). Phase 4. */
+    PLAYER_NOT_FOUND(503),
+
+    /** mpv could not be started, or a playback session failed (`details.cause`). Phase 4. */
+    PLAYER_FAILED(500),
+
     /** The request itself is invalid: a GraphQL syntax or validation error, a bad argument. */
     BAD_REQUEST(400),
 

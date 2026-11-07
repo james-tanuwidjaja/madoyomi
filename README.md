@@ -5,7 +5,7 @@ A Windows 11 desktop app for anime and manga that runs existing **Aniyomi** and 
 The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 
 > [!WARNING]
-> **Early development. Not usable yet:** episodes don't play and chapters don't open (Phases 4 and 5). Phase 0 (spikes), **Phase 1 (backend foundation)**, **Phase 2 (anime sources)** and **Phase 3 (frontend MVP)** are done. **Phase 4 (playback in mpv)** is next.
+> **Early development. Not usable yet:** episodes play in mpv, but nothing remembers where you stopped yet, and chapters don't open (Phases 4 and 5). Phase 0 (spikes), **Phase 1 (backend foundation)**, **Phase 2 (anime sources)** and **Phase 3 (frontend MVP)** are done. **Phase 4 (playback in mpv) is in progress: Stage 1 of 6 is done.** An episode's Play button opens its first video in mpv's own window, with the source's headers, subtitles and audio tracks. The backend runs mpv, one episode at a time, and mpv closes with the app. Choosing the video, resuming and watched marks come in the next stages.
 >
 > **The desktop app** starts the real backend itself, with a fresh API token and its data dir (`%APPDATA%\Madoyomi`). It shows a "starting" splash until the backend is healthy, and restarts the backend on its own if it crashes, with an overlay that says so. If the backend can't start at all, it shows why, with Retry and Open logs. The UI talks to the backend through typed GraphQL and live WebSocket events, and both carry on by themselves after a restart.
 >
@@ -13,6 +13,7 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 > - **Repos and extensions:** add a repo by its URL (the app works out whether it's anime or manga), remove it, and refresh it. Browse what your repos offer, with search, a language filter and a "Show 18+" switch. Install, update and uninstall extensions and watch each step. The trust prompt shows the signing certificate and a warning for an extension whose certificate you haven't trusted yet.
 > - **Browse your sources:** they're listed by language, with your pins at the top. A source shows its Popular, Latest and Search results as an endless grid of covers. Its filters (selects, sorts, checkboxes, include/exclude genres, text, groups) open in a side sheet, with Apply and Reset.
 > - **Details and the Library:** a cover opens its details, refreshed from the source the first time, with its episodes or chapters (even 1000+ scroll smoothly), sorted and filtered. "Add to library" puts it in the Library, a grid sorted by title or date added.
+> - **Play an episode** (new in Phase 4): Play on an episode row opens the source's first video in mpv. You need mpv installed and on PATH (or set `MADOYOMI_MPV`).
 > - **Settings:** the theme (System, Dark or Light), the backend's version and folders with Open logs, and each source's own settings (quality, mirror, title language, content filters, …), saved as you change them and used from the source's next page.
 >
 > All of it was checked from a fresh data dir in the Phase 3 exit run, including a backend crash in the middle ([phase-3 §10](docs/phases/phase-3-frontend-mvp.md#10-findings-log)).
@@ -22,7 +23,8 @@ The name comes from 窓 *mado* ("window") + 読み *yomi* ("reading").
 > - install, update, trust and uninstall extensions of both kinds (from their signed APKs only; only trusted ones get loaded);
 > - browse and read manga sources, as in Suwayomi;
 > - browse anime sources: popular, latest, search with filters, details with episodes (or seasons), and the videos of an episode with their headers, subtitle and audio tracks. Source preferences can be changed, anime thumbnails are served through the backend, and anime can be added to and removed from the library (`updateAnime`, as upstream's `updateManga`);
-> - see per extension which Android or extension APIs it needs and doesn't get (`compatIssues`).
+> - see per extension which Android or extension APIs it needs and doesn't get (`compatIssues`);
+> - play an episode's video in mpv (`playEpisode`, `stopPlayback`, `playbackSession`; Phase 4 Stage 1). The backend resolves the video right before the launch, and passes the source's headers, subtitles, audio tracks and mpv options through a per-session config file ([player/IPC.md](player/IPC.md)).
 >
 > **18 of the 20 most-downloaded yuzono anime extensions** work end to end against their real sites (install, browse, details and episodes, videos, a resolved video URL), measured by the compatibility harness ([docs/research/anime-compat.md](docs/research/anime-compat.md)). The two that don't:
 > - AnimePahe: its site is behind a Cloudflare challenge, and a Cloudflare solver is deferred;
@@ -72,9 +74,9 @@ The full architecture and tech stack are in [docs/PLAN.md](docs/PLAN.md).
 
 | Path | What | Status |
 |---|---|---|
-| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes; the Repos, Extensions, Browse, source, Details, Library and Settings screens; the filter and preference renderers; the typed API client and WebSocket in `api/`; vue-query hooks in `composables/`; the startup splash and error screens; design tokens. See [app/README.md](app/README.md)) | Phase 3 done |
-| [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phases 1 and 2 done |
-| `player/` | mpv config, scripts, IPC contract | Planned (Phase 4) |
+| [`app/`](app/) | Tauri 2 shell (Rust, `src-tauri/`: backend sidecar lifecycle) + Vue 3 UI (`src/`: the app shell and routes; the Repos, Extensions, Browse, source, Details, Library and Settings screens; the filter and preference renderers; the typed API client and WebSocket in `api/`; vue-query hooks in `composables/`; the startup splash and error screens; design tokens; Play on an episode. See [app/README.md](app/README.md)) | Phase 3 done, Phase 4 in progress |
+| [`server/`](server/) | Kotlin/JVM backend (Madoyomi-Server): extension host, API, DB. A fork of Suwayomi-Server at `7b061be`, rebranded and running in sidecar mode. Every change to upstream is listed in [server/UPSTREAM.md](server/UPSTREAM.md). Modules are listed below. | Phases 1 and 2 done, Phase 4 in progress |
+| [`player/`](player/) | mpv's config dir for Madoyomi (`mpv.conf`, `input.conf`) and the contract between the backend and mpv ([IPC.md](player/IPC.md)) | Phase 4 in progress |
 | [`spikes/`](spikes/) | Phase 0 throwaway code: `index.pb` parser, Suwayomi GraphQL smoke test, anime extension harness, mpv playback check, Tauri sidecar | Done (Phase 0) |
 | [`tools/`](tools/) | Dev scripts (tracked): `fetch-upstream-assets.ps1`, `fetch-test-apks.ps1`, `run-server.ps1`, `smoke-api.ps1` (the end-to-end API test against real repos) and its helpers in `lib/MadoyomiServer.ps1`, and `compat-test/` (the top-20 anime and manga-sample lists, the static compatibility scan, the compatibility harness `run-compat.ps1` for anime and manga with its triage file, and `lib/HprofLoaderRoots.java`, a heap-dump reader that shows what keeps an uninstalled extension in memory). Local binaries (`tools/bin/`), test APKs (`tools/apks/`, `tools/compat-test/apks/`) and upstream checkouts (`tools/upstream/`) are gitignored. | Active |
 | [`docs/`](docs/) | Project plan and per-phase checklists | Active |
@@ -83,8 +85,8 @@ The backend in `server/` is a Gradle multi-module project:
 
 | Module | What |
 |---|---|
-| `api` | Entry point (`madoyomi.api.MainKt`), `/health`, the API-token filter, Madoyomi's GraphQL additions (trust, extension events, and the anime API: sources, browse, details and episodes, videos, filters and preferences, compat issues), the anime thumbnail route, and the integration tests of the whole API. Builds the server jar. |
-| `core` | DB and migrations (manga and anime tables), the repo manager (JSON and protobuf indexes, repo trust), extension install/update/uninstall with the signing-certificate trust gate, the anime extension loader and anime services, the extension compat log, manga domain, settings, the GraphQL API (type-aware for anime and manga) and the error model, the Javalin web server, startup |
+| `api` | Entry point (`madoyomi.api.MainKt`), `/health`, the API-token filter, Madoyomi's GraphQL additions (trust, extension events, the anime API: sources, browse, details and episodes, videos, filters and preferences, compat issues; and playback), the anime thumbnail route, and the integration tests of the whole API. Builds the server jar. |
+| `core` | DB and migrations (manga and anime tables), the repo manager (JSON and protobuf indexes, repo trust), extension install/update/uninstall with the signing-certificate trust gate, the anime extension loader and anime services, the mpv player (`madoyomi.core.player`: finding mpv, its command line, the playback session), the extension compat log, manga domain, settings, the GraphQL API (type-aware for anime and manga) and the error model, the Javalin web server, startup |
 | `ext-manga` | Mihon manga source API (`eu.kanade.tachiyomi.source`) |
 | `ext-anime` | Aniyomi anime source API (`eu.kanade.tachiyomi.animesource`), ported from Aniyomi (lib 17, which keeps every lib-14/16 member). Trusted anime extensions run on it since Phase 2. |
 | `ext-host` | What extensions run on: OkHttp network stack, helpers, the dex2jar bytecode fixers (including a repair for R8-optimised APKs), the extension classloader, APK inspection and signature verification (apksig) |
@@ -116,7 +118,7 @@ The full list is in Tauri's guide: [Tauri prerequisites for Windows](https://v2.
 | JDK 21 ([Temurin](https://adoptium.net/)) | Builds and runs the Kotlin backend and the spikes. The scripts expect it in `tools/bin/jdk-21` |
 | [IntelliJ IDEA](https://www.jetbrains.com/idea/) | Recommended IDE for `server/` (Community edition is enough) |
 | [dex2jar](https://github.com/ThexXTURBOXx/dex2jar), [jadx](https://github.com/skylot/jadx) | Convert and inspect extension APKs |
-| [mpv](https://mpv.io/installation/) | Video playback |
+| [mpv](https://mpv.io/installation/) | Video playback. The app finds `mpv.exe` on PATH, or `tools/bin/mpv/mpv.exe`, or wherever `MADOYOMI_MPV` points (Phase 7 bundles it) |
 | [protoc](https://github.com/protocolbuffers/protobuf/releases) | Decodes the manga repo's `index.pb` |
 | ffmpeg, yt-dlp | Anime downloads (Phase 6) |
 
@@ -192,7 +194,8 @@ The script starts the jar the way the app does, on a throwaway data dir under `%
 > - **Startup.** The window shows "Starting the backend…" until `/health` answers, about 10–12 s (longer on a busy machine; after 30 s it says so). The shell keeps waiting for up to 5 minutes while the JVM is alive.
 > - **Crashes.** If the backend exits or stops answering, the app shows an overlay and restarts it after 1, 2, 4 and 8 s. After 5 failed starts in a row it stops and offers Retry and Open logs. A missing jar shows that error at once, and Retry looks for it again, so building the jar and pressing Retry is enough. Once the backend is back (on a new port), the UI's requests and its WebSocket move there by themselves, and the sidebar's footer shows "Live updates" again.
 > - **Logs.** `sidecar.log` (the backend's output plus the shell's start, port, health and exit lines) and the server's `madoyomi.log` are in `<data dir>\logs`.
-> - **Environment overrides,** set before `pnpm tauri dev`: `MADOYOMI_SIDECAR_JAR` (another jar), `MADOYOMI_JAVA` (another `java.exe`), `MADOYOMI_DATA_DIR` (another data dir, e.g. a fresh one for testing).
+> - **mpv.** Play needs mpv. The shell passes the backend `tools/bin/mpv/mpv.exe` if it's there; otherwise the backend uses `mpv.exe` from PATH. It runs mpv with the repo's `player/` as its config dir. mpv's output is in `<data dir>\logs\mpv.log`, and `sidecar.log` says which mpv and config dir the backend was given.
+> - **Environment overrides,** set before `pnpm tauri dev`: `MADOYOMI_SIDECAR_JAR` (another jar), `MADOYOMI_JAVA` (another `java.exe`), `MADOYOMI_DATA_DIR` (another data dir, e.g. a fresh one for testing), `MADOYOMI_MPV` (another `mpv.exe`), `MADOYOMI_PLAYER_DIR` (another mpv config dir).
 > - **One server per data dir.** Don't run `pnpm tauri dev` and a server of your own on the same data dir at once (the database is locked). `tools/run-server.ps1` uses `tools/dev-data/`, so the two don't clash.
 >
 > The Phase 0 dummy sidecar in `spikes/sidecar` is no longer used by the app.
@@ -212,7 +215,7 @@ Run these from `app/`:
 | `pnpm typecheck` | Type-check with `vue-tsc` |
 | `pnpm build` | Type-check and build the UI into `dist/` |
 | `pnpm tauri build` | Build NSIS + MSI installers into `src-tauri/target/release/bundle/` |
-| `cargo test` / `cargo clippy --all-targets` (in `app/src-tauri/`) | Rust shell unit tests (port line, backoff, `/health`, log timestamps) / Rust lints |
+| `cargo test` / `cargo clippy --all-targets` (in `app/src-tauri/`) | Rust shell unit tests (port line, backoff, `/health`, log timestamps, where the jar and mpv are found) / Rust lints |
 
 More detail is in [app/README.md](app/README.md).
 
@@ -242,7 +245,7 @@ Status: ✅ Done · 🟡 In progress · ⚪ Not started
 | 1 | **Backend foundation:** fork and rebrand Suwayomi-Server, add an anime domain, repo manager for both index formats, extension install/trust | ✅ Done | [phase-1-backend-foundation.md](docs/phases/phase-1-backend-foundation.md) |
 | 2 | **Anime sources:** Aniyomi `animesource` API, Android stubs, filters and preferences as JSON | ✅ Done (18/20 top anime extensions end to end, filters and preferences through the API, 9/10 of the manga sample; Cloudflare/WebView shim deferred) | [phase-2-anime-sources.md](docs/phases/phase-2-anime-sources.md) |
 | 3 | **Frontend MVP:** Browse, Details, Library, Extensions, Settings screens; generic filter and preference renderers | ✅ Done (every screen for anime and manga, the generic filter and preference renderers, the backend run and restarted by the app; every exit criterion checked from a fresh data dir in the UI) | [phase-3-frontend-mvp.md](docs/phases/phase-3-frontend-mvp.md) |
-| 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | ⚪ Not started | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
+| 4 | **Playback:** mpv launcher, IPC, progress sync, video picker, next episode | 🟡 In progress (Stage 1 of 6 done: the mpv launcher and process, `playEpisode`, Play on each episode; mpv in its own window, owned by the backend) | [phase-4-playback.md](docs/phases/phase-4-playback.md) |
 | 5 | **Manga reader:** image proxy and cache, paged, webtoon and double-page modes | ⚪ Not started | [phase-5-manga-reader.md](docs/phases/phase-5-manga-reader.md) |
 | 6 | **Library features:** categories, updates, history, downloads, backup/restore | ⚪ Not started | [phase-6-library-features.md](docs/phases/phase-6-library-features.md) |
 | 7 | **Packaging & release:** jlink JRE, bundled mpv, installers, auto-update, CI | ⚪ Not started | [phase-7-packaging-release.md](docs/phases/phase-7-packaging-release.md) |
@@ -313,9 +316,18 @@ Decided in Phase 3 (see [phase-3-frontend-mvp.md §9](docs/phases/phase-3-fronte
 - **Covers and chapter pages are cached in the data dir** (`<data dir>\cache`), next to the database whose ids name the files. Suwayomi keeps these caches in the temp folder, shared by every data dir, and a fresh data dir showed an older one's covers. A small backend change, found in the exit run.
 - **UI preferences belong to this device, not to the data dir:** pins, the theme, the anime/manga switch, the sorts and "Show 18+" stay when the data dir changes.
 
+Decided so far in Phase 4 (see [phase-4-playback.md §9](docs/phases/phase-4-playback.md#9-decision-record)):
+
+- **mpv plays in its own window** for the MVP: its own fullscreen, controls and keys. Embedding it in the app window is a stretch goal after the phase's exit run.
+- **The backend owns mpv.** It resolves the video right before the launch, keeps the source's video URLs and headers to itself (the UI never sees them), and runs one mpv at a time. A new Play replaces the episode that was playing.
+- **Where mpv comes from:** a path set in the app (later in Phase 4), else `MADOYOMI_MPV`, else `mpv.exe` on PATH. The app sets `MADOYOMI_MPV` itself to `tools/bin/mpv/mpv.exe` in dev, or to the bundled mpv in a release build (Phase 7), when that file exists. mpv's config is Madoyomi's own (`player/`), not your `%APPDATA%\mpv`.
+- **The source's headers, subtitles, audio tracks and mpv options go to mpv in a per-session config file,** not on its command line. Values with quotes or commas arrive exactly, and nothing private shows in the process list. Each header is sent on its own (Phase 0's finding), and options that would take control of mpv away from Madoyomi (scripts, config, the IPC pipe, written files) are left out.
+- **mpv never outlives the app.** It closes when the app closes or is killed. If the backend crashes, the restarted backend closes the mpv it left. mpv doesn't get the API token.
+- **Progress will go into the episode's existing watched and position fields** (Aniyomi's model), so the next stage needs no new table.
+- **Until the video picker, Play takes the source's first video:** the first working server, and its preferred quality.
+
 Still open:
 
-- mpv in a separate window (MVP) or embedded in the app window?
 - Windows-only, or keep macOS/Linux possible?
 
 ## Contributing

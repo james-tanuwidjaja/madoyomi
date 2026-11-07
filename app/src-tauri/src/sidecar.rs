@@ -23,7 +23,9 @@
 //! previous session's file is kept as `sidecar.1.log`). The server writes its own log to `<dataDir>/logs/madoyomi.log`.
 //!
 //! On Windows every child is put into one Job Object with `KILL_ON_JOB_CLOSE`, so the JVM is killed even when this
-//! process crashes or is killed from Task Manager.
+//! process crashes or is killed from Task Manager. The backend owns mpv (Phase 4): mpv is the JVM's child, so it is
+//! in the same job and dies with the app too. The shell only tells the backend where mpv and its config dir are
+//! (`MADOYOMI_MPV`, `MADOYOMI_PLAYER_DIR`; see [`resolve_player`]).
 
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
@@ -519,6 +521,8 @@ fn run_once(
         ));
     }
 
+    let player = resolve_player(launch.resources.as_deref());
+
     let mut cmd = Command::new(&java);
     cmd.arg("-jar")
         .arg(&jar)
@@ -540,11 +544,28 @@ fn run_once(
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    if let Some(mpv) = &player.mpv {
+        cmd.env("MADOYOMI_MPV", mpv);
+    }
+    if let Some(dir) = &player.config_dir {
+        cmd.env("MADOYOMI_PLAYER_DIR", dir);
+    }
     shared.log.shell(&format!(
         "start attempt {attempt}: {} -jar {} --data-dir {}",
         java.display(),
         jar.display(),
         launch.data_dir.display()
+    ));
+    shared.log.shell(&format!(
+        "player: mpv {}, config {}",
+        player
+            .mpv
+            .as_deref()
+            .map_or_else(|| "from PATH".to_owned(), |p| p.display().to_string()),
+        player
+            .config_dir
+            .as_deref()
+            .map_or_else(|| "in the data dir".to_owned(), |p| p.display().to_string()),
     ));
 
     let mut child = match cmd.spawn() {
@@ -1042,6 +1063,56 @@ fn jar_from(
     }
 }
 
+/// What the backend is told about mpv (Phase 4 §9): `MADOYOMI_MPV` and `MADOYOMI_PLAYER_DIR`. `None` leaves it to the
+/// backend: mpv from PATH, and a config dir in the data dir.
+struct Player {
+    mpv: Option<PathBuf>,
+    config_dir: Option<PathBuf>,
+}
+
+fn resolve_player(resources: Option<&Path>) -> Player {
+    let root = dev_root();
+    Player {
+        mpv: mpv_from(env_path("MADOYOMI_MPV"), resources, &root),
+        config_dir: player_dir_from(env_path("MADOYOMI_PLAYER_DIR"), resources, &root),
+    }
+}
+
+/// `MADOYOMI_MPV`, else the bundled `<resources>/mpv/mpv.exe` (release, Phase 7) or the repo's
+/// `tools/bin/mpv/mpv.exe` (debug) when it is there, else `None` (the backend looks on PATH). The override is passed
+/// on even if it's missing: the backend reports it as `PLAYER_NOT_FOUND` with the path.
+fn mpv_from(
+    override_mpv: Option<PathBuf>,
+    resources: Option<&Path>,
+    dev_root: &Path,
+) -> Option<PathBuf> {
+    if override_mpv.is_some() {
+        return override_mpv;
+    }
+    let exe = if cfg!(windows) { "mpv.exe" } else { "mpv" };
+    let candidate = match resources {
+        Some(dir) => dir.join("mpv").join(exe),
+        None => dev_root.join("tools").join("bin").join("mpv").join(exe),
+    };
+    candidate.is_file().then_some(candidate)
+}
+
+/// `MADOYOMI_PLAYER_DIR`, else `<resources>/player` (release) or the repo's `player/` (debug) when it is there.
+fn player_dir_from(
+    override_dir: Option<PathBuf>,
+    resources: Option<&Path>,
+    dev_root: &Path,
+) -> Option<PathBuf> {
+    if override_dir.is_some() {
+        return override_dir;
+    }
+    let candidate = match resources {
+        Some(dir) => dir.join("player"),
+        None => dev_root.join("player"),
+    };
+    candidate.is_dir().then_some(candidate)
+}
+
 fn newest_server_jar(dir: &Path) -> Option<PathBuf> {
     fs::read_dir(dir)
         .ok()?
@@ -1428,6 +1499,69 @@ mod tests {
         File::create(dir.join("other.jar")).unwrap();
         assert_eq!(newest_server_jar(&dir), Some(new));
         assert_eq!(newest_server_jar(&dir.join("missing")), None);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn mpv_comes_from_the_override_then_the_bundle_or_the_repo_else_path() {
+        // Phase 4 §9: MADOYOMI_MPV, the bundled mpv (release) or tools/bin/mpv (debug), else the backend's PATH.
+        let dir = std::env::temp_dir().join(format!("madoyomi-mpv-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let exe = if cfg!(windows) { "mpv.exe" } else { "mpv" };
+        let repo = dir.join("repo");
+        let resources = dir.join("resources");
+
+        // nothing anywhere: the backend looks on PATH
+        assert_eq!(mpv_from(None, None, &repo), None);
+        assert_eq!(mpv_from(None, Some(&resources), &repo), None);
+
+        let dev = repo.join("tools").join("bin").join("mpv");
+        fs::create_dir_all(&dev).unwrap();
+        File::create(dev.join(exe)).unwrap();
+        assert_eq!(mpv_from(None, None, &repo), Some(dev.join(exe)));
+        // a release build doesn't use the repo's
+        assert_eq!(mpv_from(None, Some(&resources), &repo), None);
+        let bundled = resources.join("mpv");
+        fs::create_dir_all(&bundled).unwrap();
+        File::create(bundled.join(exe)).unwrap();
+        assert_eq!(
+            mpv_from(None, Some(&resources), &repo),
+            Some(bundled.join(exe))
+        );
+
+        // the override wins, even when it's missing (the backend reports that path)
+        let custom = dir.join("custom").join(exe);
+        assert_eq!(
+            mpv_from(Some(custom.clone()), Some(&resources), &repo),
+            Some(custom)
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_player_config_dir_is_the_override_then_the_bundle_or_the_repo() {
+        let dir = std::env::temp_dir().join(format!("madoyomi-player-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let repo = dir.join("repo");
+        let resources = dir.join("resources");
+
+        assert_eq!(player_dir_from(None, None, &repo), None);
+        fs::create_dir_all(repo.join("player")).unwrap();
+        assert_eq!(
+            player_dir_from(None, None, &repo),
+            Some(repo.join("player"))
+        );
+        assert_eq!(player_dir_from(None, Some(&resources), &repo), None);
+        fs::create_dir_all(resources.join("player")).unwrap();
+        assert_eq!(
+            player_dir_from(None, Some(&resources), &repo),
+            Some(resources.join("player"))
+        );
+        let custom = dir.join("custom");
+        assert_eq!(
+            player_dir_from(Some(custom.clone()), None, &repo),
+            Some(custom)
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 

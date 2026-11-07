@@ -41,6 +41,8 @@ export const SERVER_ERROR_CODES = [
   "SOURCE_FAILED",
   "LOAD_FAILED",
   "EXTENSION_INCOMPATIBLE",
+  "PLAYER_NOT_FOUND",
+  "PLAYER_FAILED",
   "BAD_REQUEST",
   "UNAUTHORIZED",
   "FORBIDDEN",
@@ -457,7 +459,7 @@ export interface SourcePage {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Videos (Phase 4 plays them; typed now so the client is complete)
+// Videos and playback (Phase 4)
 
 export interface VideoHeader {
   name: string;
@@ -502,4 +504,34 @@ export interface Hoster {
   videos: Video[];
   errorCode: ServerErrorCode | null;
   errorMessage: string | null;
+}
+
+/** What the UI chooses a video by (`EPISODE_VIDEOS_MUTATION`): the backend keeps the URL and headers. */
+export type VideoChoice = Pick<
+  Video,
+  "index" | "videoTitle" | "resolution" | "bitrate" | "preferred" | "initialized"
+> & {
+  subtitleTracks: Pick<VideoTrack, "lang">[];
+  audioTracks: Pick<VideoTrack, "lang">[];
+};
+
+/** A hoster with its videos as {@link VideoChoice}s. */
+export type HosterChoice = Omit<Hoster, "videos"> & { videos: VideoChoice[] };
+
+/** `PlaybackSessionType.state`: mpv is running, exited by itself (closed, ended, failed), or was stopped. */
+export type PlaybackState = "RUNNING" | "EXITED" | "STOPPED";
+
+/** `PlaybackSessionType`: the backend's mpv session (one at a time). */
+export interface PlaybackSession {
+  id: string;
+  episodeId: number;
+  animeId: number;
+  /** "<anime> - <episode>", mpv's window title. */
+  title: string;
+  videoTitle: string;
+  state: PlaybackState;
+  /** Epoch milliseconds. */
+  startedAt: LongString;
+  endedAt: LongString | null;
+  exitCode: number | null;
 }
