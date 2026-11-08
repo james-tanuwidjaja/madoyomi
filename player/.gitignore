@@ -1,0 +1,6 @@
+# mpv may write cache or state files into its config dir: only the files below belong to the repo.
+*
+!.gitignore
+!mpv.conf
+!input.conf
+!IPC.md

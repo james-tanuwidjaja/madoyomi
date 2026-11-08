@@ -378,6 +378,22 @@ Not changed:
 
 Tested in `core/src/test/kotlin/madoyomi/core/storage/IdKeyedCacheDirsTest.kt`.
 
+### Playback (Phase 4)
+
+Madoyomi code only; no upstream file changed. The backend owns mpv (Phase 4 doc §9 "Stage 1"; the contract with mpv is [player/IPC.md](../player/IPC.md)).
+- `madoyomi.core.player` (core):
+  - `MpvLocator` finds `mpv.exe`: an explicit path (the player settings, Stage 5), the system property `madoyomi.player.mpv`, the env `MADOYOMI_MPV`, then `PATH`. A missing one is `PLAYER_NOT_FOUND`;
+  - `PlayerDirs` gives mpv's config dir: `MADOYOMI_PLAYER_DIR` if it is a directory, else `<data dir>/player`;
+  - `MpvCommand` builds the command line. The source's values (headers in Phase 0 S4's forms, the title, subtitle and audio URLs, `Video.mpvArgs` minus the reserved options) go into a per-session `--include` file in mpv's fixed-length quoting, not onto the command line, because Java doesn't escape a `"` inside a Windows argument;
+  - `PlaybackSessions` runs one mpv at a time. `play` resolves the video through `AnimeVideos.resolveVideo` and replaces the running session; `stop`, `current`. mpv's output goes to `<data dir>/logs/mpv.log`, and it gets the environment without `MADOYOMI_TOKEN`. A shutdown hook stops mpv. Each session writes `<data dir>/cache/player/<id>.session` (pid, executable, start time), and `reapOrphans` (called once from `Main`) ends a live process matching all three, then clears the dir.
+- `ErrorCode`: `PLAYER_NOT_FOUND` (503) and `PLAYER_FAILED` (500).
+- GraphQL (`madoyomi.api.graphql.PlaybackGraphQL`):
+  - `playEpisode(input: {episodeId, hosterIndex, videoIndex, startSeconds})` → `{clientMutationId, session}`;
+  - `stopPlayback(input: {})` → `{clientMutationId, session}` (null if nothing played);
+  - `playbackSession` (the running session, else the last one);
+  - `PlaybackSessionType`: `id`, `episodeId`, `animeId`, `title`, `videoTitle`, `state` (`PlaybackState`: `RUNNING`, `EXITED`, `STOPPED`), `startedAt`, `endedAt`, `exitCode`.
+- Tests: `core/src/test/kotlin/madoyomi/core/player/{MpvCommandTest,MpvLocatorTest}.kt`; `api/src/test/kotlin/madoyomi/api/PlaybackApiTest.kt`, with a fake mpv in `api/src/test/java/madoyomi/api/FakeMpv.java` (Java with no dependencies, so its launch stays short).
+
 ### New Madoyomi code
 
 | Path | What |
@@ -437,6 +453,8 @@ Tested in `core/src/test/kotlin/madoyomi/core/storage/IdKeyedCacheDirsTest.kt`.
 | `core/src/test/kotlin/madoyomi/core/extension/{ExtensionThreadsTest,Dex2jarRepairCompatTest,GcAssert}.kt`, `core/src/test/kotlin/madoyomi/core/anime/ParsedAnimeHttpSourceTest.kt`, `api/src/test/kotlin/madoyomi/api/AnimeRoundTripApiTest.kt`, `AndroidCompat/src/test/kotlin/.../JavaSharedPreferencesTest.kt` (Phase 2 Stage 6) | Stage 6's tests. `ParsedAnimeHttpSourceTest` runs a Jsoup-selector source (no top-20 extension extends `ParsedAnimeHttpSource`) through browse, details and videos against a loopback site. `ExtensionThreadsTest` compiles "extension" classes at test time with `javax.tools` and loads them through a `ChildFirstURLClassLoader`. `Dex2jarRepairCompatTest` covers the four manga APKs. `AnimeRoundTripApiTest` round-trips filters and preferences of real extensions through GraphQL, offline. Leak tests are in `ExtensionLifecycleTest` (an uninstalled anime and manga extension's class loader is collected), `AnimeVideosTest` and `AnimeExtensionLoaderTest` |
 | `tools/lib/MadoyomiServer.ps1` (Phase 2 Stage 4) | the PowerShell helpers that start the jar as the Tauri shell does and drive its API (steps, GraphQL, WebSocket, install with progress), used by `tools/smoke-api.ps1` |
 | `api/src/main/kotlin/madoyomi/api/graphql/AnimeMutation.kt` (Phase 3 Stage 5 additions), `api/src/test/kotlin/madoyomi/api/AnimeLibraryApiTest.kt` | `updateAnime`/`updateAnimes`, the library flag for anime (see "Library flag (Phase 3)"), and their tests: add, remove, the batch, an unknown id, and a browse leaving an in-library entry as it is |
+| `core/src/main/kotlin/madoyomi/core/player/{MpvLocator,PlayerDirs,MpvCommand,PlaybackSessions}.kt`, `api/src/main/kotlin/madoyomi/api/graphql/PlaybackGraphQL.kt` (Phase 4 Stage 1) | the mpv player: finding mpv and its config dir, the command line and session config file, one playback session at a time with orphan handling, and its GraphQL (see "Playback (Phase 4)"). `Main` calls `PlaybackSessions.reapOrphans()` after `applicationSetup()` |
+| `core/src/test/kotlin/madoyomi/core/player/*`, `api/src/test/kotlin/madoyomi/api/PlaybackApiTest.kt`, `api/src/test/java/madoyomi/api/FakeMpv.java` (Phase 4 Stage 1) | the player's tests (see "Playback (Phase 4)") |
 | `core/src/test/kotlin/madoyomi/core/storage/IdKeyedCacheDirsTest.kt` (Phase 3 exit run) | the thumbnail and chapter-page caches are in the data dir, and two data dirs share neither (see "Id-keyed caches in the data dir") |
 | `core/src/test/kotlin/madoyomi/core/anime/*` (Stage 3 additions) | `AnimeBrowseTest`, `AnimeDetailsTest`, `AnimeVideosTest` (scripted fake sources and a scratch H2 per class, `AnimeTestSources.kt`), `AnimeFiltersTest` (every filter of kickassanime, aniwave and hanime from `tools/compat-test/apks/`), `AnimeSourcePreferencesTest` (AnimePahe), and `AnimeServicesLiveTest` (real sites, only with `MADOYOMI_LIVE_SOURCE_TESTS=1`). Tests skip when their APK is missing. Stage 3 also made every madoyomi scratch-database test set its database as the explicit default and restore the previous explicit one (an order dependency, Phase 2 doc §10) |
 | `ext-host/src/test/kotlin/madoyomi/exthost/*`, `core/src/test/kotlin/madoyomi/core/extension/*` | `ApkInspectorTest`, `Dex2jarRepairTest`, `ExtensionLifecycleTest`, `SignatureTrustTest` on the real APKs in the gitignored `tools/apks/` (fetched by `tools/fetch-test-apks.ps1`; tests skip without them). `ExtensionLifecycleLiveTest` installs from the real repos and only runs with `MADOYOMI_LIVE_REPO_TESTS=1` |
@@ -477,6 +495,7 @@ When the upstream diff adds migrations of its own, say `k` of them, numbered `M0
 - `java -jar api/build/Madoyomi-Server-v0.1.0.jar [--data-dir <path>]` (built by `.\gradlew.bat :api:shadowJar`). Unknown arguments exit with code 2.
 - The jar's manifest has `Add-Opens: java.base/java.lang java.base/java.util.concurrent`, which `java -jar` applies (Phase 2 Stage 6: uninstall stops the threads an extension left running). A launch that doesn't use `-jar` (a jlink launcher, `-cp`) must pass `--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED` itself. Without them, uninstall can only interrupt those threads, and a local server blocked in `accept()` keeps the extension's classes until the process ends.
 - Env `MADOYOMI_TOKEN`: the API token. If unset, a random one is used and the API is effectively locked.
+- Env `MADOYOMI_MPV` (optional, Phase 4): the `mpv.exe` to play with; without it the backend uses `mpv.exe` from `PATH`. Env `MADOYOMI_PLAYER_DIR` (optional): mpv's config dir; without it `<data dir>/player`. mpv is started as the JVM's child, without `MADOYOMI_TOKEN` in its environment, and at startup the backend ends an mpv that an earlier (crashed) backend on the same data dir left running.
 - Binds `127.0.0.1` on a random free port and prints exactly one line `MADOYOMI_PORT=<port>` on stdout once listening (other stdout lines are logs).
 - Every request needs `Authorization: Bearer <token>`, except `GET /health` and CORS preflights. `GET` requests and WebSocket upgrades may pass `?token=<token>` instead. A rejected request gets `401 {"code":"UNAUTHORIZED","message":…,"details":null}`.
 - Binary REST routes: upstream's (`/api/v1/manga/{id}/thumbnail`, pages, extension icons) and `GET /api/v1/anime/{animeId}/thumbnail` (Phase 2).

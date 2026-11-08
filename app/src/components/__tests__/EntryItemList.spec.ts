@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
+import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 
 import ChapterList from "../ChapterList.vue";
 import EpisodeList from "../EpisodeList.vue";
@@ -39,7 +40,8 @@ function stub(
 async function mountEpisodes(episodes: Episode[], animeId = 12) {
   wrapper = mount(EpisodeList, {
     props: { animeId, episodes },
-    global: { plugins: [pinia] },
+    // EpisodeList's Play is a vue-query mutation
+    global: { plugins: [pinia, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
     attachTo: document.body,
   });
   await flushPromises();
@@ -152,6 +154,6 @@ describe("EpisodeList / ChapterList", () => {
 
     expect(wrapper.find('[data-testid="items-none"]').text()).toBe("No episodes yet.");
     expect(wrapper.find('[data-testid="item-scanlator"]').exists()).toBe(false);
-    expect(wrapper.text()).toContain("Playing episodes comes in Phase 4");
+    expect(wrapper.text()).toContain("Play opens the episode's first video in mpv");
   });
 });

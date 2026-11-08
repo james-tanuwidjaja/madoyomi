@@ -1,0 +1,95 @@
+package madoyomi.api.graphql
+
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+import com.expediagroup.graphql.generator.annotations.GraphQLDescription
+import madoyomi.core.player.PlaybackSessions
+import suwayomi.tachidesk.graphql.directives.RequireAuth
+import suwayomi.tachidesk.server.JavalinSetup.future
+import java.util.concurrent.CompletableFuture
+
+/** [PlaybackSessions.State] in the schema (a type named `State` would be too vague there). */
+enum class PlaybackState { RUNNING, EXITED, STOPPED }
+
+/** A playback session: the backend's mpv process for one episode (Phase 4; one session at a time). */
+@GraphQLDescription("The backend's mpv session for one episode; one at a time")
+data class PlaybackSessionType(
+    val id: String,
+    val episodeId: Int,
+    val animeId: Int,
+    @GraphQLDescription("What mpv shows as its title: \"<anime> - <episode>\"")
+    val title: String,
+    val videoTitle: String,
+    val state: PlaybackState,
+    @GraphQLDescription("Epoch milliseconds")
+    val startedAt: Long,
+    @GraphQLDescription("Epoch milliseconds, once mpv exited or was stopped")
+    val endedAt: Long?,
+    @GraphQLDescription("mpv's exit code, if known")
+    val exitCode: Int?,
+) {
+    constructor(session: PlaybackSessions.Session) : this(
+        id = session.id,
+        episodeId = session.episodeId,
+        animeId = session.animeId,
+        title = session.title,
+        videoTitle = session.videoTitle,
+        state = PlaybackState.valueOf(session.state.name),
+        startedAt = session.startedAt,
+        endedAt = session.endedAt,
+        exitCode = session.exitCode,
+    )
+}
+
+class PlaybackQuery {
+    @RequireAuth
+    @GraphQLDescription("The playback session that is running, else the last one, else null")
+    fun playbackSession(): PlaybackSessionType? = PlaybackSessions.current()?.let(::PlaybackSessionType)
+}
+
+class PlaybackMutation {
+    data class PlayEpisodeInput(
+        val clientMutationId: String? = null,
+        val episodeId: Int,
+        @GraphQLDescription("EpisodeHosterType.index of the episode's last fetchEpisodeVideos")
+        val hosterIndex: Int,
+        @GraphQLDescription("EpisodeVideoType.index within the hoster")
+        val videoIndex: Int,
+        @GraphQLDescription("Where to start, in seconds; null or 0 is the beginning")
+        val startSeconds: Double? = null,
+    )
+
+    data class PlayEpisodePayload(
+        val clientMutationId: String?,
+        val session: PlaybackSessionType,
+    )
+
+    @RequireAuth
+    @GraphQLDescription(
+        "Plays a video of the episode in mpv (its own window): resolves the video first, then replaces the running " +
+            "session. PLAYER_NOT_FOUND without mpv, PLAYER_FAILED if it can't start",
+    )
+    fun playEpisode(input: PlayEpisodeInput): CompletableFuture<PlayEpisodePayload?> =
+        future {
+            val session = PlaybackSessions.play(input.episodeId, input.hosterIndex, input.videoIndex, input.startSeconds)
+            PlayEpisodePayload(input.clientMutationId, PlaybackSessionType(session))
+        }
+
+    data class StopPlaybackInput(
+        val clientMutationId: String? = null,
+    )
+
+    data class StopPlaybackPayload(
+        val clientMutationId: String?,
+        @GraphQLDescription("The session that was stopped; null if none was running")
+        val session: PlaybackSessionType?,
+    )
+
+    @RequireAuth
+    @GraphQLDescription("Closes mpv")
+    fun stopPlayback(input: StopPlaybackInput): StopPlaybackPayload =
+        StopPlaybackPayload(input.clientMutationId, PlaybackSessions.stop()?.let(::PlaybackSessionType))
+}

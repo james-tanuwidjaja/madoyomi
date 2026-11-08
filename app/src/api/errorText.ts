@@ -26,6 +26,8 @@ const HINTS: Record<string, string> = {
   LOAD_FAILED: "The extension was installed but couldn't be loaded.",
   EXTENSION_INCOMPATIBLE: "The extension needs an extension API this version of Madoyomi lacks.",
   SOURCE_FAILED: "The source's website failed or couldn't be reached.",
+  PLAYER_NOT_FOUND: "mpv wasn't found. Install mpv and put it on PATH, or set MADOYOMI_MPV.",
+  PLAYER_FAILED: "mpv couldn't be started. The backend's log has the details.",
   NOT_FOUND: "It no longer exists on the backend.",
   BAD_REQUEST: "The backend refused the request.",
   UNAUTHORIZED: "The backend refused the app's token.",

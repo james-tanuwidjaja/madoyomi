@@ -6,6 +6,7 @@ package madoyomi.api
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.core.player.PlaybackSessions
 import suwayomi.tachidesk.graphql.server.GraphQLSchemaProvider
 import suwayomi.tachidesk.graphql.types.AuthMode
 import suwayomi.tachidesk.server.JavalinSetup
@@ -44,6 +45,7 @@ fun main(args: Array<String>) {
     GraphQLSchemaProvider.init()
     applicationSetup()
     forceAuthModeNone()
+    reapPlaybackOrphans()
 
     javalinSetup { config ->
         SidecarHttp.install(config, token, startedAt)
@@ -108,6 +110,12 @@ private fun forceAuthModeNone() {
         },
         ignoreInitialValue = false,
     )
+}
+
+/** An mpv that a crashed backend left playing (the shell restarted us) is ended: nothing tracks it any more. */
+private fun reapPlaybackOrphans() {
+    runCatching { PlaybackSessions.reapOrphans() }
+        .onFailure { KotlinLogging.logger {}.warn(it) { "could not check for mpv processes left by an earlier backend" } }
 }
 
 /** When the parent goes away its end of our stdin closes and read() returns -1 (backup to the Windows job object). */

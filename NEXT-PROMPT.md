@@ -1,135 +1,95 @@
-Start Phase 4 (docs/phases/phase-4-playback.md), Stage 1. First read the phase doc and propose its stage plan, as Phase 3 did in its §8 "Stage plan". Then implement Stage 1 of that plan. Follow CLAUDE.md first. Read these before anything else:
+Start Phase 4 (docs/phases/phase-4-playback.md), Stage 2: IPC and progress (steps 4-8, 19). Follow CLAUDE.md first. Read these before anything else:
 - docs/PLAN.md;
-- the Phase 4 doc, all of it: §1-§8. Its checklist is still empty, and §8 holds two open decisions: mpv in a separate window or embedded (PLAN.md §7), and whether the backend or Tauri owns the mpv process;
-- the Phase 0 doc's S4 findings ("S4 (mechanics done …)" and "S3/S4 with a real video", 2026-11-03): the mpv flags that work, `--ytdl=no`, and the named pipe;
-- the Phase 2 doc's §9/§10 on videos (`fetchEpisodeVideos`, `fetchHosterVideos`, `resolveEpisodeVideo`, hosters, `Video` headers, subtitle and audio tracks, lib-16 `mpvArgs`/`timestamps`);
-- server/UPSTREAM.md: "Startup contract", "API (Phase 1 Stage 7)", "Anime sources" (the video mutations), "Library flag (Phase 3)" and "Id-keyed caches in the data dir";
-- the Phase 3 doc's §8 stage plan, §9 decisions (Stages 1-7) and §10 Stage 7 exit run, as an example of a stage plan and of how a stage and an exit run are recorded;
-- README.md (the status box, the Roadmap, the decisions, and the NOTE on pnpm tauri dev) and app/README.md (the structure, the routes, the sidecar).
-Never commit. Tick checklist items only once they are done and verified. Plan the stage briefly, then implement it. Ask me only about decisions that are genuinely mine. The two §8 decisions and the stage plan itself are mine: propose them with a recommendation, and wait for my answer before building on them.
+- the Phase 4 doc, all of it. §8 has the agreed stage plan; Stage 1 is *Done*. §9 has the decisions (mpv in its own window, the backend owns mpv, where mpv comes from, the include file, progress in the existing EPISODE columns), and §10 has Stage 1's findings;
+- player/IPC.md: the contract between the backend and mpv. Stage 2 fills in its "IPC (Stage 2)" section;
+- server/UPSTREAM.md: "Playback (Phase 4)", "Startup contract", "Anime sources" and "Database migrations";
+- the Phase 0 doc's S4 findings (the named pipe; `time-pos` read over JSON IPC);
+- README.md (the status box, the Roadmap row for Phase 4, "Decided so far in Phase 4", and the NOTE on pnpm tauri dev) and app/README.md.
+Never commit. Tick checklist items only once they are done and verified. Plan the stage briefly, then implement it. Ask me only about decisions that are genuinely mine.
 
-Where things stand (Phases 0-3 done, 2026-11-07; Phase 3 Stage 7, the exit run, on branch feat/phase-3-exit):
-- server/ is a Suwayomi-Server fork @7b061be (Madoyomi-Server v0.1.0), built as server/api/build/Madoyomi-Server-v0.1.0.jar.
-  - Every upstream edit has a // Madoyomi: comment and is listed in server/UPSTREAM.md.
-  - The last server change was Phase 3 Stage 7's: the thumbnail and chapter-page caches moved from %TEMP%\Madoyomi into <dataDir>/cache/{thumbnails,manga}. They name their files by database id, and a fresh data dir showed another one's covers.
-- The API (server/UPSTREAM.md "Startup contract"):
-  - GraphQL at POST /api/graphql with `Authorization: Bearer <token>`.
-  - Subscriptions use graphql-transport-ws on ws://127.0.0.1:<port>/api/graphql?token=<token>, with no subprotocol.
-  - REST is only for binaries. GETs may pass ?token=.
-  - Errors carry {code, details}. SOURCE_FAILED means a source's site failed.
-  - The anime video API is in place since Phase 2: `fetchEpisodeVideos`, `fetchHosterVideos` and `resolveEpisodeVideo`, which return `Video` with its URL, headers, subtitle and audio tracks. Nothing about playback is stored yet: there is no `episode_progress` table and no player API.
-- The shell (app/src-tauri/src/sidecar.rs):
-  - runs the newest server jar with a per-session token and --data-dir %APPDATA%\Madoyomi (MADOYOMI_DATA_DIR overrides it);
-  - restarts it after a crash (1, 2, 4, 8 s; gives up after 5 failed starts in a row, with Retry);
-  - since Stage 7, resolves java and the jar for every start, so Retry finds a jar that was missing at app start;
-  - owns the backend through a Job Object, which takes the JVM down when the app dies. Phase 0 S5 noted a tiny gap between spawn and the job assignment. If mpv becomes a child process too, it needs the same care.
-- The UI (app/README.md has the structure and the routes):
-  - every Phase 3 screen is done: Repos, Extensions with the trust prompt, Browse and the source pages with FilterRenderer, Details for both kinds with a virtualized EpisodeList/ChapterList, the Library, Settings and each source's settings with PreferenceRenderer;
-  - episode rows don't act yet. A line above the list says playing comes in Phase 4, and watched marks with Phase 6 (the list's "watched" filter is a placeholder);
-  - Phase 4 adds the Play action, the video picker, the resume prompt and the watched state to this list (components/EntryItemList.vue, EpisodeList.vue, views/AnimeDetailsView.vue, composables/useEntries.ts and useDetailsPage.ts).
-- PLAN.md: Phase 3 is done, with every milestone ticked. Phase 4's five milestones are open. §7 still has "mpv in a separate window (MVP) vs. embedded" open; Phase 4 decides it.
+Where things stand (Phases 0-3 done; Phase 4 Stage 1 of 6 done, 2026-11-07, on branch feat/phase-4-launcher):
+- server/ is a Suwayomi-Server fork @7b061be (Madoyomi-Server v0.1.0), built as server/api/build/Madoyomi-Server-v0.1.0.jar. Every upstream edit has a // Madoyomi: comment and is listed in server/UPSTREAM.md. Stage 1 changed no upstream file.
+- The player (Stage 1, `madoyomi.core.player` in core; server/UPSTREAM.md "Playback (Phase 4)"):
+  - `MpvLocator`: an explicit path (Stage 5's setting), the system property `madoyomi.player.mpv`, env `MADOYOMI_MPV`, then `mpv.exe` on PATH; otherwise `PLAYER_NOT_FOUND` (503). `PlayerDirs`: mpv's config dir is `MADOYOMI_PLAYER_DIR`, else `<data dir>/player`;
+  - `MpvCommand`: only Madoyomi's values on the command line (`--config-dir`, `--include=<data dir>/cache/player/<id>.conf`, `--input-ipc-server=\\.\pipe\madoyomi-mpv-<id>`, `--ytdl=no`, `--idle=no`, `--force-window=immediate`, `--msg-level=all=warn`, `--start`, `--` URL). The source's values (headers in S4's forms, the title, subtitle and audio URLs, `mpvArgs` minus the reserved ones) are in the include file, as `name=%<UTF-8 bytes>%value`;
+  - `PlaybackSessions`: one session at a time (`play` resolves the video through `AnimeVideos.resolveVideo`, stops the running mpv and starts the new one; `stop`; `current`). A session is RUNNING until mpv exits (EXITED, with its code) or is stopped (STOPPED). Stopping is `Process.destroy()` today; Stage 2 sends `quit` over IPC first. A shutdown hook stops mpv. `<data dir>/cache/player/<id>.session` (pid, executable, start time) lets `reapOrphans()` (called from Main) end an mpv that a crashed backend left;
+  - `PlaybackSessions.executable` is public so tests can swap in a fake mpv (`api/src/test/java/madoyomi/api/FakeMpv.java`, Java without dependencies, started with `-cp` on its class dir).
+- The API: `playEpisode(input: {episodeId, hosterIndex, videoIndex, startSeconds})` → `{session}`, `stopPlayback(input: {})` → `{session}`, query `playbackSession`. `PlaybackSessionType` is id, episodeId, animeId, title, videoTitle, state (RUNNING/EXITED/STOPPED), startedAt, endedAt, exitCode. There are no playback events yet, and nothing is saved.
+- Progress goes into the existing `EPISODE.watched`, `last_second_seen` and `total_seconds` (M0070; EpisodeType already has isWatched, lastSecondSeen and totalSeconds as LongString). The GraphQL field says seconds. Check which unit the Aniyomi app stores there (it may be milliseconds despite the name), since backups and Phase 6 history should agree, and record the unit you pick in §9. No migration is needed unless you add a column (then it is M0072, under UPSTREAM.md "Database migrations").
+- The shell (app/src-tauri/src/sidecar.rs) passes `MADOYOMI_MPV` (set, or tools/bin/mpv/mpv.exe if present, or resources/mpv in release) and `MADOYOMI_PLAYER_DIR` (set, or the repo's player/, or resources/player) to the backend, and logs a `player:` line in sidecar.log. mpv is the JVM's child, so it is in the shell's Job Object: closing or killing the app ends mpv (checked live).
+- The UI: each episode row has Play (components/EpisodeList.vue, composables/usePlayback.ts, utils/videos.ts). It takes the first READY hoster's preferred video and shows "Starting…" until mpv is up, with errors above the rows. api/operations/playback.ts has EPISODE_VIDEOS_MUTATION, PLAY_EPISODE_MUTATION, STOP_PLAYBACK_MUTATION and PLAYBACK_SESSION_QUERY.
+- mpv is installed at C:\Program Files\MPV Player\mpv.exe and is on PATH; tools/bin/mpv/ doesn't exist, so dev uses PATH.
+- PLAN.md: the Phase 4 milestone "mpv launcher with headers / subs / audio" is ticked; "Named-pipe IPC + progress saving" is the one Stage 2 works towards. §7's mpv window question is closed.
 
-Baseline (after Phase 3 Stage 7; rerun all of it at the start and record it as this stage's baseline):
-- server: `.\gradlew.bat build` is green with 669 tests, 0 failures: core 606 (8 skipped), AndroidCompat 7, ext-host 8, api 48. Count them from server/{core,AndroidCompat,ext-host,api}/build/test-results/test/*.xml after a full build. The count must not drop. Server changes need tests, a rebuild and an UPSTREAM.md entry.
-- tools/smoke-api.ps1 -NoBuild: 24 steps pass (on the Stage 7 jar).
-- app: `pnpm test` gives 33 files, 256 passed + 9 skipped (the live spec). `pnpm lint`, `pnpm typecheck` and `pnpm format:check` are clean.
-- The live spec (operations.live.spec.ts with MADOYOMI_LIVE_URL/TOKEN): 9/9 against a seeded server, with 31 documents validating.
-- app/src-tauri: `cargo test` 15 tests; `cargo clippy --all-targets` and `cargo fmt --check` clean.
+Baseline (after Phase 4 Stage 1; rerun all of it at the start and record it as this stage's baseline):
+- server: `.\gradlew.bat build` is green with 688 tests, 0 failures: core 620 (8 or 9 skipped: the count varies between runs), AndroidCompat 7, ext-host 8, api 53. Count them from server/{core,AndroidCompat,ext-host,api}/build/test-results/test/*.xml after a full build. The count must not drop. Server changes need tests, a rebuild and an UPSTREAM.md entry.
+- tools/smoke-api.ps1 -NoBuild: 24 steps pass.
+- app: `pnpm test` gives 34 files, 266 passed + 9 skipped (the live spec). `pnpm lint`, `pnpm typecheck` and `pnpm format:check` are clean.
+- The live spec (operations.live.spec.ts with MADOYOMI_LIVE_URL/TOKEN): 9/9 against a seeded server, with 35 documents validating.
+- app/src-tauri: `cargo test` 17 tests; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
 
 Gotchas:
-- mpv:
-  - it is installed at C:\Program Files\MPV Player\mpv.exe and is on PATH. tools/bin/ has no mpv.exe, although the Phase 4 doc §2 expects one there for dev. Decide where dev and release builds find it (Phase 7 bundles it);
-  - spikes/mpv-play/play.ps1 and header-proxy.mjs are the S4 spike: a local proxy that returns 403 without the right Referer/User-Agent. It is a ready test bed for header handling;
-  - S4 findings: `--referrer=`/`--user-agent=`, one `--http-header-fields-append="Name: value"` per other header (not the comma-joined form), `--sub-files-append=` per subtitle, `--ytdl=no` always, and an IPC pipe of `\\.\pipe\<name>` with a unique name per session;
-  - the Phase 4 doc's step 1 still says "comma-joined" headers. S4 found that form unsafe; fix the doc when you plan.
-- Server build: `$env:JAVA_HOME='D:\Projects\madoyomi\tools\bin\jdk-21'; cmd /c "cd /d D:\Projects\madoyomi\server && .\gradlew.bat build --console=plain > <scratchpad log> 2>&1"`, in the background (about 5-6 min).
-  - From the Bash tool: `export JAVA_HOME='D:\Projects\madoyomi\tools\bin\jdk-21' && cmd //c ".\\gradlew.bat build --console=plain"` from server/.
-  - Use absolute paths: a relative JAVA_HOME silently falls back to JVM 11.
-  - Write .\gradlew.bat, not gradlew.bat. `.\gradlew.bat :api:shadowJar` builds only the jar; `build` rebuilds it too.
+- If your shell turns out to be a Linux VM (no gradlew.bat, PowerShell, pnpm, cargo or mpv), there is a job runner in tools/dev-data/agent/ (gitignored). Ask me to double-click start-runner.cmd there. It runs each queue\*.ps1 once, hidden, and writes queue\<job>.log (UTF-8) and queue\<job>.done (the exit code). Write job scripts there; inside functions log with Write-Host (a function's Write-Output becomes its return value). Computer use can't type into terminals or Explorer, but it can drive the Madoyomi window (target\debug\madoyomi.exe) and mpv (C:\Program Files\MPV Player\mpv.exe). The Claude desktop window sometimes covers the right side of the app: take a screenshot before each click.
+- Named pipes from Java:
+  - mpv on Windows only offers a named pipe for JSON IPC (`--input-ipc-client` is Unix-only);
+  - a synchronous handle (`RandomAccessFile` on `\\.\pipe\...`) serializes I/O, so a blocked read on one thread also blocks writes from another. Prefer `AsynchronousFileChannel` (overlapped I/O) or a pattern that never writes while a read is pending, and prove it with the fake-pipe test (step 19);
+  - the pipe appears a moment after mpv starts: connect with retries (Stage 1 saw it within about 1 s for a local start, longer while an HLS stream loads);
+  - mpv accepts several clients on the same pipe.
+- Stage 1's live script (tools/dev-data/agent/liveplay.ps1, scratch) reads mpv properties over the pipe from PowerShell with System.IO.Pipes.NamedPipeClientStream. Reuse it to check stored progress live.
+- Live data: tools/dev-data/agent/live-data is a seeded data dir (yuzono and Keiyoushi, with AnimeGG, MangaPill, KickAssAnime and MangaDex installed). tools/dev-data/agent/seed-live.ps1 seeds a dir and runs the live spec (`-DataDir`, `-Spec`). One server per data dir: H2 locks it.
+- Videos: AnimeGG gives MP4s (its host answers 500 without the Referer; the Play takes 10-20 s). KickAssAnime gives HLS with 7 headers, 8 subtitles and 2 audio tracks. URLs expire, so resolve right before launching (playEpisode already does).
+- mpv: `keep-open=no` is in player/mpv.conf, so mpv exits at the end of the file. Watch for `eof-reached` / `end-file` before the process exits. `q` quits with exit code 0, while TerminateProcess gives 1. Mute mpv over IPC in automated checks (`set_property mute true`).
+- Server build: `$env:JAVA_HOME='D:\Projects\madoyomi\tools\bin\jdk-21'; cmd /c "cd /d D:\Projects\madoyomi\server && .\gradlew.bat build --console=plain > <log> 2>&1"` (about 4-6 min).
+  - Run `.\gradlew.bat ktlintFormat` first. The test source set's ktlint check can run before the format and fail on chain wrapping.
+  - Backtick test names can't contain `:` (or `.`, `/`, `;`, `[`, `<`, `>`, `\`).
+  - Kotlin `internal` isn't visible from api's tests (another module).
+  - A class property named `java` shadows `java.util...` in fully qualified names.
   - Don't rebuild while a backend runs from that jar (Windows locks it): close the app first.
-  - New server code goes under `madoyomi.*`; an upstream file edit needs a `// Madoyomi:` comment and an UPSTREAM.md row.
-  - New DB tables are Madoyomi migrations, by the rules in UPSTREAM.md "Database migrations". The highest is M0071_AnimeBrowse, so the next is M0072.
-- PowerShell and servers:
-  - from the PowerShell tool, stdin is the null device, so a server started there exits at once. Start-MadoyomiServer in tools/lib/MadoyomiServer.ps1 redirects stdio, and sets $script:base and $script:token; GqlData runs a query;
-  - the Bash tool can't run `powershell` (exit 127): start PowerShell scripts from the PowerShell tool, as `powershell -NoProfile -ExecutionPolicy Bypass -File <script> > <log> 2>&1`, in the background for long runs.
-- Seeding a data dir for the live spec: a scratchpad seed.ps1 that
-  1. dot-sources tools/lib/MadoyomiServer.ps1;
-  2. runs Start-MadoyomiServer with tools\bin\jdk-21\bin\java.exe, (Resolve-MadoyomiJar <repo> '' -NoBuild) and a scratch data dir;
-  3. adds yuzono (`https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.min.json`, ANIME) and Keiyoushi (`https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb`, MANGA) with `addExtensionStore(input: {indexUrl, type})`, if `extensionStores` has none of that type;
-  4. installs AnimeGG, MangaPill, KickAssAnime and MangaDex with InstallWithProgress, if `extension(pkgName:)` says they aren't installed. The packages are `eu.kanade.tachiyomi.animeextension.en.animegg`, `eu.kanade.tachiyomi.extension.en.mangapill`, `eu.kanade.tachiyomi.animeextension.en.kickassanime` and `eu.kanade.tachiyomi.extension.all.mangadex`;
-  5. sets $env:MADOYOMI_LIVE_URL/TOKEN and runs `cmd /c "pnpm vitest run src/api/__tests__/operations.live.spec.ts --silent=false 2>&1"` from app/;
-  6. runs Stop-MadoyomiServer in a `finally`.
+  - Use absolute paths: a relative JAVA_HOME silently falls back to JVM 11.
+- PowerShell: from the PowerShell tool stdin is the null device, so start servers with Start-MadoyomiServer (tools/lib/MadoyomiServer.ps1), which sets $script:base, $script:token and $script:proc. Variables are case-insensitive (`$pid` is read-only). PS 5.1 has no `??`. Keep .ps1 files ASCII.
+- Live app checks: run `pnpm tauri dev` with MADOYOMI_DATA_DIR set, wait for a "healthy after" line from this session in <dataDir>/logs/sidecar.log, and close it with (Get-Process madoyomi | ? MainWindowHandle -ne 0).CloseMainWindow(). Kill only the pid from sidecar.log: other java processes are running.
+- Reka in jsdom, TypeScript 6 without @types, ESLint's `sort` heuristic, `pnpm format` rewriting files, and app/.vitest/: as in earlier stages (the Phase 3 doc's §10).
+- The token must stay out of logs, URLs and mpv's command line and environment. At the end, check sidecar.log, madoyomi.log, mpv.log and the dev output for `token=`.
+- Python and gh are not installed on Windows.
 
-  One server per data dir: H2 locks it.
-- Videos for live checks:
-  - AnimeGG gives MP4s that need its Referer (Phase 0: the host answers 500 without it);
-  - KickAssAnime gives HLS with hosters;
-  - Phase 2's compat report (docs/research/anime-compat.md) lists what each of the top 20 returns, with subtitles and audio tracks;
-  - video URLs expire: resolve them right before launching.
-- Live app checks:
-  - run `pnpm tauri dev` in the background (Bash tool, with MADOYOMI_DATA_DIR exported, output to a scratchpad log). Wait on <dataDir>/logs/sidecar.log for a "healthy after" line **from this session** (count the lines first, or use a fresh dir);
-  - `tauri dev` rebuilds and restarts the app by itself when src-tauri changes;
-  - kill only the pid from sidecar.log ("pid N listening"): other java processes are running;
-  - close the app with (Get-Process madoyomi | ? MainWindowHandle -ne 0).CloseMainWindow();
-  - UI preferences (pins, theme, kind, sorts) live in the WebView's localStorage, so they survive a fresh data dir.
-- Screenshots, clicks and typing work through a scratchpad win.ps1 (recreate it):
-  - SetProcessDPIAware, the madoyomi MainWindowHandle, ShowWindow(9), SetForegroundWindow, GetWindowRect;
-  - `-Action shot -Out x.png` (CopyFromScreen of the rect), `click -X -Y` (SetCursorPos + mouse_event 2/4), `wheel -X -Y -Delta -120 -Count N` (mouse_event 0x0800), `paste -Text` (Set-Clipboard, then SendKeys ^a ^v), and `keys -Text '{ENTER}'`.
-
-  Coordinates are window-relative physical pixels, read off the screenshot (the window is 1296x839). Some positions:
-  - the sidebar: Anime x≈77 / Manga x≈178 at y≈101, Library y≈153, Browse 191, Extensions 229, Settings y≈714;
-  - the page's actions at y≈72;
-  - on a details page: Add to library (520, 176) and Refresh x≈619 (x≈660 when in the library); the first episode row is at y≈413, with rows about 61 px apart.
-
-  An mpv window is a separate process: find it by its own MainWindowHandle to screenshot it. Don't commit screenshots.
-- Reka in jsdom:
-  - Tabs change on `mousedown`. Select opens with Enter on its trigger, once `scrollIntoView`, `hasPointerCapture` and `releasePointerCapture` are stubbed;
-  - Dialogs portal to <body> (mountView attaches there);
-  - the virtualizers need clientHeight/clientWidth, offsetHeight and scrollHeight stubbed.
-- TypeScript, ESLint and tests:
-  - TypeScript 6 loads no @types in app code: there's no `process` (reach it through globalThis), no `node:` types (import them untyped through `as string`), no `replaceAll` or `at` (lib ES2020);
-  - Vite refuses a `?raw` import from outside app/;
-  - `h()` doesn't take a generic SFC: mount it through `as unknown as Component`;
-  - the route smoke test needs an `h1` in `main` on every route without a backend;
-  - ESLint reads any method called `sort` as Array.prototype.sort in computeds;
-  - `pnpm format` rewrites files: read them again before an Edit;
-  - a vitest `--reporter=json` run without a valid --outputFile writes app/.vitest/: delete it, never commit it.
-- Shell edits: Bash heredocs with many quotes or backticks fail to parse. Use the Write/Edit tools, or write a scratchpad file and `cat >>` it.
-- PowerShell: variables are case-insensitive (`$pid` is read-only: use `$procId`); a function's pipeline output is its return value; PS 5.1 has no `??`; keep .ps1 files ASCII.
-- The token must stay out of logs and URLs, except where the contract needs ?token= (img src, WebSocket). If mpv ever fetches through the backend (a proxy fallback), keep the token out of mpv's command line and logs. Check sidecar.log, madoyomi.log, the dev output and any mpv log for `token=` at the end.
-- Adding npm packages or Gradle dependencies needs network access; lockfile changes are expected and are text.
-- Python and gh are not installed.
-
-Tasks (Phase 4 Stage 1):
-0. FIRST, before any edit: `git switch main`, `git pull`, then `git switch -c feat/phase-4-<topic>` (the topic of Stage 1, e.g. feat/phase-4-launcher). Never edit on main. (If feat/phase-3-exit isn't merged yet, stop and tell me.)
+Tasks (Phase 4 Stage 2):
+0. FIRST, before any edit: `git switch main`, `git pull`, then `git switch -c feat/phase-4-ipc`. Never edit on main. If feat/phase-4-launcher isn't merged yet, stop and tell me.
 1. Baseline: rerun everything in "Baseline" (smoke and the live spec included) and record it.
-2. Read the Phase 4 doc and propose:
-   - its stage plan (each stage ending in something verifiable, as Phase 3's §8);
-   - the two §8 decisions, with a recommendation each;
-   - where mpv comes from in dev and release.
-
-   Ask me, then write the agreed plan into the Phase 4 doc's §8 and the decisions into §9 (create §9/§10 as in Phase 3). Fix the doc's step 1 header form to match S4's findings.
-3. Implement Stage 1 of the agreed plan, with its tests (server and/or app, as the stage needs), and verify it live in `pnpm tauri dev` if the stage reaches the UI.
-4. Phase doc: §5 ticks (only verified items), §8 (stage 1 *Done* with a summary), §9 decisions, and §10 findings, including what wasn't checked live and why.
-5. docs/PLAN.md: Phase 4 in progress, with a short status like Phase 3's ("Stage 1 of N done"). Tick a milestone only if every phase-doc item behind it is verified. Update §8 "First tasks", §6 risks and §7 open decisions: close the mpv window question with the decision.
-6. README.md: the status box, the Roadmap row for Phase 4 (🟡 In progress), the commands tables for any new or changed command, a "Decided so far in Phase 4" list, and the NOTE on pnpm tauri dev if mpv changes what it needs. Make it match the phase doc and PLAN.md. Update app/README.md if the structure or routes change, and server/UPSTREAM.md for any server change.
-7. At the end, write the ready-to-paste prompt for the next stage into NEXT-PROMPT.md in the repo root (overwrite it), and repeat it in your final message.
+2. Plan the stage briefly (the §8 entry for Stage 2), then implement it:
+   - `MpvIpcClient` (core, `madoyomi.core.player`):
+     - connect to the session's pipe with retries;
+     - commands with `request_id` and their replies;
+     - line-delimited JSON events;
+     - `observe_property` for `time-pos`, `duration`, `pause`, `eof-reached` and `track-list`;
+     - a clean close when mpv exits.
+   - `PlaybackSessions`: a graceful `quit` over IPC before the kill. Give external subtitle tracks their language as their title (`sub-add` with a title, or track properties), if that is cheap.
+   - Progress: saved every 5 s while playing and at once on pause, seek and quit, into `EPISODE.last_second_seen`/`total_seconds` in the unit you record in §9. The episode is marked `watched` once when time-pos/duration reaches the threshold (85% default; the setting comes in Stage 5), and not marked again after the user unmarks it in the same session.
+   - Events: a GraphQL subscription (e.g. `playbackEvents`) with progress (throttled), watched, ended (end of file, with the next episode's id if there is one) and error (early exit). Nothing is replayed, so the UI subscribes first.
+   - Tests: a fake named-pipe server for the IPC client (step 19); session tests over a fake mpv that speaks the protocol (extend FakeMpv.java, or add a small pipe-serving fake); progress and watched-threshold tests on a scratch H2.
+   - Update player/IPC.md: what is observed, the commands sent, and when progress is written.
+   - Live check through the API: play AnimeGG from 60 s, let it run, quit mpv halfway, and read the stored position and duration back (`episodes` query). Then let a short seek to the end mark the episode watched, and show the event sequence.
+   - UI: only what the stage needs to show the result. If the episode list's watched badge reads `isWatched` already, check that it shows after a refetch. The picker, resume prompt and live progress bars are Stage 3.
+3. Phase doc: §5 ticks (only verified items), §8 (Stage 2 *Done* with a summary), §9 decisions, and §10 findings, including what wasn't checked live and why.
+4. docs/PLAN.md: Phase 4 status "Stage 2 of 6 done". Tick "Named-pipe IPC + progress saving" only if every phase-doc item behind it is verified. Update §8 "First tasks", the §6 risks and §7.
+5. README.md: the status box, the Roadmap row for Phase 4, the commands tables for any new or changed command, "Decided so far in Phase 4", and the NOTE on pnpm tauri dev if it changes. Make it match the phase doc and PLAN.md. Update app/README.md if the structure or routes change, and server/UPSTREAM.md for every server change (new tables as migrations).
+6. At the end, write the ready-to-paste prompt for the next stage (Stage 3: picker, resume, watched state in the UI) into NEXT-PROMPT.md in the repo root (overwrite it), and repeat it in your final message.
 
 Verify:
 - Checks:
-  - `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm test` pass, with at least 256 tests (the live spec skipped);
-  - the live spec passes 9/9 (or more) against a seeded server;
-  - `cargo build`, `cargo test` (at least 15) and `cargo clippy --all-targets` pass.
-- If anything in server/ changed: `.\gradlew.bat build` is green (at least 669 tests plus the new ones), tools/smoke-api.ps1 -NoBuild still passes (24 steps), and server/UPSTREAM.md lists the change (new tables as migrations).
-- The Phase 4 doc has the agreed stage plan (§8) and decisions (§9), and its §5 ticks are only verified items.
-- docs/PLAN.md: Phase 4's milestones are ticked if and only if their phase-doc items are verified, §4/§8 show Phase 4 in progress, and §7 matches the decision taken.
+  - `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm test` pass, with at least 266 tests (the live spec skipped);
+  - the live spec passes 9/9 (or more) against a seeded server, with every document validating;
+  - `cargo build`, `cargo test` (at least 17) and `cargo clippy --all-targets` pass.
+- Server: `.\gradlew.bat build` is green (at least 688 tests plus the new ones), tools/smoke-api.ps1 -NoBuild still passes (24 steps), and server/UPSTREAM.md lists every change (new tables as migrations).
+- The live check of stored progress and the watched mark is recorded in §10, with the event sequence.
+- The Phase 4 doc's §5 ticks are only verified items, and §8 shows Stage 2 *Done*.
+- docs/PLAN.md: Phase 4's milestones are ticked if and only if their phase-doc items are verified, and §4/§8 show "Stage 2 of 6 done".
 - README.md's status box, Roadmap row and decisions match the Phase 4 doc and PLAN.md.
 - NEXT-PROMPT.md in the repo root holds the next stage's prompt.
-- `git status`: on the feat/phase-4-… branch, with only text files. None of these:
+- `git status`: on feat/phase-4-ipc, with only text files. None of these:
   - jars, APKs, .pb files, fonts, test images, DB files, mpv binaries or video files;
   - hs_err logs, heap dumps, screenshots;
   - node_modules, target/, dist/, app/.vitest/, .env.local;
-  - tools/compat-test/out, tools/dev-data, spikes/mpv-play/out.
+  - tools/compat-test/out, tools/dev-data, spikes/mpv-play/out, or anything mpv wrote into player/.
 
 Standing rules:
 - Start every stage by switching to a new feature branch off an up-to-date main (git switch main, git pull, git switch -c feat/phase-N-<topic>) before any edit. Never edit on main.
