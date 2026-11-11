@@ -3,7 +3,8 @@
 Madoyomi plays episodes in **mpv, in its own window**, and the **backend owns the process** (Phase 4 §9). The UI asks
 the backend to play (`playEpisode`) and the backend does the rest. This file is the contract between the backend
 (`server/core/src/main/kotlin/madoyomi/core/player/`) and mpv: the command line and include file (Stage 1), then the
-IPC pipe, what is observed and when progress is saved (Stage 2).
+IPC pipe, what is observed and when progress is saved (Stage 2), and what happens when mpv can't open the video
+(Stage 4).
 
 ## Finding mpv and its config
 
@@ -133,7 +134,8 @@ episode the user unmarks while it plays isn't marked again by that session.
 | `PROGRESS` | the position moved (at most once a second), or mpv paused, resumed or seeked |
 | `WATCHED` | the episode was marked watched (once per session) |
 | `ENDED` | the end of the file (`reason: eof`), or the user quit past the threshold (`reason: quit`); `nextEpisodeId` is the next episode in the source's order (`source_order` + 1 and up), if any |
-| `ERROR` | mpv ended early: `end-file` with `error` (`message`: "mpv could not play the video: <file_error>"), or a non-zero exit code |
+| `RETRYING` | mpv couldn't open the video and the backend fetches the episode's videos again (Stage 4, below): `message`, `httpStatus`, `failedVideo`. The session's `CLOSED` follows once the retry is decided |
+| `ERROR` | mpv ended early: `end-file` with `error` (`message`: "mpv could not play the video: <file_error>", plus " (HTTP <status>)" when mpv's log has one), or a non-zero exit code. `retried` once the videos were fetched again; `nextVideo` is the video to offer instead |
 | `CLOSED` | the session is over (always its last event), with its final state |
 
 A stop by Madoyomi gives no ENDED or ERROR, only CLOSED. Each event carries the session with `positionSeconds`,
@@ -143,3 +145,30 @@ A stop by Madoyomi gives no ENDED or ERROR, only CLOSED. Each event carries the 
 below the watched threshold of the stored duration, and plays with `startSeconds = lastSecondSeen / 1000` (the
 `--start` of the command line). A watched episode starts at 0. Marking an episode unwatched (`updateEpisodes`) sets
 `last_second_seen` back to 0.
+
+## When the video doesn't play (Stage 4)
+
+A session that ends with `ERROR`'s conditions (mpv's `end-file` with `reason: error`, or a non-zero exit that wasn't
+Madoyomi's) is looked at once more before it is reported:
+
+- **The HTTP status** is read from mpv's log (`<data dir>/logs/mpv.log`, the session's own output): the last
+  `HTTP error NNN` line, which FFmpeg's http protocol writes at warn level (`[ffmpeg] https: HTTP error 403
+  Forbidden`). mpv's `end-file` only says `file_error: "loading failed"`, so the log is the only place with the status.
+- **Early** means mpv never reported a position (`time-pos`) in that session: it never got the video playing (a URL
+  refused at once, a crash at start, an exit before the pipe opened).
+- **An `eof` that isn't the end.** When a URL stops answering while it plays (it expired, and the next range request
+  gets 403), mpv logs the HTTP error and then ends the file as `eof`, with exit code 0 (measured live with AnimeGG's
+  MP4). So an `eof` more than 10 s before a known duration, with an HTTP error in the log, counts as a failure ("mpv
+  stopped reading the video at mm:ss of mm:ss"), not as `ENDED`. Without an HTTP error it stays mpv's end of the file.
+- **Retried**, once, when the session was a play (not already a retry) and it failed early, or its log has a 401, 403,
+  404 or 410 (a URL that expired while playing): the backend sends `RETRYING`, fetches the episode's videos again
+  (`fetchEpisodeVideos`, the source asked anew), finds **the same video** (the hoster by name, the video by title, else
+  by resolution; no other video stands in), resolves it, and starts a new session from the failed one's last position
+  (else where it started). Then the failed session's `CLOSED`, and the new session's own events.
+- **Not retried**, or the retry didn't help (the source failed, the video isn't there any more, mpv couldn't start, or
+  the new session failed too): `ERROR` with `retried`, `httpStatus` and `nextVideo`, the next video in the source's
+  order after the failed one (the READY hosters in order, each one's videos in order, wrapping around; never the failed
+  one; null when there is no other), then `CLOSED`. The app reopens its video picker with that video preselected.
+- A new `playEpisode` or `stopPlayback` while the videos are fetched again cancels the retry: the failed session's
+  `CLOSED` goes out at once, and nothing plays.
+

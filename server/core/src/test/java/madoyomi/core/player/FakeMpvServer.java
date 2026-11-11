@@ -54,6 +54,13 @@ public final class FakeMpvServer implements AutoCloseable {
         public String mode = "play";
         /** Milliseconds from the start to {@code file-loaded}. */
         public long loadMillis = 300;
+        /** With {@code play}: the position at which the file fails ({@code end-file} error, exit 2); negative: never. */
+        public double failAt = -1;
+        /** When the file fails: the status of the {@code HTTP error} line written to stdout (mpv's log); 0: none. */
+        public int httpStatus = 0;
+        /** With {@code play}: the position at which the file ends early as mpv ends one whose URL stopped answering
+         * ({@code end-file} eof, exit 0); negative: never. */
+        public double eofAt = -1;
     }
 
     private static final int PIPE_ACCESS_DUPLEX = 3;
@@ -192,6 +199,7 @@ public final class FakeMpvServer implements AutoCloseable {
         }
         if (closed) return;
         if (options.mode.equals("error")) {
+            logHttpError();
             Map<String, Object> end = new LinkedHashMap<>();
             end.put("event", "end-file");
             end.put("reason", "error");
@@ -210,6 +218,27 @@ public final class FakeMpvServer implements AutoCloseable {
             if (!playing || paused) continue;
             position = Math.min(options.duration, position + step);
             property("time-pos", position);
+            if (options.eofAt >= 0 && position >= options.eofAt) {
+                logHttpError();
+                eof = true;
+                property("eof-reached", true);
+                Map<String, Object> end = new LinkedHashMap<>();
+                end.put("event", "end-file");
+                end.put("reason", "eof");
+                broadcast(end);
+                finish(0);
+                return;
+            }
+            if (options.failAt >= 0 && position >= options.failAt) {
+                logHttpError();
+                Map<String, Object> end = new LinkedHashMap<>();
+                end.put("event", "end-file");
+                end.put("reason", "error");
+                end.put("file_error", "loading failed");
+                broadcast(end);
+                finish(2);
+                return;
+            }
             if (position >= options.duration) {
                 eof = true;
                 property("eof-reached", true);
@@ -220,6 +249,14 @@ public final class FakeMpvServer implements AutoCloseable {
                 finish(0);
             }
         }
+    }
+
+    /** What mpv logs at warn level for a refused URL (FFmpeg's http protocol). */
+    private void logHttpError() {
+        if (options.httpStatus == 0) return;
+        System.out.println("[ffmpeg] https: HTTP error " + options.httpStatus + " Forbidden");
+        System.out.println("[stream] Failed to open the URL.");
+        System.out.flush();
     }
 
     private synchronized void load() {
@@ -450,13 +487,22 @@ public final class FakeMpvServer implements AutoCloseable {
      * fakempv.duration}, {@code fakempv.speed}, {@code fakempv.mode}, {@code fakempv.loadMillis}. Records its arguments
      * and include file to {@code <tmp>/madoyomi-fake-mpv/<pipe name>.txt} (as {@code FakeMpv}) and, at the exit, the
      * lines the clients sent to {@code <pipe name>.received}; exits as mpv would, after two minutes at the latest.
+     *
+     * <p>The URL (after {@code --}) can make the file fail, as a refused or expired URL does (Stage 4): {@code
+     * fakempv-error=<status>} fails to load, and {@code fakempv-fail-at=<seconds>} fails once the position gets
+     * there (with {@code fakempv-status=<status>}); {@code fakempv-eof-at=<seconds>} ends the file there as mpv
+     * does when a URL stops answering mid-play. With a status other than 0, FFmpeg's {@code HTTP error <status>}
+     * line goes to stdout (mpv's log) when it fails.
      */
     public static void main(String[] args) throws Exception {
         String pipe = null;
         String include = null;
+        String url = "";
         Options o = new Options();
         StringBuilder record = new StringBuilder();
-        for (String arg : args) {
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if (arg.equals("--") && i + 1 < args.length) url = args[i + 1];
             if (arg.startsWith("--input-ipc-server=")) pipe = arg.substring("--input-ipc-server=".length());
             if (arg.startsWith("--include=")) include = arg.substring("--include=".length());
             if (arg.startsWith("--start=")) o.start = Double.parseDouble(arg.substring("--start=".length()));
@@ -466,6 +512,14 @@ public final class FakeMpvServer implements AutoCloseable {
         o.speed = Double.parseDouble(System.getProperty("fakempv.speed", "1"));
         o.mode = System.getProperty("fakempv.mode", "play");
         o.loadMillis = Long.parseLong(System.getProperty("fakempv.loadMillis", "300"));
+        String status = urlParam(url, "fakempv-error");
+        String failAt = urlParam(url, "fakempv-fail-at");
+        if (status != null) o.mode = "error";
+        if (failAt != null) o.failAt = Double.parseDouble(failAt);
+        String eofAt = urlParam(url, "fakempv-eof-at");
+        if (eofAt != null) o.eofAt = Double.parseDouble(eofAt);
+        String httpStatus = status != null ? status : urlParam(url, "fakempv-status");
+        if (httpStatus != null) o.httpStatus = Integer.parseInt(httpStatus);
         record.append("TOKEN ").append(System.getenv("MADOYOMI_TOKEN") != null).append('\n');
         record.append("INCLUDE\n").append(include == null ? "" : Files.readString(Path.of(include)));
         String name = pipe.substring(pipe.lastIndexOf('\\') + 1);
@@ -482,6 +536,16 @@ public final class FakeMpvServer implements AutoCloseable {
         Files.writeString(sent, String.join("\n", server.received()) + "\n");
         Files.move(sent, dir.resolve(name + ".received"), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         System.exit(code < 0 ? 4 : code);
+    }
+
+    private static String urlParam(String url, String name) {
+        int q = url.indexOf('?');
+        if (q < 0) return null;
+        for (String part : url.substring(q + 1).split("&")) {
+            int eq = part.indexOf('=');
+            if (eq > 0 && part.substring(0, eq).equals(name)) return part.substring(eq + 1);
+        }
+        return null;
     }
 
     /** Just enough JSON for mpv's IPC: objects, arrays, strings, numbers, true/false/null. */

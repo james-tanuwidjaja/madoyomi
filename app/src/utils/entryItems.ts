@@ -24,14 +24,26 @@ export interface ListItem {
   filler: boolean;
   /** Anime only: where playback stopped (or is, while it plays), in milliseconds. */
   progress?: Progress;
-  /** Anime only: mpv is playing it now (or has it paused). */
-  playing?: "playing" | "paused";
+  /**
+   * Anime only: mpv is playing it now (or has it paused), or the backend is fetching its videos again after mpv
+   * couldn't open the video (Stage 4).
+   */
+  playing?: "playing" | "paused" | "retrying";
 }
 
-/** An episode as a row; `live` (the session mpv plays) overlays its position when it is this episode. */
-export function fromEpisode(e: Episode, live?: PlaybackSession | null): ListItem {
+/**
+ * An episode as a row; `live` (the session mpv plays) overlays its position when it is this episode, and
+ * `retrying` (the playback store's) marks it as being retried.
+ */
+export function fromEpisode(e: Episode, live?: PlaybackSession | null, retrying = false): ListItem {
   const playing =
-    live && live.episodeId === e.id ? (live.paused ? "paused" : "playing") : undefined;
+    live && live.episodeId === e.id
+      ? retrying
+        ? "retrying"
+        : live.paused
+          ? "paused"
+          : "playing"
+      : undefined;
   return {
     id: e.id,
     name: e.name,

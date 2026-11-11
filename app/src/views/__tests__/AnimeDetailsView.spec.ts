@@ -15,7 +15,17 @@ import type {
 } from "../../api/types";
 import { queryKeys } from "../../composables/queryKeys";
 import { resetAutoRefresh } from "../../composables/useEntries";
-import { makeAnime, makeEpisodes, makePage, makeSource } from "../../test/fixtures";
+import {
+  makeAnime,
+  makeEpisodes,
+  makePage,
+  makePlaybackEvent,
+  makePlaybackSession,
+  makeSource,
+} from "../../test/fixtures";
+import { usePlaybackStore } from "../../stores/playback";
+import { usePlayerPrefsStore } from "../../stores/playerPrefs";
+import { useVideoChoicesStore } from "../../stores/videoChoices";
 import { mountView, setBackendReady } from "../../test/mountView";
 
 const ops = vi.hoisted(() => ({
@@ -28,6 +38,7 @@ const ops = vi.hoisted(() => ({
   fetchEpisodeVideos: vi.fn(),
   fetchHosterVideos: vi.fn(),
   playEpisode: vi.fn(),
+  stopPlayback: vi.fn(),
   updateEpisodes: vi.fn(),
 }));
 
@@ -428,5 +439,248 @@ describe("AnimeDetailsView", () => {
     expect(wrapper.find('[data-testid="mark-error"]').text()).toContain("NOT_FOUND");
     // the selection stays, for a retry
     expect(wrapper.find('[data-testid="selected-count"]').text()).toBe("1 selected");
+  });
+});
+
+describe("AnimeDetailsView: the next episode and failed videos (Phase 4 Stage 4)", () => {
+  const toast = () => wrapper.find('[data-testid="next-episode"]');
+  const ended = (episodeId = 1001, nextEpisodeId: number | null = 1002) =>
+    usePlaybackStore().apply(
+      makePlaybackEvent("ENDED", {
+        session: makePlaybackSession({ episodeId, state: "EXITED" }),
+        nextEpisodeId,
+        reason: "eof",
+      }),
+    );
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    ops.fetchEpisodeVideos.mockResolvedValue([
+      hoster(),
+      hoster({
+        index: 1,
+        name: "Backup",
+        videos: [{ ...hoster().videos[0]!, videoTitle: "480p" }],
+      }),
+    ]);
+    ops.playEpisode.mockImplementation(async (r: { episodeId: number }) => session(r.episodeId));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("offers the next episode with a countdown, then plays it with the remembered choice, from its resume point", async () => {
+    episodes = makeEpisodes(3).map((e) =>
+      e.id === 1002 ? { ...e, lastSecondSeen: "600000", totalSeconds: "1500000" } : e,
+    );
+    useVideoChoicesStore().remember(animegg.id, {
+      hosterName: "Main",
+      videoTitle: "720p",
+      resolution: 720,
+    });
+    await mountDetails();
+
+    ended();
+    await flushPromises();
+    expect(toast().find('[data-testid="next-episode-name"]').text()).toBe("Next: Episode 2");
+    expect(toast().find('[data-testid="next-episode-countdown"]').text()).toBe("Plays in 10 s");
+    vi.advanceTimersByTime(3000);
+    await flushPromises();
+    expect(toast().find('[data-testid="next-episode-countdown"]').text()).toBe("Plays in 7 s");
+    expect(ops.playEpisode).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(7000);
+    await flushPromises();
+    expect(ops.fetchEpisodeVideos).toHaveBeenCalledWith(1002);
+    // no picker: the remembered video (not the source's pick, 1080p) from where the episode stopped
+    expect(document.body.querySelector('[data-testid="video-picker"]')).toBeNull();
+    expect(ops.playEpisode).toHaveBeenCalledWith({
+      episodeId: 1002,
+      hosterIndex: 0,
+      videoIndex: 0,
+      startSeconds: 600,
+    });
+    expect(toast().exists()).toBe(false);
+  });
+
+  it("plays the source's pick from the start without a remembered choice, at once with Play now", async () => {
+    await mountDetails();
+    ended();
+    await flushPromises();
+    await toast().find('[data-action="play-next"]').trigger("click");
+    await flushPromises();
+    expect(ops.playEpisode).toHaveBeenCalledWith({
+      episodeId: 1002,
+      hosterIndex: 0,
+      videoIndex: 1,
+      startSeconds: null,
+    });
+    // what auto-play played is remembered, as a play from the picker is
+    expect(useVideoChoicesStore().choiceOf(animegg.id)).toEqual({
+      hosterName: "Main",
+      videoTitle: "1080p",
+      resolution: 1080,
+    });
+  });
+
+  it("stops on Cancel, on another Play, and when the page goes away", async () => {
+    await mountDetails();
+    ended();
+    await flushPromises();
+    await toast().find('[data-action="cancel-next"]').trigger("click");
+    vi.advanceTimersByTime(15_000);
+    await flushPromises();
+    expect(toast().exists()).toBe(false);
+    expect(ops.fetchEpisodeVideos).not.toHaveBeenCalled();
+
+    ended();
+    await flushPromises();
+    expect(toast().exists()).toBe(true);
+    await wrapper.find('[data-action="play"]').trigger("click");
+    await flushPromises();
+    expect(toast().exists()).toBe(false);
+    document.body.querySelector<HTMLButtonElement>('[data-action="cancel-play"]')!.click();
+    await flushPromises();
+
+    ended();
+    await flushPromises();
+    usePlaybackStore().apply(
+      makePlaybackEvent("STARTED", { session: makePlaybackSession({ id: "s9", episodeId: 1003 }) }),
+    );
+    await flushPromises();
+    expect(toast().exists()).toBe(false);
+
+    ended();
+    await flushPromises();
+    expect(toast().exists()).toBe(true);
+    wrapper.unmount();
+    ops.fetchEpisodeVideos.mockClear();
+    vi.advanceTimersByTime(15_000);
+    await flushPromises();
+    expect(ops.fetchEpisodeVideos).not.toHaveBeenCalled();
+    await mountDetails();
+  });
+
+  it("Cancel while it starts plays nothing, and stops an mpv whose start was already on its way", async () => {
+    ops.stopPlayback.mockResolvedValue(null);
+    await mountDetails();
+
+    // still fetching the videos: nothing is played
+    let videosDone!: (v: unknown) => void;
+    const hosters = await ops.fetchEpisodeVideos();
+    ops.fetchEpisodeVideos.mockImplementationOnce(() => new Promise((r) => (videosDone = r)));
+    ended();
+    await flushPromises();
+    await toast().find('[data-action="play-next"]').trigger("click");
+    expect(toast().find('[data-testid="next-episode-countdown"]').text()).toBe("Starting…");
+    await toast().find('[data-action="cancel-next"]').trigger("click");
+    videosDone(hosters);
+    await flushPromises();
+    expect(ops.playEpisode).not.toHaveBeenCalled();
+    expect(ops.stopPlayback).not.toHaveBeenCalled();
+
+    // playEpisode already sent: once it returns, mpv is stopped
+    let playDone!: (v: unknown) => void;
+    ops.playEpisode.mockImplementationOnce(() => new Promise((r) => (playDone = r)));
+    ended();
+    await flushPromises();
+    await toast().find('[data-action="play-next"]').trigger("click");
+    await flushPromises();
+    expect(ops.playEpisode).toHaveBeenCalledTimes(1);
+    await toast().find('[data-action="cancel-next"]').trigger("click");
+    expect(toast().exists()).toBe(false);
+    expect(ops.stopPlayback).not.toHaveBeenCalled();
+    playDone(session(1002));
+    await flushPromises();
+    expect(ops.stopPlayback).toHaveBeenCalledTimes(1);
+  });
+
+  it("only offers it with auto-play off, and ignores another anime's end or a last episode", async () => {
+    usePlayerPrefsStore().autoPlayNext = false;
+    await mountDetails();
+    ended();
+    await flushPromises();
+    expect(toast().find('[data-testid="next-episode-countdown"]').text()).toBe("Auto-play is off");
+    vi.advanceTimersByTime(30_000);
+    await flushPromises();
+    expect(ops.playEpisode).not.toHaveBeenCalled();
+    await toast().find('[data-action="cancel-next"]').trigger("click");
+
+    usePlaybackStore().apply(
+      makePlaybackEvent("ENDED", {
+        session: makePlaybackSession({ animeId: 99, episodeId: 5001 }),
+        nextEpisodeId: 5002,
+      }),
+    );
+    ended(1003, null);
+    await flushPromises();
+    expect(toast().exists()).toBe(false);
+  });
+
+  it("opens the picker for the next episode when it can't auto-play", async () => {
+    ops.playEpisode.mockRejectedValueOnce(
+      new ApiError({ code: "PLAYER_NOT_FOUND", message: "mpv was not found", kind: "graphql" }),
+    );
+    await mountDetails();
+    ended();
+    await flushPromises();
+    await toast().find('[data-action="play-next"]').trigger("click");
+    await flushPromises();
+    const picker = document.body.querySelector('[data-testid="video-picker"]')!;
+    expect(picker.querySelector(".dialog-title")!.textContent).toBe("Episode 2");
+    expect(picker.querySelector('[data-testid="picker-failure"]')!.textContent).toContain(
+      "Couldn't play the next episode",
+    );
+    expect(toast().exists()).toBe(false);
+  });
+
+  it("shows Retrying… on the row while the videos are fetched again", async () => {
+    await mountDetails();
+    usePlaybackStore().apply(
+      makePlaybackEvent("RETRYING", {
+        session: makePlaybackSession({ episodeId: 1003, state: "EXITED" }),
+        message: "mpv could not play the video: loading failed (HTTP 403)",
+        httpStatus: 403,
+      }),
+    );
+    await flushPromises();
+    const row = wrapper.findAll('[data-testid="item-row"]')[0]!;
+    expect(row.find('[data-testid="item-playing"]').text()).toBe("Retrying…");
+  });
+
+  it("reopens the picker with the error and the next video when a video fails after the refetch", async () => {
+    await mountDetails();
+    usePlaybackStore().apply(
+      makePlaybackEvent("ERROR", {
+        session: makePlaybackSession({ episodeId: 1003, state: "EXITED", exitCode: 2 }),
+        message: "mpv could not play the video: loading failed (HTTP 403)",
+        httpStatus: 403,
+        retried: true,
+        failedVideo: { hosterName: "Main", videoTitle: "1080p", resolution: 1080 },
+        nextVideo: { hosterName: "Backup", videoTitle: "480p", resolution: 720 },
+      }),
+    );
+    await flushPromises();
+    const picker = document.body.querySelector('[data-testid="video-picker"]')!;
+    expect(picker.querySelector(".dialog-title")!.textContent).toBe("Episode 3");
+    const failure = picker.querySelector('[data-testid="picker-failure"]')!.textContent!;
+    expect(failure).toContain("Couldn't play 1080p");
+    expect(failure).toContain("HTTP 403");
+    expect(picker.querySelector('[data-testid="picker-instead"]')!.textContent).toContain(
+      "480p is selected instead",
+    );
+    const checked = [...picker.querySelectorAll<HTMLElement>('[data-testid="picker-video"]')].find(
+      (l) => l.querySelector<HTMLInputElement>("input")!.checked,
+    );
+    expect(checked!.textContent).toContain("480p");
+    picker.querySelector<HTMLButtonElement>('[data-action="confirm-play"]')!.click();
+    await flushPromises();
+    expect(ops.playEpisode).toHaveBeenCalledWith({
+      episodeId: 1003,
+      hosterIndex: 1,
+      videoIndex: 0,
+      startSeconds: null,
+    });
   });
 });

@@ -6,6 +6,7 @@ import type { QueryClient } from "@tanstack/vue-query";
 import { createQueryClient } from "../../api/realtime";
 import type { Source } from "../../api/types";
 import { useBackendStore } from "../../stores/backend";
+import { AUTO_PLAY_NEXT_KEY } from "../../stores/playerPrefs";
 import { THEME_KEY } from "../../stores/theme";
 import { makeSource } from "../../test/fixtures";
 import { mountView, setBackendReady } from "../../test/mountView";
@@ -94,6 +95,15 @@ describe("SettingsView", () => {
     await mountSettings();
     expect(themeOption("light").attributes("data-state")).toBe("on");
     expect(html().dataset.theme).toBe("light");
+  });
+
+  it("switches auto-play of the next episode, on by default, and keeps the choice", async () => {
+    await mountSettings();
+    const toggle = wrapper.find('[data-testid="autoplay-switch"]');
+    expect(toggle.attributes("data-state")).toBe("checked");
+    await toggle.trigger("click");
+    expect(toggle.attributes("data-state")).toBe("unchecked");
+    expect(localStorage.getItem(AUTO_PLAY_NEXT_KEY)).toBe("false");
   });
 
   it("says English is the only language", async () => {

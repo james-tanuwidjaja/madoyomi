@@ -159,7 +159,7 @@ class PlaybackApiTest : AnimeApiTest() {
         return props.getProperty("pid").toLong()
     }
 
-    private fun episode(source: PlaySource): Int {
+    private fun episode(source: AnimeHttpSource): Int {
         register(source)
         return episodeRow(animeRow(source.id, "/anime", title = "One Piece"), "/episode/1")
     }
@@ -238,22 +238,31 @@ class PlaybackApiTest : AnimeApiTest() {
     }
 
     @Test
-    fun `mpv exiting by itself ends the session with its exit code`() {
+    fun `mpv exiting by itself ends the session with its exit code, and an early exit is retried once`() {
         fake("madoyomi.api.FakeMpv\$Exits")
-        val episodeId = episode(PlaySource())
+        val source = PlaySource()
+        val episodeId = episode(source)
         val id = play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String
 
-        val deadline = System.currentTimeMillis() + 20_000
-        while (currentSession().path("state") == "RUNNING") {
-            check(System.currentTimeMillis() < deadline) { "the session never ended" }
+        // it exited before playing (Stage 4): the videos are fetched again and a second session starts, which exits
+        // the same way, and that is final
+        val deadline = System.currentTimeMillis() + 30_000
+        while (currentSession().path("id") == id || currentSession().path("state") == "RUNNING") {
+            check(System.currentTimeMillis() < deadline) { "the sessions never ended" }
             Thread.sleep(50)
         }
         val ended = currentSession()
-        assertEquals(id, ended.path("id"))
+        val retry = ended.path("id") as String
+        assertNotEquals(id, retry)
         assertEquals("EXITED", ended.path("state"))
         assertEquals(3, ended.path("exitCode"))
-        assertFalse(File(PlaybackSessions.dirs().sessions, "$id.conf").exists())
-        File(records, "madoyomi-mpv-$id.txt").delete()
+        assertEquals(2, source.resolveCalls, "resolved again after the refetch")
+        Thread.sleep(500)
+        assertEquals(retry, currentSession().path("id"), "no second retry")
+        for (s in listOf(id, retry)) {
+            assertFalse(File(PlaybackSessions.dirs().sessions, "$s.conf").exists())
+            File(records, "madoyomi-mpv-$s.txt").delete()
+        }
     }
 
     @Test
@@ -353,7 +362,9 @@ class PlaybackApiTest : AnimeApiTest() {
         }
     }
 
-    private val eventFields = "type nextEpisodeId reason message session { $sessionFields }"
+    private val eventFields =
+        "type nextEpisodeId reason message httpStatus retried failedVideo { hosterName videoTitle resolution } " +
+            "nextVideo { hosterName videoTitle resolution } session { $sessionFields }"
 
     /**
      * Runs [block] while `playbackEvents(episodeId)` collects, until [until] holds for the events seen (or a minute
@@ -493,17 +504,296 @@ class PlaybackApiTest : AnimeApiTest() {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
-    fun `a video that fails to load is ERROR, then CLOSED`() {
+    fun `a video that fails to load is fetched again once, and when it fails again it is ERROR, then CLOSED`() {
         fakeIpc(duration = 100.0, speed = 1.0, mode = "error", loadMillis = 2_000)
         val episodeId = episode(PlaySource())
         val (id, events) =
-            withEvents(episodeId) { play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String }
+            withEvents(episodeId, until = closedTwice) {
+                play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+            }
         recordOf(id)
         receivedBy(id)
-        assertEquals(listOf("STARTED", "ERROR", "CLOSED"), events.map { it.path("type") })
+        assertEquals(listOf("STARTED", "RETRYING", "CLOSED", "STARTED", "ERROR", "CLOSED"), events.map { it.path("type") })
         assertEquals("mpv could not play the video: loading failed", events[1].path("message"))
+        assertEquals(id, events[2].path("session", "id"))
+        val retry = events[3].path("session", "id") as String
+        assertNotEquals(id, retry)
+        recordOf(retry)
+        receivedBy(retry)
+        val error = events[4]
+        assertEquals(retry, error.path("session", "id"))
+        assertEquals(true, error.path("retried"))
+        assertEquals("Main 1080p", error.path("failedVideo", "videoTitle"))
+        assertNull(error.path("nextVideo"), "the episode has no other video")
         assertEquals("EXITED", events.last().path("session", "state"))
         assertEquals(2, events.last().path("session", "exitCode"))
         assertEquals(Triple(0L, 0L, false), progressOf(episodeId))
+    }
+
+    /**
+     * Stage 4's source: hoster Main with 1080p and 720p, hoster Backup with 480p, already resolved. [urls] gives each
+     * fetch's URL query by its number (from 1), so a fetch can hand the fake mpv a URL that fails.
+     */
+    private class RetrySource(
+        val urls: (fetch: Int, title: String) -> String?,
+    ) : AnimeHttpSource() {
+        override val name = "Fake retry source"
+        override val lang = "en"
+        override val baseUrl = "https://retry.example.org"
+        override val supportsLatest = false
+
+        @Volatile
+        var fetches = 0
+
+        @Volatile
+        var fetchDelayMillis = 0L
+
+        override suspend fun getHosterList(episode: SEpisode): List<Hoster> {
+            fetches++
+            if (fetches > 1 && fetchDelayMillis > 0) delay(fetchDelayMillis)
+            return listOf(
+                Hoster(hosterUrl = "https://h/main", hosterName = "Main"),
+                Hoster(hosterUrl = "https://h/backup", hosterName = "Backup"),
+            )
+        }
+
+        override suspend fun getVideoList(hoster: Hoster): List<Video> {
+            val n = fetches
+            val titles = if (hoster.hosterName == "Main") listOf("Main 1080p" to 1080, "Main 720p" to 720) else listOf("Backup 480p" to 480)
+            return titles.mapNotNull { (title, res) ->
+                val query = urls(n, title) ?: return@mapNotNull null
+                Video(
+                    videoUrl = "https://cdn.example.org/$n/${title.replace(' ', '-')}.mp4$query",
+                    videoTitle = title,
+                    resolution = res,
+                    initialized = true,
+                )
+            }
+        }
+    }
+
+    private val closedTwice: (List<Any?>) -> Boolean = { events -> events.count { it.path("type") == "CLOSED" } >= 2 }
+
+    private fun argsOf(id: String) = recordOf(id).first
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `a refused URL is fetched again once, and the same video plays from where it was`() {
+        fakeIpc(duration = 40.0, speed = 10.0)
+        // the first fetch's URLs are refused (403) at once; the second fetch's play
+        val source = RetrySource { n, _ -> if (n == 1) "?fakempv-error=403" else "" }
+        val episodeId = episode(source)
+
+        val (id, events) =
+            withEvents(episodeId, until = closedTwice) {
+                play(episodeId, start = 30.0).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+            }
+        val types = events.map { it.path("type") }
+        assertEquals(listOf("STARTED", "RETRYING", "CLOSED", "STARTED"), types.take(4), types.toString())
+        assertEquals("ENDED", types[types.size - 2], types.toString())
+        assertFalse("ERROR" in types, types.toString())
+        val retrying = events[1]
+        assertEquals(403, retrying.path("httpStatus"))
+        assertEquals("mpv could not play the video: loading failed (HTTP 403)", retrying.path("message"))
+        assertEquals("Main", retrying.path("failedVideo", "hosterName"))
+        assertEquals("Main 1080p", retrying.path("failedVideo", "videoTitle"))
+        assertEquals(1080, retrying.path("failedVideo", "resolution"))
+        assertEquals(2, source.fetches, "fetched again once")
+
+        assertTrue(argsOf(id).last().endsWith("/1/Main-1080p.mp4?fakempv-error=403"))
+        val retry = events[3].path("session", "id") as String
+        val retryArgs = argsOf(retry)
+        assertEquals("https://cdn.example.org/2/Main-1080p.mp4", retryArgs.last(), "the same video, from the new fetch")
+        assertTrue("--start=30" in retryArgs, "where the failed one started: it never played. $retryArgs")
+        assertEquals("Main 1080p", events[3].path("session", "videoTitle"))
+        receivedBy(id)
+        receivedBy(retry)
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `a URL that expires while playing is fetched again, and plays on from the position it failed at`() {
+        fakeIpc(duration = 60.0, speed = 5.0)
+        val source = RetrySource { n, _ -> if (n == 1) "?fakempv-fail-at=12&fakempv-status=403" else "" }
+        val episodeId = episode(source)
+
+        val (id, events) =
+            withEvents(episodeId, until = { e ->
+                e.any {
+                    it.path("type") == "STARTED" &&
+                        it.path("session", "id") != e.first().path("session", "id")
+                }
+            }) {
+                play(episodeId, start = 2.0).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+            }
+        val types = events.map { it.path("type") }
+        assertTrue(types.indexOf("RETRYING") > types.indexOf("PROGRESS"), types.toString())
+        assertEquals(403, events.single { it.path("type") == "RETRYING" }.path("httpStatus"))
+        val retry = events.last().path("session", "id") as String
+        val start =
+            argsOf(retry)
+                .single { it.startsWith("--start=") }
+                .removePrefix("--start=")
+                .toDouble()
+        assertTrue(start in 11.5..13.0, "the failed session's last position, $start")
+        assertTrue(progressOf(episodeId).first in 11_500L..40_000L, "saved from where it failed on")
+        receivedBy(id)
+        PlaybackSessions.stop()
+        receivedBy(retry)
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `an end of file long before the end, after an HTTP error, is an expired URL - fetched again, from there`() {
+        fakeIpc(duration = 60.0, speed = 5.0)
+        // as mpv does when a range request gets 403: the HTTP error in its log, then end-file eof, exit 0
+        val source = RetrySource { n, _ -> if (n == 1) "?fakempv-eof-at=12&fakempv-status=403" else "" }
+        val episodeId = episode(source)
+
+        val (id, events) =
+            withEvents(episodeId, until = { e ->
+                e.any {
+                    it.path("type") == "STARTED" &&
+                        it.path("session", "id") != e.first().path("session", "id")
+                }
+            }) {
+                play(episodeId, start = 2.0).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+            }
+        val types = events.map { it.path("type") }
+        assertFalse("ENDED" in types, "not the end of the episode: $types")
+        val retrying = events.single { it.path("type") == "RETRYING" }
+        assertEquals(403, retrying.path("httpStatus"))
+        assertTrue(
+            (retrying.path("message") as String).startsWith("mpv stopped reading the video at 0:1"),
+            retrying.path("message") as String,
+        )
+        val retry = events.last().path("session", "id") as String
+        val start =
+            argsOf(retry)
+                .single { it.startsWith("--start=") }
+                .removePrefix("--start=")
+                .toDouble()
+        assertTrue(start in 11.5..13.0, "where it stopped, $start")
+        receivedBy(id)
+        PlaybackSessions.stop()
+        receivedBy(retry)
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `an early end of file without an HTTP error stays mpv's end of the file`() {
+        fakeIpc(duration = 60.0, speed = 10.0)
+        val source = RetrySource { _, _ -> "?fakempv-eof-at=20" }
+        val episodeId = episode(source)
+        val (id, events) = withEvents(episodeId) { play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String }
+        val types = events.map { it.path("type") }
+        assertEquals("ENDED", types[types.size - 2], types.toString())
+        assertFalse("RETRYING" in types || "ERROR" in types, types.toString())
+        recordOf(id)
+        receivedBy(id)
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `when the video fails again after the refetch, ERROR offers the next video in the source's order`() {
+        fakeIpc(duration = 40.0, speed = 10.0)
+        val source = RetrySource { _, _ -> "?fakempv-error=404" }
+        val episodeId = episode(source)
+
+        val (id, events) =
+            withEvents(episodeId, until = closedTwice) {
+                play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+            }
+        assertEquals(listOf("STARTED", "RETRYING", "CLOSED", "STARTED", "ERROR", "CLOSED"), events.map { it.path("type") })
+        val error = events[4]
+        assertEquals(true, error.path("retried"))
+        assertEquals(404, error.path("httpStatus"))
+        assertEquals("Main 1080p", error.path("failedVideo", "videoTitle"))
+        assertEquals("Main", error.path("nextVideo", "hosterName"))
+        assertEquals("Main 720p", error.path("nextVideo", "videoTitle"))
+        assertEquals(720, error.path("nextVideo", "resolution"))
+        assertEquals(2, source.fetches, "fetched again only once")
+        recordOf(id)
+        receivedBy(id)
+        val retry = events[3].path("session", "id") as String
+        recordOf(retry)
+        receivedBy(retry)
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `when the refetch no longer has the video, ERROR offers the first one, and nothing plays`() {
+        fakeIpc(duration = 40.0, speed = 10.0)
+        // the second fetch has no 1080p (no such title or resolution)
+        val source =
+            RetrySource { n, title ->
+                if (n == 1) {
+                    "?fakempv-error=403"
+                } else if (title == "Main 1080p") {
+                    null
+                } else {
+                    ""
+                }
+            }
+        val episodeId = episode(source)
+
+        val (id, events) = withEvents(episodeId) { play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String }
+        assertEquals(listOf("STARTED", "RETRYING", "ERROR", "CLOSED"), events.map { it.path("type") })
+        val error = events[2]
+        assertEquals(id, error.path("session", "id"))
+        assertEquals(true, error.path("retried"))
+        assertTrue((error.path("message") as String).contains("isn't among the episode's videos any more"), error.path("message") as String)
+        assertEquals("Main 720p", error.path("nextVideo", "videoTitle"))
+        assertEquals("EXITED", currentSession().path("state"))
+        recordOf(id)
+        receivedBy(id)
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `a failure after playback started without an HTTP error is ERROR at once, with the next video`() {
+        fakeIpc(duration = 40.0, speed = 10.0)
+        val source = RetrySource { n, _ -> if (n == 1) "?fakempv-fail-at=5" else "" }
+        val episodeId = episode(source)
+
+        val (id, events) = withEvents(episodeId) { play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String }
+        val types = events.map { it.path("type") }
+        assertFalse("RETRYING" in types, types.toString())
+        val error = events.single { it.path("type") == "ERROR" }
+        assertEquals(false, error.path("retried"))
+        assertNull(error.path("httpStatus"))
+        assertEquals("Main 720p", error.path("nextVideo", "videoTitle"))
+        assertEquals(1, source.fetches)
+        recordOf(id)
+        receivedBy(id)
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `stopPlayback while the videos are fetched again cancels the retry`() {
+        fakeIpc(duration = 40.0, speed = 10.0)
+        val source = RetrySource { n, _ -> if (n == 1) "?fakempv-error=403" else "" }
+        source.fetchDelayMillis = 3_000
+        val episodeId = episode(source)
+
+        val (id, events) =
+            withEvents(episodeId) {
+                val id = play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+                val deadline = System.currentTimeMillis() + 20_000
+                while (source.fetches < 2) {
+                    check(System.currentTimeMillis() < deadline) { "no refetch" }
+                    Thread.sleep(20)
+                }
+                assertNull(
+                    graphql("mutation { stopPlayback(input: {}) { session { id } } }").assertNoErrors().dataPath("stopPlayback", "session"),
+                    "nothing was playing",
+                )
+                id
+            }
+        assertEquals(listOf("STARTED", "RETRYING", "CLOSED"), events.map { it.path("type") })
+        Thread.sleep(4_000)
+        assertEquals(id, currentSession().path("id"), "the retry played nothing")
+        recordOf(id)
+        receivedBy(id)
     }
 }

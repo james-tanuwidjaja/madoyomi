@@ -205,6 +205,10 @@ describe("EpisodeList / ChapterList", () => {
       nextEpisodeId: null,
       reason: null,
       message: null,
+      httpStatus: null,
+      retried: false,
+      failedVideo: null,
+      nextVideo: null,
     });
     const first = () => rows().find((r) => r.find(".name").text() === "Episode 1")!;
 

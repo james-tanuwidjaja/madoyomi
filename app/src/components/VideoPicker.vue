@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "reka-ui";
 import type { Episode, HosterChoice, PlaybackSession, VideoChoice } from "../api/types";
+import type { PickerFailure } from "../composables/useNextEpisode";
 import { noVideoError, useEpisodeVideos, usePlayEpisode } from "../composables/usePlayback";
 import { usePlaybackStore } from "../stores/playback";
 import { useVideoChoicesStore } from "../stores/videoChoices";
@@ -35,11 +36,16 @@ import ErrorNotice from "./ErrorNotice.vue";
  * The resume prompt (step 13) is its footer: an episode stopped between 1 % and the watched threshold offers
  * "Resume from mm:ss" and "Start over"; any other plays from the start (a watched one too, as in Aniyomi). The dialog
  * stays open, "Starting…", until mpv is up, and shows a failure there.
+ *
+ * Opened because something failed (Stage 4: the video didn't play even after the videos were fetched again, or the
+ * next episode couldn't auto-play), it shows that `failure` above the videos and preselects its `preselect` (the
+ * next video in the source's order) instead of the remembered choice.
  */
 const props = defineProps<{
   episode: Episode | null;
   sourceId: string;
   sourceName: string;
+  failure?: PickerFailure | null;
 }>();
 const open = defineModel<boolean>("open", { required: true });
 const emit = defineEmits<{ started: [session: PlaybackSession] }>();
@@ -50,6 +56,8 @@ const choices = useVideoChoicesStore();
 const playback = usePlaybackStore();
 
 const selected = ref<VideoPick | null>(null);
+/** The failure's `preselect` as found in this fetch. */
+const insteadPick = ref<VideoPick | null>(null);
 const startingFrom = ref<number | null>(null);
 const primaryEl = ref<HTMLButtonElement | null>(null);
 
@@ -98,12 +106,15 @@ async function focusPrimary() {
 
 async function start(episodeId: number) {
   selected.value = null;
+  insteadPick.value = null;
   play.reset();
   const list = await videos.load(episodeId);
   if (!list) return;
-  selected.value = initialPick(list, remembered.value);
+  const instead = props.failure?.preselect ? matchChoice(list, props.failure.preselect) : null;
+  insteadPick.value = instead;
+  selected.value = instead ?? initialPick(list, remembered.value);
   // The remembered hoster loads only on request: load it, then take the remembered video from it.
-  const hoster = rememberedHoster(list, remembered.value);
+  const hoster = instead ? null : rememberedHoster(list, remembered.value);
   if (hoster && hoster.state === "IDLE") {
     const loaded = await videos.loadHoster(hoster.index);
     if (loaded && videos.episodeId.value === episodeId) {
@@ -181,6 +192,13 @@ const busy = computed(() => play.isPending.value);
         <DialogDescription class="dialog-description">
           Choose a video. It plays in mpv's own window.
         </DialogDescription>
+
+        <div v-if="failure" class="failure" data-testid="picker-failure">
+          <ErrorNotice :title="failure.title" :error="failure.error" />
+          <p v-if="insteadPick && !videos.loading.value" class="muted" data-testid="picker-instead">
+            {{ insteadPick.videoTitle || "The next video" }} is selected instead.
+          </p>
+        </div>
 
         <p v-if="videos.loading.value" class="muted" data-testid="picker-loading">
           Fetching the videos from {{ sourceName }}…
@@ -337,6 +355,11 @@ const busy = computed(() => play.isPending.value);
 <style scoped>
 .picker {
   width: min(640px, calc(100vw - 2 * var(--space-6)));
+}
+
+.failure {
+  display: grid;
+  gap: var(--space-2);
 }
 
 .muted {

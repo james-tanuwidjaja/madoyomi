@@ -151,6 +151,12 @@ function clearSelection() {
 // ---------------------------------------------------------------------------------------------------------------
 // Progress
 
+const PLAYING_LABELS: Record<NonNullable<ListItem["playing"]>, string> = {
+  playing: "Playing",
+  paused: "Paused",
+  retrying: "Retrying…",
+};
+
 /** A row's progress to show: it has a position, and it isn't watched (unless it is playing again). */
 function progressOf(item: ListItem) {
   const p = item.progress;
@@ -277,7 +283,7 @@ const countLine = computed(() => {
             <span class="name">{{ item.name }}</span>
             <span class="sub">
               <span v-if="item.playing" class="playing" data-testid="item-playing">{{
-                item.playing === "paused" ? "Paused" : "Playing"
+                PLAYING_LABELS[item.playing]
               }}</span>
               <span v-if="progressOf(item)" data-testid="item-progress-text">{{
                 progressOf(item)!.text

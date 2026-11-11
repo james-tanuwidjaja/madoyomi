@@ -67,6 +67,9 @@ describe("entry items", () => {
     });
     expect(fromEpisode(stopped, { ...live, paused: false }).playing).toBe("playing");
     expect(fromEpisode(stopped, { ...live, episodeId: 1 }).playing).toBeUndefined();
+    // Stage 4: the backend fetching its videos again
+    expect(fromEpisode(stopped, live, true).playing).toBe("retrying");
+    expect(fromEpisode(stopped, { ...live, episodeId: 1 }, true).playing).toBeUndefined();
     const [c] = makeChapters(1);
     expect(fromChapter({ ...c, isRead: true, scanlator: "TCB", uploadDate: "0" })).toMatchObject({
       number: 1,

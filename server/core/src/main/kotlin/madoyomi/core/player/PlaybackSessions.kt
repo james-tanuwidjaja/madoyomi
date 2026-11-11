@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import madoyomi.core.anime.AnimeEntries
@@ -47,6 +48,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   progress into `EPISODE` ([EpisodeProgress]), marks the episode watched at [watchedThreshold], adds the external
  *   subtitle and audio tracks with their labels, and stops mpv with `quit` before it would kill it. [events] carries
  *   what happens (nothing is replayed: subscribe first).
+ * - When mpv can't open the video (Stage 4): a failure before playback started, or with an HTTP 401/403/404/410 in
+ *   mpv's log, fetches the episode's videos again once (URLs expire), finds the same video ([VideoChoices.find]) and
+ *   plays it from where the failed session was (RETRYING, then the new session). If that fails too, ERROR names the
+ *   video to offer instead ([VideoChoices.next]).
  *
  * A session is RUNNING until mpv exits (EXITED) or Madoyomi stops it (STOPPED).
  */
@@ -91,7 +96,17 @@ object PlaybackSessions {
         /** The end of the file, or a quit past the threshold; [Event.nextEpisodeId] is the next episode, if any. */
         ENDED,
 
-        /** mpv ended early: the video failed to play, or mpv exited with an error ([Event.message]). */
+        /**
+         * mpv could not open the video, and the backend fetches the episode's videos again to play the same one from
+         * the same position ([Event.message], [Event.httpStatus]). The session's CLOSED follows once that is decided;
+         * then the new session's events, or ERROR.
+         */
+        RETRYING,
+
+        /**
+         * mpv ended early: the video failed to play, or mpv exited with an error ([Event.message]). [Event.retried]
+         * once the videos were fetched again; [Event.nextVideo] is the one to offer instead.
+         */
         ERROR,
 
         /** The session is over (always the last event of a session; after ENDED or ERROR if there was one). */
@@ -105,6 +120,14 @@ object PlaybackSessions {
         /** For ENDED: mpv's end-file reason (`eof`, `quit`). */
         val reason: String? = null,
         val message: String? = null,
+        /** RETRYING, ERROR: the last `HTTP error` status in mpv's log, if any. */
+        val httpStatus: Int? = null,
+        /** ERROR: whether the videos had been fetched again (the failure is final). */
+        val retried: Boolean = false,
+        /** RETRYING, ERROR: the video that failed. */
+        val failedVideo: VideoRef? = null,
+        /** ERROR: the video to offer instead, the next in the source's order ([VideoChoices.next]), if there is one. */
+        val nextVideo: VideoRef? = null,
     )
 
     private class Live(
@@ -112,6 +135,11 @@ object PlaybackSessions {
         val process: Process,
         val files: List<File>,
         val tracks: List<MpvCommand.Track>,
+        /** The video, to find it again after a refetch; null for a launch without one (tests): no retry. */
+        val ref: VideoRef?,
+        /** 0 for a play, 1 for the relaunch after the videos were fetched again (no second retry). */
+        val attempt: Int,
+        val startSeconds: Double?,
     ) {
         lateinit var tracker: PlaybackTracker
         val client = CompletableFuture<MpvIpcClient>()
@@ -134,6 +162,9 @@ object PlaybackSessions {
 
     @Volatile
     private var last: Session? = null
+
+    /** A failed session whose videos are being fetched again (RETRYING sent, CLOSED not yet). */
+    private var pendingRetry: Live? = null
 
     private val hookAdded = AtomicBoolean(false)
 
@@ -175,10 +206,11 @@ object PlaybackSessions {
         startSeconds: Double? = null,
     ): Session {
         val video = AnimeVideos.resolveVideo(episodeId, hosterIndex, videoIndex)
+        val ref = VideoRef(AnimeVideos.hosterName(episodeId, hosterIndex).orEmpty(), video.videoTitle, video.resolution)
         val episode = AnimeEntries.episodeRow(episodeId)
         val anime = AnimeEntries.animeRow(episode[EpisodeTable.anime].value)
         val title = "${anime[AnimeTable.title]} - ${episode[EpisodeTable.name]}"
-        return launch(episodeId, anime[AnimeTable.id].value, title, video, startSeconds)
+        return launch(episodeId, anime[AnimeTable.id].value, title, video, startSeconds, ref)
     }
 
     /** [play] after the video is known. */
@@ -188,6 +220,8 @@ object PlaybackSessions {
         title: String,
         video: EpisodeVideo,
         startSeconds: Double?,
+        ref: VideoRef? = null,
+        attempt: Int = 0,
     ): Session {
         if (video.videoUrl.isBlank()) {
             throw MadoyomiException(ErrorCode.SOURCE_FAILED, "The video has no URL", mapOf("episodeId" to episodeId))
@@ -203,6 +237,7 @@ object PlaybackSessions {
         built.dropped.forEach { logger.warn { "playback $id: left out $it" } }
 
         synchronized(lock) {
+            cancelRetryLocked()
             stopLocked()
             include.writeText(built.include, Charsets.UTF_8)
             val process =
@@ -237,7 +272,7 @@ object PlaybackSessions {
                     exitCode = null,
                     endedAt = null,
                 )
-            val entry = Live(session, process, listOf(include, record), built.tracks)
+            val entry = Live(session, process, listOf(include, record), built.tracks, ref, attempt, startSeconds)
             entry.tracker = PlaybackTracker(hooks(entry), watchedThreshold)
             live = entry
             last = session
@@ -254,8 +289,20 @@ object PlaybackSessions {
         env.keys.removeIf { it.equals("MADOYOMI_TOKEN", ignoreCase = true) }
     }
 
-    /** Stops the current session; returns it, or null if none was running. */
-    fun stop(): Session? = synchronized(lock) { stopLocked() }
+    /** Stops the current session (or a pending retry); returns it, or null if none was running. */
+    fun stop(): Session? =
+        synchronized(lock) {
+            cancelRetryLocked()
+            stopLocked()
+        }
+
+    /** A retry that a new play or a stop overtakes: its session is CLOSED now, and the retry drops its result. */
+    private fun cancelRetryLocked() {
+        val pending = pendingRetry ?: return
+        pendingRetry = null
+        logger.info { "playback ${pending.session.id}: the retry was cancelled" }
+        emit(Event(EventType.CLOSED, pending.session))
+    }
 
     private fun stopLocked(): Session? {
         val entry = live ?: return null
@@ -302,7 +349,23 @@ object PlaybackSessions {
             client.awaitClosed(2_000)
             client.close()
         }
-        val outcome = entry.tracker.finish(stopped, exitCode)
+        val log = MpvLog.tail(dirs().log)
+        val status = MpvLog.httpStatus(log)
+        val outcome =
+            entry.tracker.finish(stopped, exitCode).let { o ->
+                // mpv treats a URL that stops answering (403 after it expired) as the end of the file: an eof well
+                // before the end, with an HTTP error in its log, is a failure (found live, Phase 4 Stage 4)
+                val at = entry.tracker.snapshot()
+                if (o is PlaybackTracker.Outcome.Ended && o.reason == "eof" && status != null &&
+                    MpvLog.endedEarly(at.positionSeconds, at.durationSeconds)
+                ) {
+                    PlaybackTracker.Outcome.Failed(
+                        "mpv stopped reading the video at ${clock(at.positionSeconds)} of ${clock(at.durationSeconds)}",
+                    )
+                } else {
+                    o
+                }
+            }
         val ended = entry.snapshot().copy(state = state, exitCode = exitCode, endedAt = System.currentTimeMillis())
         entry.session = ended
         if (last?.id == ended.id) last = ended
@@ -315,8 +378,34 @@ object PlaybackSessions {
             }
 
             is PlaybackTracker.Outcome.Failed -> {
-                logger.warn { "playback ${ended.id}: ${outcome.message}" }
-                emit(Event(EventType.ERROR, ended, message = outcome.message))
+                val message = outcome.message + (status?.let { " (HTTP $it)" } ?: "")
+                // early: mpv never reported a position, so it never got the video playing
+                val early = entry.tracker.snapshot().positionSeconds == null
+                val ref = entry.ref
+                if (ref != null && entry.attempt == 0 && (early || status in MpvLog.EXPIRED_STATUSES)) {
+                    logger.warn { "playback ${ended.id}: $message; fetching the videos again" }
+                    emit(Event(EventType.RETRYING, ended, message = message, httpStatus = status, failedVideo = ref))
+                    pendingRetry = entry
+                    retry(entry, ended, ref, message, status)
+                    // CLOSED once the retry is decided
+                    return ended
+                }
+                val next =
+                    ref?.let { r ->
+                        runCatching { AnimeVideos.cachedHosters(ended.episodeId) }.getOrNull()?.let { VideoChoices.next(it, r) }
+                    }
+                logger.warn { "playback ${ended.id}: $message${if (entry.attempt > 0) " (after fetching the videos again)" else ""}" }
+                emit(
+                    Event(
+                        EventType.ERROR,
+                        ended,
+                        message = message,
+                        httpStatus = status,
+                        retried = entry.attempt > 0,
+                        failedVideo = ref,
+                        nextVideo = next?.ref,
+                    ),
+                )
             }
 
             PlaybackTracker.Outcome.Closed -> {
@@ -325,6 +414,67 @@ object PlaybackSessions {
         }
         emit(Event(EventType.CLOSED, ended))
         return ended
+    }
+
+    /**
+     * Fetches the failed session's episode videos again (in the background: a source can take a while), finds the
+     * same video, and plays it from where the failed session was (its last position, else where it started), as
+     * attempt 1. If the source fails, the video isn't there any more, or mpv can't start, ERROR (with the next video
+     * to offer), then the failed session's CLOSED. A play or stop meanwhile cancels it ([cancelRetryLocked]).
+     */
+    private fun retry(
+        entry: Live,
+        ended: Session,
+        ref: VideoRef,
+        message: String,
+        status: Int?,
+    ) {
+        Thread({
+            var hosters: List<AnimeVideos.EpisodeHoster>? = null
+            val found =
+                runCatching {
+                    runBlocking {
+                        val fresh = AnimeVideos.fetchEpisodeVideos(ended.episodeId).also { hosters = it }
+                        val position = VideoChoices.find(fresh, ref) ?: error("the video isn't among the episode's videos any more")
+                        position to AnimeVideos.resolveVideo(ended.episodeId, position.hosterIndex, position.videoIndex)
+                    }
+                }
+            synchronized(lock) {
+                if (pendingRetry !== entry) return@Thread
+                pendingRetry = null
+                val failure =
+                    found.fold(
+                        onSuccess = { (position, video) ->
+                            runCatching {
+                                val start = ended.positionSeconds?.takeIf { it > 0 } ?: entry.startSeconds
+                                val next = launch(ended.episodeId, ended.animeId, ended.title, video, start, position.ref, attempt = 1)
+                                logger.info {
+                                    "playback ${ended.id}: fetched the videos again, playing ${video.videoTitle} as ${next.id} from ${start ?: 0.0} s"
+                                }
+                            }.exceptionOrNull()
+                        },
+                        onFailure = { it },
+                    )
+                if (failure != null) {
+                    val reason = (failure as? MadoyomiException)?.message ?: failure.message ?: failure.javaClass.simpleName
+                    val all = hosters ?: runCatching { AnimeVideos.cachedHosters(ended.episodeId) }.getOrNull()
+                    val next = all?.let { VideoChoices.next(it, ref) }
+                    logger.warn { "playback ${ended.id}: fetching the videos again didn't help: $reason" }
+                    emit(
+                        Event(
+                            EventType.ERROR,
+                            ended,
+                            message = "$message. Fetching the videos again didn't help: $reason",
+                            httpStatus = status,
+                            retried = true,
+                            failedVideo = ref,
+                            nextVideo = next?.ref,
+                        ),
+                    )
+                }
+                emit(Event(EventType.CLOSED, ended))
+            }
+        }, "playback-retry-${ended.id}").apply { isDaemon = true }.start()
     }
 
     /** What the session's tracker does: saves into `EPISODE`, the watched mark, events, the external tracks. */
@@ -490,6 +640,15 @@ object PlaybackSessions {
                 }
             }, "playback-shutdown"),
         )
+    }
+
+    private fun clock(seconds: Double?): String {
+        val total = (seconds ?: 0.0).toLong().coerceAtLeast(0)
+        return if (total >= 3600) {
+            "%d:%02d:%02d".format(total / 3600, total % 3600 / 60, total % 60)
+        } else {
+            "%d:%02d".format(total / 60, total % 60)
+        }
     }
 
     private fun hostOf(url: String): String = runCatching { URI(url).host }.getOrNull() ?: "(no host)"

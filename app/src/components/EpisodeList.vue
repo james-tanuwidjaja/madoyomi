@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import type { Episode } from "../api/types";
 import { useUpdateEpisodes } from "../composables/useEntries";
+import { useNextEpisode, type PickerFailure } from "../composables/useNextEpisode";
 import { usePlaybackStore } from "../stores/playback";
 import { fromEpisode } from "../utils/entryItems";
 import EntryItemList from "./EntryItemList.vue";
 import ErrorNotice from "./ErrorNotice.vue";
+import NextEpisodeToast from "./NextEpisodeToast.vue";
 import VideoPicker from "./VideoPicker.vue";
 
 /**
@@ -16,6 +18,11 @@ import VideoPicker from "./VideoPicker.vue";
  * plays it (stores/playback.ts: no refetch per second). Rows can be selected for "Mark watched", "Mark unwatched"
  * (which also clears the position, as in Aniyomi) and, with one row, "Mark previous as watched" (every earlier
  * episode in the source's order), through `updateEpisodes`.
+ *
+ * Stage 4: when an episode of this anime ends, the next-episode toast (`useNextEpisode`) counts down and plays the
+ * next one with the remembered choice, without the picker. When mpv can't play a video even after the backend
+ * fetched the videos again (ERROR), the picker reopens for that episode with the error and the next video
+ * preselected. Both only while this page is open.
  */
 defineOptions({ inheritAttrs: false });
 
@@ -31,14 +38,44 @@ const playback = usePlaybackStore();
 const live = computed(() =>
   playback.session && playback.session.animeId === props.animeId ? playback.session : null,
 );
-const items = computed(() => props.episodes.map((e) => fromEpisode(e, live.value)));
+const items = computed(() =>
+  props.episodes.map((e) => fromEpisode(e, live.value, playback.retrying)),
+);
 
 const pickerOpen = ref(false);
 const pickerEpisode = ref<Episode | null>(null);
-function openPicker(id: number) {
+const pickerFailure = shallowRef<PickerFailure | null>(null);
+function openPicker(id: number, failure: PickerFailure | null = null) {
+  next.dismiss();
   pickerEpisode.value = props.episodes.find((e) => e.id === id) ?? null;
+  pickerFailure.value = pickerEpisode.value ? failure : null;
   pickerOpen.value = pickerEpisode.value !== null;
 }
+watch(pickerOpen, (isOpen) => {
+  if (!isOpen) pickerFailure.value = null;
+});
+
+const next = useNextEpisode({
+  animeId: () => props.animeId,
+  episodes: () => props.episodes,
+  sourceId: () => props.sourceId,
+  openPicker: (id, failure) => openPicker(id, failure),
+});
+
+// The backend fetched the videos again and the video still didn't play: offer the next one.
+watch(
+  () => playback.failed,
+  (event) => {
+    if (!event || event.session.animeId !== props.animeId) return;
+    openPicker(event.session.episodeId, {
+      title: event.failedVideo
+        ? `Couldn't play ${event.failedVideo.videoTitle || "the video"}`
+        : "Couldn't play the video",
+      error: new Error(event.message ?? "mpv could not play the video."),
+      preselect: event.nextVideo,
+    });
+  },
+);
 // The picker reads the stored progress of the episode as it is now (a refetch after a session replaces the row).
 watch(
   () => props.episodes,
@@ -142,5 +179,14 @@ async function mark(ids: number[], isWatched: boolean) {
     :episode="pickerEpisode"
     :source-id="sourceId"
     :source-name="sourceName"
+    :failure="pickerFailure"
+  />
+  <NextEpisodeToast
+    v-if="next.offer.value"
+    :name="next.offer.value.episode.name"
+    :seconds-left="next.offer.value.secondsLeft"
+    :starting="next.starting.value"
+    @play="next.playNow()"
+    @cancel="next.cancel()"
   />
 </template>

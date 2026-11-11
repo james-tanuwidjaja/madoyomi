@@ -37,6 +37,18 @@ export const PLAYBACK_EVENTS_SUBSCRIPTION = /* GraphQL */ `
       nextEpisodeId
       reason
       message
+      httpStatus
+      retried
+      failedVideo {
+        hosterName
+        videoTitle
+        resolution
+      }
+      nextVideo {
+        hosterName
+        videoTitle
+        resolution
+      }
       session {
         ...PlaybackSessionFields
       }
