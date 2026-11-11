@@ -7,7 +7,7 @@ import type { HosterChoice, PlaybackSession } from "../types";
  * its headers, so the UI never needs a video's headers or tracks, only what to choose between.
  */
 
-const PLAYBACK_SESSION_FIELDS = /* GraphQL */ `
+export const PLAYBACK_SESSION_FIELDS = /* GraphQL */ `
   fragment PlaybackSessionFields on PlaybackSessionType {
     id
     episodeId
@@ -18,6 +18,9 @@ const PLAYBACK_SESSION_FIELDS = /* GraphQL */ `
     startedAt
     endedAt
     exitCode
+    positionSeconds
+    durationSeconds
+    paused
   }
 `;
 

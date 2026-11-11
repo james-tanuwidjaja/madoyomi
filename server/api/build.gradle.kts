@@ -45,6 +45,8 @@ dependencies {
     testImplementation(libs.exposed.migrations)
     testImplementation(libs.injekt)
     testImplementation(projects.extManga)
+    // the fake mpv named-pipe server (core's tests) runs as mpv in PlaybackApiTest
+    testImplementation(libs.jna.platform)
 }
 
 application {

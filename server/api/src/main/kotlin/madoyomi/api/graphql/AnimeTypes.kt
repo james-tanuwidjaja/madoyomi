@@ -153,9 +153,9 @@ class EpisodeType(
     val fetchedAt: Long,
     val isWatched: Boolean,
     val isBookmarked: Boolean,
-    @GraphQLDescription("Playback position in seconds")
+    @GraphQLDescription("Playback position in milliseconds, as the Aniyomi app stores it despite the name")
     val lastSecondSeen: Long,
-    @GraphQLDescription("Duration in seconds, 0 if unknown")
+    @GraphQLDescription("Duration in milliseconds (as Aniyomi's, despite the name), 0 if unknown")
     val totalSeconds: Long,
     val fillermark: Boolean,
     val summary: String?,

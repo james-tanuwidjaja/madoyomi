@@ -381,8 +381,9 @@ export interface Episode {
   isWatched: boolean;
   isBookmarked: boolean;
   fillermark: boolean;
-  /** Seconds. */
+  /** Playback position in **milliseconds**, despite the name (as the Aniyomi app stores it; Phase 4 §9). */
   lastSecondSeen: LongString;
+  /** Duration in milliseconds, "0" while unknown. */
   totalSeconds: LongString;
   summary: string | null;
   previewUrl: string | null;
@@ -534,4 +535,23 @@ export interface PlaybackSession {
   startedAt: LongString;
   endedAt: LongString | null;
   exitCode: number | null;
+  /** mpv's position in seconds; null until mpv reports it over IPC. */
+  positionSeconds: number | null;
+  durationSeconds: number | null;
+  paused: boolean;
+}
+
+/** `PlaybackEventType.type` (Phase 4 Stage 2). CLOSED is always a session's last event. */
+export type PlaybackEventKind = "STARTED" | "PROGRESS" | "WATCHED" | "ENDED" | "ERROR" | "CLOSED";
+
+/** `playbackEvents`: something that happened in a playback session. */
+export interface PlaybackEvent {
+  type: PlaybackEventKind;
+  session: PlaybackSession;
+  /** ENDED: the next episode in the source's order, if any. */
+  nextEpisodeId: number | null;
+  /** ENDED: mpv's end-file reason ("eof", or "quit" past the watched threshold). */
+  reason: string | null;
+  /** ERROR: what went wrong. */
+  message: string | null;
 }

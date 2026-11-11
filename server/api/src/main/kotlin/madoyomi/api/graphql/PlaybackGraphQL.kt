@@ -6,6 +6,9 @@ package madoyomi.api.graphql
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import com.expediagroup.graphql.generator.annotations.GraphQLDescription
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import madoyomi.core.player.PlaybackSessions
 import suwayomi.tachidesk.graphql.directives.RequireAuth
 import suwayomi.tachidesk.server.JavalinSetup.future
@@ -30,6 +33,11 @@ data class PlaybackSessionType(
     val endedAt: Long?,
     @GraphQLDescription("mpv's exit code, if known")
     val exitCode: Int?,
+    @GraphQLDescription("mpv's position in seconds; null until mpv reports it over IPC")
+    val positionSeconds: Double?,
+    @GraphQLDescription("The video's duration in seconds; null while unknown")
+    val durationSeconds: Double?,
+    val paused: Boolean,
 ) {
     constructor(session: PlaybackSessions.Session) : this(
         id = session.id,
@@ -41,7 +49,48 @@ data class PlaybackSessionType(
         startedAt = session.startedAt,
         endedAt = session.endedAt,
         exitCode = session.exitCode,
+        positionSeconds = session.positionSeconds,
+        durationSeconds = session.durationSeconds,
+        paused = session.paused,
     )
+}
+
+/** [PlaybackSessions.EventType] in the schema. */
+enum class PlaybackEventKind { STARTED, PROGRESS, WATCHED, ENDED, ERROR, CLOSED }
+
+@GraphQLDescription("Something that happened in a playback session (playbackEvents)")
+data class PlaybackEventType(
+    val type: PlaybackEventKind,
+    @GraphQLDescription("The session as it is now, with its position")
+    val session: PlaybackSessionType,
+    @GraphQLDescription("ENDED: the next episode in the source's order, if there is one")
+    val nextEpisodeId: Int?,
+    @GraphQLDescription("ENDED: mpv's end-file reason (eof, or quit for a quit past the watched threshold)")
+    val reason: String?,
+    @GraphQLDescription("ERROR: what went wrong")
+    val message: String?,
+) {
+    constructor(event: PlaybackSessions.Event) : this(
+        type = PlaybackEventKind.valueOf(event.type.name),
+        session = PlaybackSessionType(event.session),
+        nextEpisodeId = event.nextEpisodeId,
+        reason = event.reason,
+        message = event.message,
+    )
+}
+
+/** Over `graphql-transport-ws` at `/api/graphql`. Nothing is replayed: subscribe before `playEpisode`. */
+class PlaybackSubscription {
+    @RequireAuth
+    @GraphQLDescription(
+        "Playback events of every session, or only of episodeId: STARTED (IPC connected), PROGRESS (at most once a " +
+            "second, and on pause, resume and seek), WATCHED (once per session), ENDED (with the next episode), ERROR " +
+            "(mpv ended early), CLOSED (always last)",
+    )
+    fun playbackEvents(episodeId: Int? = null): Flow<PlaybackEventType> =
+        PlaybackSessions.events
+            .filter { episodeId == null || it.session.episodeId == episodeId }
+            .map(::PlaybackEventType)
 }
 
 class PlaybackQuery {

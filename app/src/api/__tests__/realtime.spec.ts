@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 describe("realtime", () => {
-  it("connects to the backend's WebSocket with the token, and subscribes to both events", () => {
+  it("connects to the backend's WebSocket with the token, and subscribes to the three event streams", () => {
     expect(sockets.last.url).toBe(`ws://127.0.0.1:50266/api/graphql?token=${TOKEN}`);
     sockets.last.open();
     sockets.last.ack();
@@ -62,9 +62,10 @@ describe("realtime", () => {
     const queries = sockets.last
       .sentOfType("subscribe")
       .map((m) => (m.payload as { query: string }).query);
-    expect(queries).toHaveLength(2);
+    expect(queries).toHaveLength(3);
     expect(queries.some((q) => q.includes("extensionInstallProgress"))).toBe(true);
     expect(queries.some((q) => q.includes("extensionStoreRefreshed"))).toBe(true);
+    expect(queries.some((q) => q.includes("playbackEvents"))).toBe(true);
     expect(useEventsStore().wsState).toBe("connected");
     expect(useEventsStore().connections).toBe(1);
   });
@@ -100,6 +101,42 @@ describe("realtime", () => {
       queryKeys.extensionStores(),
       queryKeys.extensions("anime"),
     ]);
+  });
+
+  it("fetches the anime's episodes again when an episode is marked watched or a session closes", () => {
+    sockets.last.open();
+    sockets.last.ack();
+    const spy = vi.spyOn(queryClient, "invalidateQueries");
+    const session = {
+      id: "s1",
+      episodeId: 5,
+      animeId: 7,
+      title: "One Piece - Episode 1",
+      videoTitle: "1080p",
+      state: "RUNNING",
+      startedAt: "1",
+      endedAt: null,
+      exitCode: null,
+      positionSeconds: 1300,
+      durationSeconds: 1500,
+      paused: false,
+    };
+    const send = (type: string) =>
+      sockets.last.receive({
+        id: opId("playbackEvents"),
+        type: "next",
+        payload: {
+          data: {
+            playbackEvents: { type, session, nextEpisodeId: null, reason: null, message: null },
+          },
+        },
+      });
+
+    send("PROGRESS");
+    expect(spy).not.toHaveBeenCalled();
+    send("WATCHED");
+    send("CLOSED");
+    expect(invalidatedKeys(spy)).toEqual([queryKeys.episodes(7), queryKeys.episodes(7)]);
   });
 
   it("keeps the latest install step per package, and invalidates only when it ends", () => {
@@ -160,7 +197,7 @@ describe("realtime", () => {
 
     sockets.last.open();
     sockets.last.ack();
-    expect(sockets.last.sentOfType("subscribe")).toHaveLength(2);
+    expect(sockets.last.sentOfType("subscribe")).toHaveLength(3);
     // a reconnect may have missed events: the lists are fetched again
     expect(invalidatedKeys(invalidate)).toEqual([
       queryKeys.extensionStores(),

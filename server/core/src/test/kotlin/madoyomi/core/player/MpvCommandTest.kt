@@ -124,7 +124,7 @@ class MpvCommandTest {
     }
 
     @Test
-    fun `each subtitle and audio track is appended on its own`() {
+    fun `subtitle and audio tracks are kept for IPC with their labels, not put in the include file`() {
         val built =
             MpvCommand.build(
                 video(
@@ -133,13 +133,20 @@ class MpvCommandTest {
                 ),
                 options,
             )
+        assertEquals(listOf("force-media-title"), decode(built.include).map { it.first })
         assertEquals(
             listOf(
-                "sub-files-append" to "https://subs/en,1.vtt",
-                "sub-files-append" to "C:\\Users\\me\\subs\\ep 1.ass",
-                "audio-files-append" to "https://audio/ja.m4a",
+                MpvCommand.Track(MpvCommand.Track.Kind.SUBTITLE, "https://subs/en,1.vtt", "English"),
+                MpvCommand.Track(MpvCommand.Track.Kind.SUBTITLE, "C:\\Users\\me\\subs\\ep 1.ass", "English"),
+                MpvCommand.Track(MpvCommand.Track.Kind.AUDIO, "https://audio/ja.m4a", "Japanese"),
             ),
-            decode(built.include).drop(1),
+            built.tracks,
+        )
+        assertEquals(listOf("sub-add", "https://subs/en,1.vtt", "select", "English"), built.tracks[0].command(select = true))
+        assertEquals(listOf("audio-add", "https://audio/ja.m4a", "auto", "Japanese"), built.tracks[2].command(select = false))
+        assertEquals(
+            listOf("sub-add", "u", "auto", "Subtitles"),
+            MpvCommand.Track(MpvCommand.Track.Kind.SUBTITLE, "u", " ").command(select = false),
         )
         assertEquals(listOf("subtitle track English: no usable URL"), built.dropped)
     }

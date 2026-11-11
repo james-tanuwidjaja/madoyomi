@@ -22,8 +22,8 @@ import java.util.Locale
  *
  * Headers (S4): `User-Agent` → `user-agent`, `Referer` → `referrer`, every other header one
  * `http-header-fields-append=Name: value` (never the comma-joined `http-header-fields`, which splits values on `,`).
- * Subtitles and audio tracks are one `sub-files-append`/`audio-files-append` each. `--ytdl=no` always: otherwise mpv's
- * ytdl hook retries a failed URL through yt-dlp with a browser User-Agent.
+ * Subtitles and audio tracks are not in the file: the session adds them over IPC with their labels ([Track]).
+ * `--ytdl=no` always: otherwise mpv's ytdl hook retries a failed URL through yt-dlp with a browser User-Agent.
  *
  * A header with an invalid name or a line break, and an `mpvArgs` option that would take control away from Madoyomi
  * ([DENIED_OPTIONS]: the IPC pipe, config and script loading, files it would write) are left out and listed in
@@ -50,7 +50,32 @@ object MpvCommand {
         val include: String,
         /** What was left out, and why (for the log). */
         val dropped: List<String>,
+        /** The external subtitle and audio tracks, added over IPC once the file is loaded ([Track.command]). */
+        val tracks: List<Track> = emptyList(),
     )
+
+    /**
+     * An external subtitle or audio track. It is added over IPC (`sub-add`/`audio-add` with the source's label as its
+     * title) rather than with `sub-files-append`/`audio-files-append`, which can't name a track: mpv would show the
+     * URL's file name. The first subtitle track is selected (as mpv selects a single `--sub-file`), and the first
+     * audio track when the file has no audio of its own.
+     */
+    data class Track(
+        val kind: Kind,
+        val url: String,
+        val title: String,
+    ) {
+        enum class Kind { SUBTITLE, AUDIO }
+
+        /** The IPC command; [select] selects the track as it is added. */
+        fun command(select: Boolean): List<String> =
+            listOf(
+                if (kind == Kind.SUBTITLE) "sub-add" else "audio-add",
+                url,
+                if (select) "select" else "auto",
+                title.ifBlank { if (kind == Kind.SUBTITLE) "Subtitles" else "Audio" },
+            )
+    }
 
     fun pipePath(
         name: String,
@@ -90,16 +115,17 @@ object MpvCommand {
                 else -> option("http-header-fields-append", "$name: $value")
             }
         }
+        val tracks = mutableListOf<Track>()
         for (track in video.subtitleTracks) {
             when {
                 track.url.isBlank() || hasLineBreak(track.url) -> dropped += "subtitle track ${track.lang}: no usable URL"
-                else -> option("sub-files-append", track.url)
+                else -> tracks += Track(Track.Kind.SUBTITLE, track.url.trim(), track.lang.trim())
             }
         }
         for (track in video.audioTracks) {
             when {
                 track.url.isBlank() || hasLineBreak(track.url) -> dropped += "audio track ${track.lang}: no usable URL"
-                else -> option("audio-files-append", track.url)
+                else -> tracks += Track(Track.Kind.AUDIO, track.url.trim(), track.lang.trim())
             }
         }
         for (arg in video.mpvArgs) {
@@ -126,7 +152,7 @@ object MpvCommand {
                 add("--")
                 add(url)
             }
-        return Built(args, include.toString(), dropped)
+        return Built(args, include.toString(), dropped, tracks)
     }
 
     /**

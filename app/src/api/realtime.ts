@@ -12,8 +12,9 @@ import {
 import {
   EXTENSION_INSTALL_PROGRESS_SUBSCRIPTION,
   EXTENSION_STORE_REFRESHED_SUBSCRIPTION,
+  PLAYBACK_EVENTS_SUBSCRIPTION,
 } from "./operations/subscriptions";
-import type { ExtensionInstallProgress, ExtensionStoreRefreshed } from "./types";
+import type { ExtensionInstallProgress, ExtensionStoreRefreshed, PlaybackEvent } from "./types";
 import { mediaKindOf } from "./types";
 
 /**
@@ -51,6 +52,8 @@ export interface RealtimeOptions {
  *   port after a restart;
  * - subscribes to `extensionInstallProgress` and `extensionStoreRefreshed` for the app's lifetime, records them in
  *   the events store and invalidates the queries they change;
+ * - subscribes to `playbackEvents`: when an episode is marked watched or a session closes (its progress saved), the
+ *   anime's episode list is fetched again (Phase 4 Stage 2; Stage 3 shows live progress);
  * - after a reconnect (events may have been missed: nothing is replayed) invalidates the extension and repo queries;
  * - when the backend comes back, refetches the queries that failed while it was away.
  *
@@ -108,6 +111,19 @@ export function startRealtime(options: RealtimeOptions): {
         void queryClient.invalidateQueries({ queryKey: queryKeys.extensions(mediaKindOf(e.type)) });
       },
       error: (e) => console.warn("extensionStoreRefreshed subscription failed:", e.code, e.message),
+    },
+  );
+
+  client.subscribe<{ playbackEvents: PlaybackEvent }>(
+    PLAYBACK_EVENTS_SUBSCRIPTION,
+    {},
+    {
+      next: ({ playbackEvents: e }) => {
+        if (e.type === "WATCHED" || e.type === "CLOSED") {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.episodes(e.session.animeId) });
+        }
+      },
+      error: (e) => console.warn("playbackEvents subscription failed:", e.code, e.message),
     },
   );
 
