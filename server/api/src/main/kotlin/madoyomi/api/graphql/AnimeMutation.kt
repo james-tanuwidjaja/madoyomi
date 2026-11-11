@@ -34,8 +34,8 @@ import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * The anime counterparts of upstream's `fetchSourceManga`, `fetchMangaAndChapters`, `fetchChapterPages`, `updateManga(s)` and
- * `updateSourcePreference`, over the core services (`madoyomi.core.anime`). Permissions as upstream's.
+ * The anime counterparts of upstream's `fetchSourceManga`, `fetchMangaAndChapters`, `fetchChapterPages`, `updateManga(s)`,
+ * `updateChapter(s)` and `updateSourcePreference`, over the core services (`madoyomi.core.anime`). Permissions as upstream's.
  */
 class AnimeMutation {
     enum class FetchSourceAnimeType {
@@ -273,6 +273,93 @@ class AnimeMutation {
         future {
             updateAnimes(input.ids, input.patch)
             UpdateAnimesPayload(input.clientMutationId, AnimeType.byIds(input.ids.distinct()))
+        }
+
+    data class UpdateEpisodePatch(
+        val isWatched: Boolean? = null,
+        val isBookmarked: Boolean? = null,
+        @GraphQLDescription(
+            "The playback position in MILLISECONDS (as EpisodeType.lastSecondSeen), clamped to 0 and to totalSeconds when known",
+        )
+        val lastSecondSeen: Long? = null,
+    )
+
+    data class UpdateEpisodeInput(
+        val clientMutationId: String? = null,
+        val id: Int,
+        val patch: UpdateEpisodePatch,
+    )
+
+    data class UpdateEpisodePayload(
+        val clientMutationId: String?,
+        val episode: EpisodeType,
+    )
+
+    data class UpdateEpisodesInput(
+        val clientMutationId: String? = null,
+        val ids: List<Int>,
+        val patch: UpdateEpisodePatch,
+    )
+
+    data class UpdateEpisodesPayload(
+        val clientMutationId: String?,
+        @GraphQLDescription("In the given order, each id once")
+        val episodes: List<EpisodeType>,
+    )
+
+    /**
+     * Upstream's `updateChapters` for episodes (Phase 4 Stage 3): `isWatched`, `isBookmarked` and `lastSecondSeen`
+     * (milliseconds, as the player stores it). Marking unwatched also clears the position, as the Aniyomi app's
+     * `SetSeenStatus` does, unless the patch sets one; marking watched keeps it. The duration is never changed here.
+     * Every id must exist (`NOT_FOUND` otherwise, before anything is written).
+     */
+    private fun updateEpisodes(
+        ids: List<Int>,
+        patch: UpdateEpisodePatch,
+    ) {
+        if (ids.isEmpty()) return
+        dbTransaction {
+            val rows = ids.distinct().map(AnimeEntries::episodeRow)
+            val position = patch.lastSecondSeen ?: if (patch.isWatched == false) 0L else null
+            if (patch.isWatched == null && patch.isBookmarked == null && position == null) return@dbTransaction
+            rows.forEach { row ->
+                val total = row[EpisodeTable.totalSeconds]
+                EpisodeTable.update({ EpisodeTable.id eq row[EpisodeTable.id] }) {
+                    patch.isWatched?.let { watched -> it[EpisodeTable.watched] = watched }
+                    patch.isBookmarked?.let { bookmark -> it[EpisodeTable.bookmark] = bookmark }
+                    position?.let { ms ->
+                        it[EpisodeTable.lastSecondSeen] = ms.coerceAtLeast(0).let { p -> if (total > 0) p.coerceAtMost(total) else p }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun episodesByIds(ids: List<Int>): List<EpisodeType> {
+        if (ids.isEmpty()) return emptyList()
+        val byId =
+            dbTransaction {
+                EpisodeTable.selectAll().where { EpisodeTable.id inList ids }.associate { it[EpisodeTable.id].value to EpisodeType(it) }
+            }
+        return ids.mapNotNull(byId::get)
+    }
+
+    @RequireAuth
+    @GraphQLDescription(
+        "Changes an episode: watched (false also clears the position), bookmarked, the position; as upstream's updateChapter",
+    )
+    fun updateEpisode(input: UpdateEpisodeInput): CompletableFuture<UpdateEpisodePayload?> =
+        future {
+            updateEpisodes(listOf(input.id), input.patch)
+            UpdateEpisodePayload(input.clientMutationId, EpisodeType(AnimeEntries.episodeRow(input.id)))
+        }
+
+    @RequireAuth
+    @GraphQLDescription("Changes several episodes at once (e.g. mark watched), as upstream's updateChapters")
+    fun updateEpisodes(input: UpdateEpisodesInput): CompletableFuture<UpdateEpisodesPayload?> =
+        future {
+            updateEpisodes(input.ids, input.patch)
+            UpdateEpisodesPayload(input.clientMutationId, episodesByIds(input.ids.distinct()))
         }
 
     data class UpdateAnimeSourcePreferenceInput(

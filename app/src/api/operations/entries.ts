@@ -5,6 +5,7 @@ import type {
   AnimeSeason,
   Chapter,
   Episode,
+  EpisodePatch,
   LibraryEntry,
   Manga,
   MangaRefresh,
@@ -14,7 +15,8 @@ import type {
 /*
  * Stored entries and their children: Madoyomi's `anime`/`episodes` and upstream's `manga`/`chapters` (database reads),
  * the refreshes from the source (`fetchAnimeAndEpisodes`; upstream's `fetchManga` + `fetchChapters`), the library flag
- * (`updateAnime`, upstream's `updateManga`) and the library lists.
+ * (`updateAnime`, upstream's `updateManga`), the library lists, and the episodes' watched marks (`updateEpisodes`, upstream's
+ * `updateChapters`; Phase 4 Stage 3).
  */
 
 const ANIME_FIELDS = /* GraphQL */ `
@@ -220,6 +222,17 @@ export const UPDATE_MANGA_MUTATION = /* GraphQL */ `
   ${MANGA_FIELDS}
 `;
 
+export const UPDATE_EPISODES_MUTATION = /* GraphQL */ `
+  mutation UpdateEpisodes($ids: [Int!]!, $patch: UpdateEpisodePatchInput!) {
+    updateEpisodes(input: { ids: $ids, patch: $patch }) {
+      episodes {
+        ...EpisodeFields
+      }
+    }
+  }
+  ${EPISODE_FIELDS}
+`;
+
 const LIBRARY_FIELDS = `
   id
   title
@@ -335,6 +348,19 @@ export async function setInLibrary(
   return (
     await api.gql<{ updateManga: { manga: Manga } }>(UPDATE_MANGA_MUTATION, { id, inLibrary })
   ).updateManga.manga;
+}
+
+/**
+ * Changes episodes (watched, bookmarked, the position in milliseconds); returns them as stored, in the given order.
+ * `isWatched: false` also clears the position, as in Aniyomi.
+ */
+export async function updateEpisodes(ids: number[], patch: EpisodePatch): Promise<Episode[]> {
+  return (
+    await api.gql<{ updateEpisodes: { episodes: Episode[] } }>(UPDATE_EPISODES_MUTATION, {
+      ids,
+      patch,
+    })
+  ).updateEpisodes.episodes;
 }
 
 type LibraryNode = Omit<LibraryEntry, "kind" | "inLibraryAt"> & { inLibraryAt: string };

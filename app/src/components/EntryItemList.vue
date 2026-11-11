@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import type { MediaKind } from "../api/types";
 import { useItemListStore } from "../stores/itemList";
 import {
@@ -12,6 +12,7 @@ import {
   type ProgressFilter,
 } from "../utils/entryItems";
 import { formatCount, formatDate } from "../utils/format";
+import { progressShare, progressText } from "../utils/progress";
 import VirtualList from "./VirtualList.vue";
 
 /**
@@ -20,6 +21,11 @@ import VirtualList from "./VirtualList.vue";
  * so a list of 1000+ rows keeps only what is in view in the DOM. The sort is kept per kind, the filters per entry
  * for the session (stores/itemList.ts). A row's actions come from the `actions` slot (EpisodeList: Play), and a
  * notice above the rows (an action's error) from the `notice` slot. Reading chapters comes in Phase 5.
+ *
+ * With `selectable` (EpisodeList, Phase 4 Stage 3) each row has a checkbox: Shift+click selects a range of the rows
+ * as shown, and a bar above the rows shows the count, the `bulk-actions` slot (with the selected ids), "Select all
+ * shown" and Clear. The selection (`v-model:selected`, ids) is cleared when the entry changes. A row with
+ * `progress` shows how far it was watched (a bar and "mm:ss left"), and `playing` marks the one mpv plays.
  */
 const props = defineProps<{
   kind: MediaKind;
@@ -31,6 +37,15 @@ const props = defineProps<{
   doneLabels: { done: string; notDone: string };
   /** What the rows can't do yet. */
   note: string;
+  /** Rows can be selected (a checkbox each) for the `bulk-actions` slot. */
+  selectable?: boolean;
+}>();
+const selected = defineModel<number[]>("selected", { default: () => [] });
+
+defineSlots<{
+  notice(): unknown;
+  actions(props: { item: ListItem }): unknown;
+  "bulk-actions"(props: { ids: number[] }): unknown;
 }>();
 
 const store = useItemListStore();
@@ -91,6 +106,61 @@ const shown = computed(() =>
 const resetKey = computed(() =>
   JSON.stringify([props.entryId, sort.value, effectiveFilters.value]),
 );
+
+// ---------------------------------------------------------------------------------------------------------------
+// Selection
+
+const selectedSet = computed(() => new Set(selected.value));
+/** The row a Shift+click extends from: the last one clicked. */
+const anchor = ref<number | null>(null);
+
+watch(
+  () => props.entryId,
+  () => {
+    selected.value = [];
+    anchor.value = null;
+  },
+);
+
+function onSelect(event: MouseEvent, id: number) {
+  const next = new Set(selectedSet.value);
+  const on = !next.has(id);
+  const ids = shown.value.map((i) => i.id);
+  const from = anchor.value === null ? -1 : ids.indexOf(anchor.value);
+  const to = ids.indexOf(id);
+  if (event.shiftKey && from >= 0 && to >= 0) {
+    for (const i of ids.slice(Math.min(from, to), Math.max(from, to) + 1)) {
+      if (on) next.add(i);
+      else next.delete(i);
+    }
+  } else if (on) next.add(id);
+  else next.delete(id);
+  anchor.value = id;
+  selected.value = [...next];
+}
+
+function selectAllShown() {
+  selected.value = [...new Set([...selected.value, ...shown.value.map((i) => i.id)])];
+}
+
+function clearSelection() {
+  selected.value = [];
+  anchor.value = null;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Progress
+
+/** A row's progress to show: it has a position, and it isn't watched (unless it is playing again). */
+function progressOf(item: ListItem) {
+  const p = item.progress;
+  if (!p || p.positionMs <= 0 || (item.done && !item.playing)) return null;
+  return {
+    text: progressText(p),
+    percent: Math.round(progressShare(p) * 1000) / 10,
+    known: p.durationMs > 0,
+  };
+}
 
 const countLine = computed(() => {
   const total = formatCount(props.items.length, props.noun.one, props.noun.many);
@@ -154,6 +224,24 @@ const countLine = computed(() => {
       <span>{{ note }}</span>
     </p>
     <slot name="notice" />
+    <div
+      v-if="selectable && selected.length"
+      class="bulk"
+      role="toolbar"
+      aria-label="Selected"
+      data-testid="bulk-bar"
+    >
+      <span data-testid="selected-count"
+        >{{ selected.length.toLocaleString("en-US") }} selected</span
+      >
+      <slot name="bulk-actions" :ids="selected" />
+      <button type="button" class="btn" data-action="select-all" @click="selectAllShown">
+        Select all shown
+      </button>
+      <button type="button" class="btn" data-action="clear-selection" @click="clearSelection">
+        Clear
+      </button>
+    </div>
 
     <p v-if="items.length === 0" class="muted" data-testid="items-none">No {{ noun.many }} yet.</p>
     <p v-else-if="shown.length === 0" class="muted" data-testid="items-filtered-out">
@@ -170,12 +258,44 @@ const countLine = computed(() => {
       data-testid="item-rows"
     >
       <template #default="{ item }">
-        <div class="row" :class="{ done: item.done }" data-testid="item-row" :data-id="item.id">
+        <div
+          class="row"
+          :class="{ done: item.done, selected: selectedSet.has(item.id) }"
+          data-testid="item-row"
+          :data-id="item.id"
+        >
+          <input
+            v-if="selectable"
+            type="checkbox"
+            class="select"
+            :checked="selectedSet.has(item.id)"
+            :aria-label="`Select ${item.name}`"
+            data-testid="item-select"
+            @click="onSelect($event, item.id)"
+          />
           <div class="text">
             <span class="name">{{ item.name }}</span>
             <span class="sub">
+              <span v-if="item.playing" class="playing" data-testid="item-playing">{{
+                item.playing === "paused" ? "Paused" : "Playing"
+              }}</span>
+              <span v-if="progressOf(item)" data-testid="item-progress-text">{{
+                progressOf(item)!.text
+              }}</span>
               <span v-if="item.date">{{ formatDate(item.date) }}</span>
               <span v-if="item.scanlator">{{ item.scanlator }}</span>
+            </span>
+            <span
+              v-if="progressOf(item)?.known"
+              class="bar"
+              role="progressbar"
+              aria-label="Watched"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              :aria-valuenow="progressOf(item)!.percent"
+              data-testid="item-progress-bar"
+            >
+              <span class="bar-fill" :style="{ width: `${progressOf(item)!.percent}%` }" />
             </span>
           </div>
           <span class="badges">
@@ -250,12 +370,54 @@ const countLine = computed(() => {
   background: var(--color-surface);
 }
 
+.row.selected {
+  border-color: var(--color-accent);
+}
+
+.select {
+  flex: none;
+  margin: 0;
+}
+
+.bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.playing {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.bar {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--color-border-strong);
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+
 .row.done .name {
   color: var(--color-text-tertiary);
 }
 
 .text {
   display: grid;
+  flex: 1;
   gap: 2px;
   min-width: 0;
 }

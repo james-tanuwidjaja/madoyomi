@@ -26,7 +26,9 @@ const ops = vi.hoisted(() => ({
   refreshAnime: vi.fn(),
   setInLibrary: vi.fn(),
   fetchEpisodeVideos: vi.fn(),
+  fetchHosterVideos: vi.fn(),
   playEpisode: vi.fn(),
+  updateEpisodes: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -306,7 +308,7 @@ describe("AnimeDetailsView", () => {
     expect(wrapper.find('[data-testid="not-stored"]').text()).toContain("This anime isn't stored");
   });
 
-  it("plays an episode: its first ready hoster's preferred video, with the row busy until mpv starts", async () => {
+  it("plays an episode through the picker: its first ready hoster's preferred video preselected", async () => {
     let started!: (s: PlaybackSession) => void;
     ops.fetchEpisodeVideos.mockResolvedValue([
       hoster({ index: 0, name: "Down", state: "ERROR", videos: [], errorCode: "SOURCE_FAILED" }),
@@ -321,48 +323,110 @@ describe("AnimeDetailsView", () => {
     await flushPromises();
 
     expect(ops.fetchEpisodeVideos).toHaveBeenCalledWith(1003);
+    const picker = document.body.querySelector('[data-testid="video-picker"]')!;
+    expect(picker.querySelector(".dialog-title")!.textContent).toBe("Episode 3");
+    const confirm = picker.querySelector<HTMLButtonElement>('[data-action="confirm-play"]')!;
+    confirm.click();
+    await flushPromises();
     expect(ops.playEpisode).toHaveBeenCalledWith({
       episodeId: 1003,
       hosterIndex: 1,
       videoIndex: 1,
+      startSeconds: null,
     });
-    expect(play.text()).toBe("Starting…");
-    expect(play.attributes("disabled")).toBeDefined();
-    // the other rows stay playable
-    expect(wrapper.findAll('[data-action="play"]')[1]!.attributes("disabled")).toBeUndefined();
+    expect(confirm.textContent).toContain("Starting…");
 
     started(session(1003));
     await flushPromises();
-    expect(play.text()).toBe("Play");
-    expect(wrapper.find('[data-testid="play-error"]').exists()).toBe(false);
+    expect(document.body.querySelector('[data-testid="video-picker"]')).toBeNull();
   });
 
-  it("shows why an episode can't play: the failed hoster's error, or mpv's", async () => {
-    ops.fetchEpisodeVideos.mockResolvedValue([
-      hoster({
-        name: "Down",
-        state: "ERROR",
-        videos: [],
-        errorCode: "SOURCE_FAILED",
-        errorMessage: "HTTP error 503",
-      }),
-    ]);
+  it("resumes an episode stopped halfway from the picker", async () => {
+    episodes = makeEpisodes(3).map((e) =>
+      e.id === 1002 ? { ...e, lastSecondSeen: "752043", totalSeconds: "1500125" } : e,
+    );
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster()]);
+    ops.playEpisode.mockResolvedValue(session(1002));
     await mountDetails();
 
-    await wrapper.find('[data-action="play"]').trigger("click");
+    const row = wrapper.findAll('[data-testid="item-row"]')[1]!;
+    expect(row.find('[data-testid="item-progress-text"]').text()).toBe("12:28 left");
+    await row.find('[data-action="play"]').trigger("click");
     await flushPromises();
-    expect(ops.playEpisode).not.toHaveBeenCalled();
-    const notice = wrapper.find('[data-testid="play-error"]');
-    expect(notice.text()).toContain("Couldn't play the episode");
-    expect(notice.text()).toContain("SOURCE_FAILED");
-    expect(notice.text()).toContain("Down: HTTP error 503");
-
-    ops.fetchEpisodeVideos.mockResolvedValue([hoster()]);
-    ops.playEpisode.mockRejectedValue(
-      new ApiError({ kind: "graphql", code: "PLAYER_NOT_FOUND", message: "mpv was not found" }),
+    document.body.querySelector<HTMLButtonElement>('[data-action="resume"]')!.click();
+    await flushPromises();
+    expect(ops.playEpisode).toHaveBeenCalledWith(
+      expect.objectContaining({ episodeId: 1002, startSeconds: 752.043 }),
     );
-    await wrapper.find('[data-action="play"]').trigger("click");
+  });
+
+  it("marks selected episodes watched and unwatched, updating the rows from what is stored", async () => {
+    episodes = makeEpisodes(3).map((e) =>
+      e.id === 1001 ? { ...e, lastSecondSeen: "60000", totalSeconds: "1500000" } : e,
+    );
+    ops.updateEpisodes.mockImplementation(async (ids: number[], patch: { isWatched: boolean }) =>
+      episodes
+        .filter((e) => ids.includes(e.id))
+        .map((e) => ({
+          ...e,
+          isWatched: patch.isWatched,
+          lastSecondSeen: patch.isWatched ? e.lastSecondSeen : "0",
+        })),
+    );
+    await mountDetails();
+    const boxes = () => wrapper.findAll('[data-testid="item-select"]');
+    const watched = () =>
+      wrapper.findAll('[data-testid="item-row"]').map((r) => r.text().includes("Watched"));
+
+    // shown newest first: 3, 2, 1
+    await boxes()[1]!.trigger("click");
+    await boxes()[2]!.trigger("click");
+    await button("mark-watched").trigger("click");
     await flushPromises();
-    expect(wrapper.find('[data-testid="play-error"]').text()).toContain("mpv wasn't found");
+    expect(ops.updateEpisodes).toHaveBeenCalledWith([1002, 1001], { isWatched: true });
+    expect(watched()).toEqual([false, true, true]);
+    expect(wrapper.find('[data-testid="bulk-bar"]').exists()).toBe(false);
+    expect(ops.fetchEpisodes).toHaveBeenCalledTimes(1);
+
+    await boxes()[2]!.trigger("click");
+    await button("mark-unwatched").trigger("click");
+    await flushPromises();
+    expect(ops.updateEpisodes).toHaveBeenLastCalledWith([1001], { isWatched: false });
+    expect(watched()).toEqual([false, true, false]);
+    // unwatched also cleared the position
+    const cached = queryClient.getQueryData<Episode[]>(queryKeys.episodes(12))!;
+    expect(cached.find((e) => e.id === 1001)!.lastSecondSeen).toBe("0");
+  });
+
+  it("marks every earlier episode in the source's order watched", async () => {
+    episodes = makeEpisodes(4).map((e) => (e.id === 1002 ? { ...e, isWatched: true } : e));
+    ops.updateEpisodes.mockImplementation(async (ids: number[]) =>
+      episodes.filter((e) => ids.includes(e.id)).map((e) => ({ ...e, isWatched: true })),
+    );
+    await mountDetails();
+
+    // shown newest first: 4, 3, 2, 1; select episode 4
+    await wrapper.findAll('[data-testid="item-select"]')[0]!.trigger("click");
+    await button("mark-previous").trigger("click");
+    await flushPromises();
+    // episode 2 was already watched
+    expect(ops.updateEpisodes).toHaveBeenCalledWith([1001, 1003], { isWatched: true });
+
+    // the oldest has no previous one
+    await wrapper.findAll('[data-testid="item-select"]')[3]!.trigger("click");
+    expect(button("mark-previous").attributes("disabled")).toBeDefined();
+  });
+
+  it("shows a failed mark above the rows", async () => {
+    ops.updateEpisodes.mockRejectedValue(
+      new ApiError({ kind: "graphql", code: "NOT_FOUND", message: "No episode with id 1003" }),
+    );
+    await mountDetails();
+    await wrapper.findAll('[data-testid="item-select"]')[0]!.trigger("click");
+    await button("mark-watched").trigger("click");
+    await flushPromises();
+    expect(wrapper.find('[data-testid="mark-error"]').text()).toContain("NOT_FOUND");
+    // the selection stays, for a retry
+    expect(wrapper.find('[data-testid="selected-count"]').text()).toBe("1 selected");
   });
 });

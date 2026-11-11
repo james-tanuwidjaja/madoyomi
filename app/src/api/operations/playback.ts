@@ -2,7 +2,7 @@ import { api } from "../client";
 import type { HosterChoice, PlaybackSession } from "../types";
 
 /*
- * Playback (Phase 4): the episode's videos (`fetchEpisodeVideos`), and the backend's mpv session (`playEpisode`,
+ * Playback (Phase 4): the episode's videos (`fetchEpisodeVideos`, one hoster with `fetchHosterVideos`), and the backend's mpv session (`playEpisode`,
  * `stopPlayback`, `playbackSession`). The backend owns mpv: it resolves the video right before the launch and sends
  * its headers, so the UI never needs a video's headers or tracks, only what to choose between.
  */
@@ -24,33 +24,53 @@ export const PLAYBACK_SESSION_FIELDS = /* GraphQL */ `
   }
 `;
 
+/** What the picker shows of a hoster and its videos (never a URL or a header: the backend keeps those). */
+const HOSTER_CHOICE_FIELDS = /* GraphQL */ `
+  fragment HosterChoiceFields on EpisodeHosterType {
+    index
+    name
+    lazy
+    state
+    errorCode
+    errorMessage
+    videos {
+      index
+      videoTitle
+      resolution
+      bitrate
+      preferred
+      initialized
+      subtitleTracks {
+        lang
+      }
+      audioTracks {
+        lang
+      }
+    }
+  }
+`;
+
 export const EPISODE_VIDEOS_MUTATION = /* GraphQL */ `
   mutation EpisodeVideos($episodeId: Int!) {
     fetchEpisodeVideos(input: { episodeId: $episodeId }) {
       hosters {
-        index
-        name
-        lazy
-        state
-        errorCode
-        errorMessage
-        videos {
-          index
-          videoTitle
-          resolution
-          bitrate
-          preferred
-          initialized
-          subtitleTracks {
-            lang
-          }
-          audioTracks {
-            lang
-          }
-        }
+        ...HosterChoiceFields
       }
     }
   }
+  ${HOSTER_CHOICE_FIELDS}
+`;
+
+/** One hoster of the episode's last `fetchEpisodeVideos`: a lazy one loaded, or a failed one retried. */
+export const HOSTER_VIDEOS_MUTATION = /* GraphQL */ `
+  mutation HosterVideos($episodeId: Int!, $hosterIndex: Int!) {
+    fetchHosterVideos(input: { episodeId: $episodeId, hosterIndex: $hosterIndex }) {
+      hoster {
+        ...HosterChoiceFields
+      }
+    }
+  }
+  ${HOSTER_CHOICE_FIELDS}
 `;
 
 export const PLAY_EPISODE_MUTATION = /* GraphQL */ `
@@ -103,6 +123,19 @@ export async function fetchEpisodeVideos(episodeId: number): Promise<HosterChoic
       episodeId,
     })
   ).fetchEpisodeVideos.hosters;
+}
+
+/** Loads one hoster of the episode (lazy, or failed before) and returns it with its videos, or its error. */
+export async function fetchHosterVideos(
+  episodeId: number,
+  hosterIndex: number,
+): Promise<HosterChoice> {
+  return (
+    await api.gql<{ fetchHosterVideos: { hoster: HosterChoice } }>(HOSTER_VIDEOS_MUTATION, {
+      episodeId,
+      hosterIndex,
+    })
+  ).fetchHosterVideos.hoster;
 }
 
 export interface PlayRequest {

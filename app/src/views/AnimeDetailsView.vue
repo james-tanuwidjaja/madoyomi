@@ -189,7 +189,14 @@ const seasonCards = computed<EntrySummary[]>(() =>
         >
           Fetching the episodes from {{ page.sourceName.value }}…
         </p>
-        <EpisodeList v-else class="list" :anime-id="id" :episodes="episodes.data.value ?? []" />
+        <EpisodeList
+          v-else
+          class="list"
+          :anime-id="id"
+          :episodes="episodes.data.value ?? []"
+          :source-id="entry.sourceId"
+          :source-name="page.sourceName.value"
+        />
       </section>
     </template>
   </PageLayout>

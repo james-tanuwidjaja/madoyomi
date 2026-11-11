@@ -76,9 +76,9 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 - [ ] Proxy fallback for headers mpv can't send
 
 ### Frontend
-- [ ] `VideoPicker` dialog with remembered choice
-- [ ] Resume / start-over prompt
-- [ ] Progress + watched state in episode list; bulk mark
+- [x] `VideoPicker` dialog with remembered choice (Stage 3: the hosters with Load/Retry, quality and track counts, "Source's pick" and "Last used", the last choice per source on this device; `VideoPicker.spec.ts`, `videoChoices.spec.ts`, `videos.spec.ts`, and live in `pnpm tauri dev`: a non-default video played, and was preselected as "Last used" after an app restart, §10)
+- [x] Resume / start-over prompt (Stage 3: the picker's footer between 1 % and 85 %; `progress.spec.ts`, `VideoPicker.spec.ts`, `AnimeDetailsView.spec.ts`, and live in `pnpm tauri dev`: "Resume from 12:37" after an app restart, and mpv started 0.00 s from the stored position, §10)
+- [x] Progress + watched state in episode list; bulk mark (Stage 3: live rows from `playbackEvents` through `stores/playback.ts`, the Watched badge at once, checkboxes with Shift+click ranges and "Mark previous as watched", through `updateEpisodes`; `EntryItemList.spec.ts`, `realtime.spec.ts`, `AnimeDetailsView.spec.ts`, `EpisodeUpdateApiTest`, and live in `pnpm tauri dev`, §10)
 - [ ] Next-episode toast / auto-play setting
 - [ ] Player settings section
 
@@ -92,8 +92,8 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 
 ## 6. Exit criteria
 
-- [ ] Watch an episode from the UI, close mpv halfway, reopen the app, and resume within ±5 s of where you stopped.
-- [ ] An episode passing the watched threshold shows as watched in the UI without a refresh.
+- [x] Watch an episode from the UI, close mpv halfway, reopen the app, and resume within ±5 s of where you stopped. (Stage 3, live in `pnpm tauri dev` on the seeded `live-data`: quit at 757.6 s, stored 757666 ms, the app closed and started again, and mpv resumed at 757.666 s, 0.00 s off, §10. The exit run repeats it from a fresh data dir.)
+- [x] An episode passing the watched threshold shows as watched in the UI without a refresh. (Stage 3, live in `pnpm tauri dev`: a seek to 1290 s of 1475 s (87 %) showed the Watched badge on the playing row at once, §10. The exit run repeats it from a fresh data dir.)
 - [ ] The next episode starts from the end-of-episode prompt.
 
 ## 7. Risks & notes
@@ -123,6 +123,11 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - live through the API (§10): AnimeGG from 60 s, a save every 5 s, a seek to halfway and a quit stored mpv's last position to the millisecond; the same episode from halfway with a seek to 99 % was marked watched once, then ENDED with the next episode; KickAssAnime's 8 subtitle and 2 audio tracks carry their labels, and `stopPlayback` quit mpv with code 0.
 2. **IPC and progress** (steps 4–8, 19): `MpvIpcClient` on the named pipe (`observe_property` on `time-pos`, `duration`, `pause`, `eof-reached`, `track-list`), a graceful `quit` before the kill, progress saved every 5 s and on pause and quit into `EPISODE.last_second_seen`/`total_seconds`, the episode marked watched once at the threshold, and a GraphQL subscription with progress, ended and error events. Verified by a fake-pipe test and a live check of the stored values after quitting halfway.
 3. **Picker, resume and watched state in the UI** (steps 12–14): `VideoPicker` (hosters, quality, subtitle and audio counts, the last choice remembered per source), the "Resume from mm:ss / Start over" prompt, progress bars and watched marks that update live, and bulk mark watched/unwatched (`updateEpisodes`). Verified by component tests and live.
+   - *Done* (2026-11-11):
+     - server: `updateEpisode`/`updateEpisodes` (`EpisodeUpdateApiTest`, 6 tests): watched, bookmarked and the position; unwatched clears the position;
+     - app: `VideoPicker` (hosters, Load/Retry, quality and track counts, the source's pick and the last-used choice, the resume prompt as its footer), the playback store with live rows ("Playing"/"Paused", "mm:ss left", a bar), the Watched badge at once, and bulk marks with Shift+click ranges and "Mark previous as watched";
+     - live through the API: a non-default video, a resume after a backend restart (0.00 s off), WATCHED at 90 %, and the bulk marks;
+     - live in `pnpm tauri dev` (§10): the picker with the DUBBED 360p played (height 360), a quit halfway shown as "11:57 left", "Last used" and "Resume from 12:37" after an app restart with mpv 0.00 s off, the row live while playing and paused, the Watched badge at 87 % without a refresh, and the three bulk marks. Both §6 criteria they cover are ticked. No fix was needed.
 4. **Next episode and errors** (steps 8, 9, 11, 15): the next-episode toast with a countdown and auto-play; on a 403/404 or an early exit, the videos fetched again once, then the next video offered. The proxy fallback is decided by measurement (mpv sends every header itself, so it is likely deferred). Verified with an expiring URL from the header proxy (`spikes/mpv-play/header-proxy.mjs`) and live.
 5. **Player settings** (steps 9, 16): the watched threshold, preferred quality, server and subtitle/audio language (sorting), and the mpv path override, in a Settings section. Verified by unit tests and a live change that takes effect.
 6. **Exit run**: the step 20 format matrix (MP4, HLS, MKV with ASS, external subtitles, multiple audio tracks, expiring URLs), every §6 criterion from a fresh data dir, and a fix round. The embedded `--wid` prototype (step 17) stays a stretch goal after the exit, not part of it.
@@ -188,6 +193,41 @@ Decided in the stage (defaults, not asked):
 - **External tracks over IPC:** subtitle and audio tracks are added with `sub-add`/`audio-add` (async), with the source's label as their title, once the file is open (`file-loaded`, or a non-empty `track-list` if the pipe connected late), instead of `sub-files-append`/`audio-files-append` in the include file. Those can't name a track, so mpv showed the URL's file name. The first subtitle track is selected (as mpv selects a single `--sub-file`), and the first audio track only when the file has no audio of its own (found live: KickAssAnime's HLS has none, and mpv's selection has already run when the tracks arrive, so it played silent). Stage 5's language preference will choose between them. The trade-off: without the pipe, there are no external tracks, but there is no progress either.
 - **The pipe:** the backend retries every 100 ms for up to 60 s after the start, and stops when mpv exits. A session without a pipe plays on, but nothing is saved (logged).
 - **UI, only what this stage needs:** the app subscribes to `playbackEvents` and fetches the anime's episodes again on WATCHED and CLOSED, so the episode list's watched state (`isWatched`, already shown) and the stored position follow without a manual refresh. Progress bars, the resume prompt and live progress are Stage 3.
+
+### Stage 3 (2026-11-11)
+
+Decided in the stage (the prompt left these to the stage; defaults, not asked):
+- **Play always opens the video picker**, even when a choice is remembered. That choice (else the source's pick) is preselected and its button focused, so Enter plays it: one extra key press over playing at once. The reasons:
+  - the source is asked for the videos each time anyway (URLs expire), which takes 10–20 s with AnimeGG, and the dialog shows that it is fetching;
+  - an episode's hosters and qualities differ from the last one's, and a lazy or failed hoster has to be seen;
+  - the resume prompt sits in the same dialog.
+
+  Stage 4's auto-play of the next episode may play the remembered choice without the dialog.
+- **The picker** (`VideoPicker`) lists each hoster in the source's order with its state:
+  - a READY hoster shows its videos;
+  - a lazy one is "Not loaded", with Load;
+  - a failed one shows its error code and message, with Retry (both through `fetchHosterVideos`).
+
+  A video shows its title, the resolution when the title doesn't have it, and its subtitle and audio-track counts. "Source's pick" marks the first READY hoster's `preferred` video, and "Last used" marks the remembered one. The dialog stays open, "Starting…", until `playEpisode` returns, and shows a failure there (`PLAYER_NOT_FOUND`, …).
+- **The last choice is remembered per source, on this device** (`localStorage` `madoyomi.videoChoices`), like the other UI preferences (Phase 3 §9). What is kept is the hoster's name and the video's title and resolution, since indexes change between episodes. It is saved when mpv starts, not when a radio button is clicked.
+  - Matching: the hoster by name (READY), then the video by its exact title, else by resolution, else that hoster's preferred or first video.
+  - A remembered hoster that is lazy is loaded by itself. If it is missing or failed, the source's pick is preselected.
+- **The resume prompt is the picker's footer.** "Resume from mm:ss" (the default) and "Start over" appear when the episode isn't watched, its duration is known, and the position is at least 1 % and below the watched threshold (85 %, `WATCHED_THRESHOLD` until Stage 5's setting). `startSeconds` is `lastSecondSeen / 1000`. Otherwise there is only Play, from the start:
+  - a watched episode starts over without asking (Aniyomi's behaviour);
+  - so does one below 1 %, or one with no known duration.
+
+  While mpv plays the episode, its live position counts rather than the stored one, which is up to 5 s older.
+- **Live progress goes through a Pinia store, not the query cache.** Every `playbackEvents` event goes into `stores/playback.ts`, and the episode list draws the playing row from it: "Playing"/"Paused", "mm:ss left", and a bar. So a PROGRESS event (once a second) refetches nothing.
+  - WATCHED marks the episode in the cached list at once, so the badge appears without waiting for a refetch.
+  - CLOSED writes the session's last position into the cached list and clears the store. Both then refetch the episodes, as Stage 2 did.
+  - After a WebSocket reconnect, the session the store followed is forgotten (its CLOSED may be lost), and its episodes are refetched.
+- **A row's progress** shows when it has a position and isn't watched (or is playing again): "12:28 left" with a bar, or "Stopped at 1:01" without a duration.
+- **Bulk marks.**
+  - Selection: each episode row has a checkbox, and Shift+click selects or clears the range from the last row clicked, in the order shown. The bar above the rows has the count, Mark watched, Mark unwatched, "Select all shown" and Clear. The selection is cleared when the entry changes and after a mark; it stays after a failed one, for a retry.
+  - **Mark previous as watched** appears with exactly one row selected. It marks every earlier unwatched episode in the source's order (lower `source_order`, all episodes, not only those shown), the same order as Stage 2's next episode. Mihon goes by the list's current sort instead; the source's order doesn't change with the user's sort.
+  - Chapters aren't selectable yet (Phase 5).
+- **`updateEpisode` / `updateEpisodes`** (api, `AnimeMutation`, in the shape of upstream's `updateChapter(s)`). The patch is `isWatched`, `isBookmarked` and `lastSecondSeen` (milliseconds, a `LongString`). Episodes are returned in the given order, each once, and an unknown id is `NOT_FOUND` with nothing written.
+- **Unmarking clears the position.** `isWatched: false` sets `last_second_seen` to 0, as the Aniyomi app's `SetSeenStatus` does, so an unwatched episode starts from the beginning without a resume prompt. A `lastSecondSeen` in the same patch wins, clamped to 0 and to the known duration. Marking watched keeps the position (Stage 2's rule), and the duration is never changed. A session playing the episode keeps saving its position and doesn't mark it again (Stage 2's once-per-session rule).
 
 ## 10. Findings log
 
@@ -274,3 +314,70 @@ Decided in the stage (defaults, not asked):
   - the backend's own shutdown while mpv plays: it quits mpv over IPC now (2 s, then the kill), as Stage 1's hook did with the kill alone. A unit test doesn't reach a shutdown hook, and it wasn't rerun live;
   - a quit past the threshold giving ENDED with `reason=quit` live: the tracker's tests cover it.
 
+
+### Stage 3 (2026-11-11)
+
+- **Baseline before the stage** (feat/phase-4-ipc merged as #28; all rerun before any edit):
+  - server: `.\gradlew.bat build` green with 711 tests, 0 failures (core 640 with 8 skipped, AndroidCompat 7, ext-host 8, api 56);
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: 34 files, 267 passed + 9 skipped; `pnpm lint`, `pnpm typecheck` and `pnpm format:check` clean;
+  - the live spec: 9/9 against the seeded `live-data`, with 36 documents validated;
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - server: 717 tests, 0 failures (core 640 with 8 skipped, AndroidCompat 7, ext-host 8, api 62). The 6 new ones are `EpisodeUpdateApiTest`;
+  - smoke: 24/24 on the new jar;
+  - app: 37 files, 307 passed + 9 skipped (40 new):
+    - `VideoPicker.spec.ts` 13;
+    - `progress.spec.ts` 9;
+    - `videoChoices.spec.ts` 2;
+    - `videos.spec.ts` 6 more;
+    - `EntryItemList.spec.ts` 4 more (progress, live rows, selection, chapters not selectable);
+    - `realtime.spec.ts` 4 (in place of the old playback test);
+    - `AnimeDetailsView.spec.ts` (the Play tests rewritten for the picker, plus resume and three bulk-mark tests);
+    - `entryItems.spec.ts` (progress and playing).
+
+    `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` are clean;
+  - the live spec: 9/9 on the new jar, with 38 documents validated (`HOSTER_VIDEOS_MUTATION` and `UPDATE_EPISODES_MUTATION` are new);
+  - `cargo test`: 17 (no Rust change).
+- **The `LongString` scalar takes a string literal:** `lastSecondSeen: 60000` is a validation error, and `"60000"` is accepted. The app's `EpisodePatch.lastSecondSeen` is a string, as the field it sets.
+- **Gradle:** `ktlintFormat` and `build`/`test` in one invocation fail on an implicit task dependency (`:core:generateJte` and `runKtlintFormatOverMainSourceSet`). Run them as two invocations.
+- **Live through the API** (a scratch script driving the real jar and the installed mpv on the seeded `live-data`; mpv muted over a second IPC client). AnimeGG, One Piece ep. 3, one hoster with 5 videos (`[SUBBED] AnimeGG:1080p` is the source's pick):
+
+  | Step | Result |
+  |---|---|
+  | `fetchHosterVideos` on that hoster (the picker's Load/Retry) | READY, 5 videos |
+  | `playEpisode` with the non-default `[DUBBED] AnimeGG:360p` | session `videoTitle` the same; mpv `height` 360, its title the anime and episode, duration 1474.98 s |
+  | a seek to halfway, `quit` at mpv's `time-pos` 740.033 | stored `lastSecondSeen` 740033, `totalSeconds` 1474977; CLOSED (EXITED, exit 0) |
+  | the backend stopped, a new one started | stored 740033 (50.2 %), so the picker offers "Resume from 12:20"; the remembered choice found again by hoster name and title |
+  | `playEpisode` with `startSeconds` = 740.033 (`lastSecondSeen / 1000`) | the first PROGRESS and mpv's `time-pos` at 740.03 s: **0.00 s off** |
+  | a seek to 90 % | WATCHED; stored `isWatched` true |
+  | `updateEpisodes` watched on 3 episodes, then unwatched on those and ep. 3 | all marked, then all unmarked with `lastSecondSeen` 0 |
+
+  The `episodes` query read back the same values. No `token=` in `madoyomi.log`, `mpv.log`, `sidecar.log` or `sidecar.1.log`.
+- **Live in `pnpm tauri dev`** (a second session; driven by clicks with computer use on the seeded `live-data`, with mpv muted and read over its named pipe by a second IPC client). AnimeGG, One Piece ep. 3 (id 3, unwatched, position 0 at the start), the list sorted ascending:
+
+  | Step | Result |
+  |---|---|
+  | Play on ep. 3 | the picker: `no_hoster_list`, 5 videos; "Source's pick" on `[SUBBED] AnimeGG:1080p`, preselected; no resume footer (position 0), only Play |
+  | `[DUBBED] AnimeGG:360p` chosen, Play | mpv opened in its own window; mpv `height` 360, duration 1474.98 s, its title the anime and episode; `madoyomi.log`: "episode 3, [DUBBED] AnimeGG:360p" |
+  | a seek to 737 s over IPC | the row: "Playing", "12:10 left", then "12:06 left" 3 s later, with a bar (PROGRESS only) |
+  | `quit` over IPC at `time-pos` 757.6 | mpv exit code 0; the row: "11:57 left" with a bar |
+  | the app closed (window closed: the backend stopped with code 0, no mpv left), stored values read | `lastSecondSeen` 757666, `totalSeconds` 1474977, not watched |
+  | `pnpm tauri dev` again, Play on ep. 3 | the row still "11:57 left"; the picker preselected `[DUBBED] AnimeGG:360p`, marked "Last used", with "You stopped at 12:37.", Start over and **Resume from 12:37** |
+  | Resume | mpv's first `time-pos` 757.666: **0.00 s off** the stored position (§6: ±5 s) |
+  | while playing; then `pause` over IPC | "Playing", "11:50 left" → "11:44 left"; then "Paused", "11:36 left" |
+  | a seek to 1290 s (87 %) over IPC | "marked watched at 1290.0 s" in the log; the **Watched badge** on the row at once, while it still said "Playing" (§6) |
+  | `quit` at 1315.4 s | mpv exit code 0; the row Watched, no progress line; the log: "ended (quit), next episode 4" |
+  | ep. 4 clicked, ep. 6 Shift+clicked | "3 selected"; Mark watched: eps. 4–6 Watched, the selection cleared |
+  | eps. 3–6 selected the same way, Mark unwatched | the badges gone; ep. 3 lost its progress line (position cleared) |
+  | ep. 7 alone selected, "Mark previous as watched" | eps. 3–6 Watched (the earlier unwatched ones), ep. 7 not. Earlier, with ep. 4 or ep. 3 alone selected while every earlier episode was watched, the button was disabled |
+  | eps. 3–6 unmarked again (the restore) | stored: eps. 1–2 watched (1499958 ms), eps. 3–7 unwatched with `lastSecondSeen` 0; 2 of 1167 episodes watched, as before the run |
+
+  No `token=` in `madoyomi.log`, `sidecar.log`, `sidecar.1.log`, `mpv.log` or either run's `pnpm tauri dev` output. mpv wrote nothing into `player/`.
+- **Stage 2's "quit past the threshold gives ENDED with `reason=quit`"** is now seen live: the quit at 1315.4 s logged "ended (quit), next episode 4".
+- **The tooling for this session.** The agent's shell was the Linux VM again, so the checks and `pnpm tauri dev` ran through the job runner (`tools/dev-data/agent/`, gitignored), with scratch scripts to start and close the app, read mpv over IPC, and read the stored values with a server of their own while the app was closed. `pnpm` prints `[ELIFECYCLE] Command failed with exit code -1` when the app window is closed; the shell's own line before it is "backend stopped (exit code 0)".
+- **Not checked:**
+  - a lazy hoster's Load and a failed hoster's Retry in the UI: AnimeGG has a single READY hoster. `fetchHosterVideos` was checked through the API, and `VideoPicker.spec.ts` covers both buttons;
+  - the subtitle and audio counts in the picker: AnimeGG's videos have none, and KickAssAnime wasn't played in this stage (`VideoPicker.spec.ts` covers them);
+  - Start over and the Enter key on the preselected button: only Resume and Play were clicked (`VideoPicker.spec.ts`);
+  - that a PROGRESS event refetches nothing was seen only as the row updating each second without the list flickering; `realtime.spec.ts` covers it, and a WebSocket reconnect forgetting the session is covered only there.

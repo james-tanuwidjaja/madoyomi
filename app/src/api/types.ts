@@ -389,6 +389,15 @@ export interface Episode {
   previewUrl: string | null;
 }
 
+/** `UpdateEpisodePatch` (`updateEpisode(s)`, Phase 4 Stage 3): what to change; a field left out stays. */
+export interface EpisodePatch {
+  /** False also clears the position (as Aniyomi does), unless `lastSecondSeen` is given. */
+  isWatched?: boolean;
+  isBookmarked?: boolean;
+  /** Milliseconds (a LongString, as the field it sets), clamped to [0, the duration if known]. */
+  lastSecondSeen?: LongString;
+}
+
 /** `MangaType`. */
 export interface Manga extends EntryBase {
   artist: string | null;

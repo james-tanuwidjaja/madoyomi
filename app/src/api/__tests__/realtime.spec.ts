@@ -7,6 +7,9 @@ import { createQueryClient, startRealtime } from "../realtime";
 import { ApiError } from "../client";
 import { useBackendStore } from "../../stores/backend";
 import { useEventsStore } from "../../stores/events";
+import { usePlaybackStore } from "../../stores/playback";
+import { makeEpisodes } from "../../test/fixtures";
+import type { Episode, PlaybackSession } from "../types";
 import { queryKeys } from "../../composables/queryKeys";
 import { backendStatus, healthyStatus } from "../../test/backendStatus";
 import { fakeSocketFactory } from "../../test/fakeSocket";
@@ -103,14 +106,11 @@ describe("realtime", () => {
     ]);
   });
 
-  it("fetches the anime's episodes again when an episode is marked watched or a session closes", () => {
-    sockets.last.open();
-    sockets.last.ack();
-    const spy = vi.spyOn(queryClient, "invalidateQueries");
-    const session = {
+  describe("playback events", () => {
+    const session: PlaybackSession = {
       id: "s1",
-      episodeId: 5,
-      animeId: 7,
+      episodeId: 1001,
+      animeId: 12,
       title: "One Piece - Episode 1",
       videoTitle: "1080p",
       state: "RUNNING",
@@ -121,22 +121,74 @@ describe("realtime", () => {
       durationSeconds: 1500,
       paused: false,
     };
-    const send = (type: string) =>
+    const send = (type: string, over: Partial<PlaybackSession> = {}) =>
       sockets.last.receive({
         id: opId("playbackEvents"),
         type: "next",
         payload: {
           data: {
-            playbackEvents: { type, session, nextEpisodeId: null, reason: null, message: null },
+            playbackEvents: {
+              type,
+              session: { ...session, ...over },
+              nextEpisodeId: null,
+              reason: null,
+              message: null,
+            },
           },
         },
       });
+    const cached = () => queryClient.getQueryData<Episode[]>(queryKeys.episodes(12))!;
 
-    send("PROGRESS");
-    expect(spy).not.toHaveBeenCalled();
-    send("WATCHED");
-    send("CLOSED");
-    expect(invalidatedKeys(spy)).toEqual([queryKeys.episodes(7), queryKeys.episodes(7)]);
+    beforeEach(() => {
+      sockets.last.open();
+      sockets.last.ack();
+      queryClient.setQueryData(queryKeys.episodes(12), makeEpisodes(2));
+    });
+
+    it("keeps the live session in the playback store, without refetching on PROGRESS", () => {
+      const spy = vi.spyOn(queryClient, "invalidateQueries");
+      send("STARTED", { positionSeconds: null });
+      send("PROGRESS", { positionSeconds: 61.5 });
+
+      expect(usePlaybackStore().session).toMatchObject({ episodeId: 1001, positionSeconds: 61.5 });
+      expect(spy).not.toHaveBeenCalled();
+      // the cached rows stay as stored
+      expect(cached()[0]!.lastSecondSeen).toBe("0");
+    });
+
+    it("marks the episode watched in the cached list at once on WATCHED, then refetches it", () => {
+      const spy = vi.spyOn(queryClient, "invalidateQueries");
+      send("WATCHED");
+
+      expect(cached().map((e) => e.isWatched)).toEqual([true, false]);
+      expect(invalidatedKeys(spy)).toEqual([queryKeys.episodes(12)]);
+    });
+
+    it("writes the last position into the cached list on CLOSED, clears the store and refetches", () => {
+      send("PROGRESS");
+      const spy = vi.spyOn(queryClient, "invalidateQueries");
+      send("CLOSED", { state: "EXITED", positionSeconds: 752.0437, durationSeconds: 1500.125 });
+
+      expect(cached()[0]).toMatchObject({ lastSecondSeen: "752044", totalSeconds: "1500125" });
+      expect(cached()[1]!.lastSecondSeen).toBe("0");
+      expect(usePlaybackStore().session).toBeNull();
+      expect(invalidatedKeys(spy)).toEqual([queryKeys.episodes(12)]);
+    });
+
+    it("forgets a session it was following after a reconnect (its CLOSED may be lost)", async () => {
+      send("PROGRESS");
+      const backend = useBackendStore();
+      backend.status = backendStatus({ seq: 3, state: "restarting" });
+      await nextTick();
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+      ready(4, 61000);
+      await nextTick();
+      sockets.last.open();
+      sockets.last.ack();
+
+      expect(usePlaybackStore().session).toBeNull();
+      expect(invalidatedKeys(invalidate)).toContainEqual(queryKeys.episodes(12));
+    });
   });
 
   it("keeps the latest install step per package, and invalidates only when it ends", () => {
