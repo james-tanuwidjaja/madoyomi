@@ -495,6 +495,10 @@ export interface Video {
   bitrate: number | null;
   headers: VideoHeader[];
   preferred: boolean;
+  /** Its position in the source's own order (`index` is its position in the list, sorted by the player settings). */
+  sourceIndex: number;
+  /** It is in the front group of its hoster by the preferred server or quality (Settings → Player); false without one. */
+  matchesPreference: boolean;
   /** False: call `resolveEpisodeVideo` before playing it. */
   initialized: boolean;
   subtitleTracks: VideoTrack[];
@@ -508,6 +512,8 @@ export type HosterState = "READY" | "IDLE" | "ERROR";
 /** `EpisodeHosterType`. */
 export interface Hoster {
   index: number;
+  /** Its position in the source's own order (`index` is its position in the list, sorted by the preferred server). */
+  sourceIndex: number;
   name: string;
   lazy: boolean;
   state: HosterState;
@@ -519,7 +525,14 @@ export interface Hoster {
 /** What the UI chooses a video by (`EPISODE_VIDEOS_MUTATION`): the backend keeps the URL and headers. */
 export type VideoChoice = Pick<
   Video,
-  "index" | "videoTitle" | "resolution" | "bitrate" | "preferred" | "initialized"
+  | "index"
+  | "videoTitle"
+  | "resolution"
+  | "bitrate"
+  | "preferred"
+  | "sourceIndex"
+  | "matchesPreference"
+  | "initialized"
 > & {
   subtitleTracks: Pick<VideoTrack, "lang">[];
   audioTracks: Pick<VideoTrack, "lang">[];
@@ -583,4 +596,45 @@ export interface PlaybackEvent {
   failedVideo: PlaybackVideoRef | null;
   /** ERROR: the video to offer instead, the next in the source's order, if there is one. */
   nextVideo: PlaybackVideoRef | null;
+}
+
+/** The schema's `QualityPreference`: the source's own order, the highest quality, or a resolution (Phase 4 Stage 5). */
+export type VideoQualityPreference =
+  "SOURCE" | "HIGHEST" | "P2160" | "P1080" | "P720" | "P480" | "P360";
+
+/**
+ * `PlayerSettingsType`: the backend's player settings (Settings → Player), kept in its data dir. A language is a
+ * `PlayerLanguage.code`, "" for the source's choice, or "off" (subtitles only); `mpvPath` "" uses `MADOYOMI_MPV` or PATH.
+ */
+export interface PlayerSettings {
+  /** The share of the duration at which an episode is marked watched: 0.5 to 0.95, in steps of 0.05. */
+  watchedThreshold: number;
+  preferredQuality: VideoQualityPreference;
+  preferredServer: string;
+  subtitleLanguage: string;
+  audioLanguage: string;
+  mpvPath: string;
+}
+
+/** `PlayerSettingsPatch`: only the fields given change. */
+export type PlayerSettingsPatch = Partial<PlayerSettings>;
+
+/** `PlayerLanguageType`: a language the track preferences can match. */
+export interface PlayerLanguage {
+  code: string;
+  name: string;
+}
+
+/** `MpvOrigin`: where the mpv in use comes from. */
+export type MpvOrigin = "SETTINGS" | "SYSTEM_PROPERTY" | "ENV" | "PATH";
+
+/** `MpvCheckType`: whether an mpv path (or the one in use) runs `mpv --version`. */
+export interface MpvCheck {
+  ok: boolean;
+  path: string | null;
+  origin: MpvOrigin | null;
+  /** The first line of `mpv --version` ("mpv v0.40.0 …"). */
+  version: string | null;
+  errorCode: ServerErrorCode | null;
+  message: string | null;
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import {
   SwitchRoot,
@@ -8,6 +8,13 @@ import {
   ToggleGroupRoot,
   type AcceptableValue,
 } from "reka-ui";
+import { checkMpv } from "../api/operations";
+import type { MpvCheck, MpvOrigin, VideoQualityPreference } from "../api/types";
+import {
+  usePlayerLanguages,
+  usePlayerSettings,
+  useSetPlayerSettings,
+} from "../composables/usePlayerSettings";
 import { useSources } from "../composables/useSources";
 import { useBackendStore } from "../stores/backend";
 import { useMediaKindStore } from "../stores/mediaKind";
@@ -20,13 +27,114 @@ import PageLayout from "../components/PageLayout.vue";
 
 /*
  * Settings (Phase 3 step 17): the theme and language, where the backend keeps its data and logs, and the current
- * kind's sources that have settings of their own (each opens /settings/source/:id). Phase 4 Stage 4 adds Playback:
- * whether the next episode plays by itself (kept on this device until Stage 5's player settings).
+ * kind's sources that have settings of their own (each opens /settings/source/:id).
+ *
+ * Player (Phase 4 Stage 5): the backend's player settings, each saved as it changes and used from the next play (the
+ * watched threshold also by the episode playing): when an episode counts as watched, the preferred quality and server
+ * (the order of the picker's videos and what is preselected), the subtitle and audio language, and which mpv to run.
+ * Auto-play the next episode (Stage 4) is in the same section but stays on this device.
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
 const theme = useThemeStore();
 const playerPrefs = usePlayerPrefsStore();
+
+const playerSettings = usePlayerSettings();
+const languages = usePlayerLanguages();
+const setPlayer = useSetPlayerSettings();
+const player = computed(() => playerSettings.data.value ?? null);
+
+/** 50 % to 95 % in steps of 5 (the backend's range). */
+const THRESHOLDS = Array.from({ length: 10 }, (_, i) => 50 + i * 5);
+const thresholdPercent = computed(() =>
+  player.value ? Math.round(player.value.watchedThreshold * 100) : 85,
+);
+
+const QUALITY_LABELS: Record<VideoQualityPreference, string> = {
+  SOURCE: "The source's choice",
+  HIGHEST: "Highest",
+  P2160: "2160p",
+  P1080: "1080p",
+  P720: "720p",
+  P480: "480p",
+  P360: "360p",
+};
+
+function selectValue(e: Event): string {
+  return (e.target as HTMLSelectElement).value;
+}
+
+function saveThreshold(e: Event) {
+  setPlayer.mutate({ watchedThreshold: Number(selectValue(e)) / 100 });
+}
+
+// The text fields are saved when they lose focus or on Enter, and follow the backend's value otherwise.
+const serverText = ref("");
+const mpvText = ref("");
+watch(
+  () => player.value?.preferredServer,
+  (v) => (serverText.value = v ?? ""),
+  { immediate: true },
+);
+watch(
+  () => player.value?.mpvPath,
+  (v) => (mpvText.value = v ?? ""),
+  { immediate: true },
+);
+
+function saveServer() {
+  const v = serverText.value.trim();
+  if (player.value && v !== player.value.preferredServer) setPlayer.mutate({ preferredServer: v });
+}
+
+const ORIGIN_LABELS: Record<MpvOrigin, string> = {
+  SETTINGS: "this setting",
+  SYSTEM_PROPERTY: "a system property",
+  ENV: "MADOYOMI_MPV",
+  PATH: "PATH",
+};
+const mpvStatus = ref<MpvCheck | null>(null);
+const mpvChecking = ref(false);
+const mpvCheckError = ref<unknown>(null);
+
+/** Runs `mpv --version` on `path`, or on the mpv the backend would start now. */
+async function runMpvCheck(path: string | null) {
+  mpvChecking.value = true;
+  mpvCheckError.value = null;
+  try {
+    mpvStatus.value = await checkMpv(path);
+  } catch (e) {
+    mpvStatus.value = null;
+    mpvCheckError.value = e;
+  } finally {
+    mpvChecking.value = false;
+  }
+}
+
+async function saveMpvPath() {
+  const v = mpvText.value.trim().replace(/^"(.*)"$/, "$1");
+  mpvText.value = v;
+  if (!player.value || v === player.value.mpvPath) return;
+  try {
+    await setPlayer.mutateAsync({ mpvPath: v });
+  } catch {
+    return; // shown below, from setPlayer.error
+  }
+  await runMpvCheck(null);
+}
+
+function checkTyped() {
+  const v = mpvText.value.trim().replace(/^"(.*)"$/, "$1");
+  void runMpvCheck(v || null);
+}
+
+watch(
+  () => backend.ready,
+  (ready) => {
+    if (ready && !mpvStatus.value && !mpvChecking.value) void runMpvCheck(null);
+  },
+  { immediate: true },
+);
 
 const THEME_LABELS: Record<ThemeChoice, string> = {
   system: "System",
@@ -102,15 +210,16 @@ const unknown = computed(
       </div>
     </section>
 
-    <section class="group" aria-labelledby="settings-playback">
-      <h2 id="settings-playback">Playback</h2>
-      <div class="card">
+    <section class="group" aria-labelledby="settings-player">
+      <h2 id="settings-player">Player</h2>
+      <div class="card" data-testid="player-settings">
         <div class="row">
           <div class="text">
             <span id="settings-autoplay">Auto-play the next episode</span>
             <span class="summary">
               When an episode ends, the next one plays after {{ NEXT_EPISODE_COUNTDOWN_SECONDS }} s,
-              with your last choice of video for its source. Off, it is only offered.
+              with your last choice of video for its source. Off, it is only offered. Kept on this
+              device.
             </span>
           </div>
           <SwitchRoot
@@ -122,7 +231,171 @@ const unknown = computed(
             <SwitchThumb class="switch-thumb" />
           </SwitchRoot>
         </div>
+        <template v-if="player">
+          <div class="row">
+            <label class="text" for="settings-threshold">
+              <span>Mark as watched at</span>
+              <span class="summary">
+                An episode counts as watched once you pass this share of it, also the one playing.
+                Below it, Play offers to resume where you stopped.
+              </span>
+            </label>
+            <select
+              id="settings-threshold"
+              class="field"
+              data-testid="threshold-select"
+              :value="thresholdPercent"
+              @change="saveThreshold"
+            >
+              <option v-for="t in THRESHOLDS" :key="t" :value="t">{{ t }} %</option>
+            </select>
+          </div>
+          <div class="row">
+            <label class="text" for="settings-quality">
+              <span>Preferred quality</span>
+              <span class="summary">
+                Goes first in each server's videos: this one, else the closest below it, else the
+                closest above. Your last choice for a source still comes first.
+              </span>
+            </label>
+            <select
+              id="settings-quality"
+              class="field"
+              data-testid="quality-select"
+              :value="player.preferredQuality"
+              @change="
+                setPlayer.mutate({
+                  preferredQuality: selectValue($event) as VideoQualityPreference,
+                })
+              "
+            >
+              <option v-for="(label, q) in QUALITY_LABELS" :key="q" :value="q">{{ label }}</option>
+            </select>
+          </div>
+          <div class="row">
+            <label class="text" for="settings-server">
+              <span>Preferred server</span>
+              <span class="summary">
+                Servers (and videos) whose name contains this go first, e.g. VidStreaming. Empty:
+                the source's order.
+              </span>
+            </label>
+            <input
+              id="settings-server"
+              v-model="serverText"
+              class="field text-field"
+              type="text"
+              maxlength="100"
+              placeholder="Any server"
+              data-testid="server-input"
+              @blur="saveServer"
+              @keydown.enter="saveServer"
+            />
+          </div>
+          <div class="row">
+            <label class="text" for="settings-subtitles">
+              <span>Subtitles</span>
+              <span class="summary">
+                The first track in this language, the video's own or the source's. Without one, the
+                source's first.
+              </span>
+            </label>
+            <select
+              id="settings-subtitles"
+              class="field"
+              data-testid="subtitle-select"
+              :value="player.subtitleLanguage"
+              @change="setPlayer.mutate({ subtitleLanguage: selectValue($event) })"
+            >
+              <option value="">The source's first</option>
+              <option value="off">Off</option>
+              <option v-for="l in languages.data.value ?? []" :key="l.code" :value="l.code">
+                {{ l.name }}
+              </option>
+            </select>
+          </div>
+          <div class="row">
+            <label class="text" for="settings-audio">
+              <span>Audio</span>
+              <span class="summary">
+                The first audio track in this language. Without one, the video's own audio, else the
+                source's first track.
+              </span>
+            </label>
+            <select
+              id="settings-audio"
+              class="field"
+              data-testid="audio-select"
+              :value="player.audioLanguage"
+              @change="setPlayer.mutate({ audioLanguage: selectValue($event) })"
+            >
+              <option value="">The source's choice</option>
+              <option v-for="l in languages.data.value ?? []" :key="l.code" :value="l.code">
+                {{ l.name }}
+              </option>
+            </select>
+          </div>
+          <div class="row mpv-row">
+            <label class="text" for="settings-mpv">
+              <span>mpv</span>
+              <span class="summary">
+                The mpv.exe to play with. Empty: MADOYOMI_MPV if set, else mpv.exe on PATH.
+              </span>
+            </label>
+            <div class="mpv-field">
+              <div class="path-actions">
+                <input
+                  id="settings-mpv"
+                  v-model="mpvText"
+                  class="field text-field path-field"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="C:\Program Files\MPV Player\mpv.exe"
+                  data-testid="mpv-input"
+                  @blur="saveMpvPath"
+                  @keydown.enter="saveMpvPath"
+                />
+                <button
+                  type="button"
+                  class="btn"
+                  data-action="check-mpv"
+                  :disabled="mpvChecking"
+                  @mousedown.prevent
+                  @click="checkTyped"
+                >
+                  {{ mpvChecking ? "Checking…" : "Check" }}
+                </button>
+              </div>
+              <p v-if="mpvStatus?.ok" class="summary" data-testid="mpv-status">
+                {{ mpvStatus.version }} · {{ mpvStatus.path }}
+                <template v-if="mpvStatus.origin">
+                  (from {{ ORIGIN_LABELS[mpvStatus.origin] }})</template
+                >
+              </p>
+              <p v-else-if="mpvStatus" class="summary danger" data-testid="mpv-status">
+                {{ mpvStatus.message }}
+              </p>
+              <ErrorNotice v-if="mpvCheckError" title="Couldn't check mpv" :error="mpvCheckError" />
+            </div>
+          </div>
+        </template>
+        <div v-else-if="playerSettings.isError.value" class="row">
+          <ErrorNotice
+            title="Couldn't read the player settings"
+            :error="playerSettings.error.value"
+            @retry="playerSettings.refetch()"
+          />
+        </div>
+        <p v-else class="row muted" data-testid="player-settings-pending">
+          {{ backend.ready ? "Loading the player settings…" : "Waiting for the backend…" }}
+        </p>
       </div>
+      <ErrorNotice
+        v-if="setPlayer.error.value"
+        title="Couldn't save the player setting"
+        :error="setPlayer.error.value"
+        data-testid="player-save-error"
+      />
     </section>
 
     <section class="group" aria-labelledby="settings-backend">
@@ -279,6 +552,32 @@ h2 {
 .path-actions .btn {
   flex: none;
   white-space: nowrap;
+}
+
+.text-field {
+  width: 220px;
+  flex: none;
+}
+
+.mpv-row {
+  align-items: flex-start;
+}
+
+.mpv-field {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: end;
+  min-width: 0;
+}
+
+.path-field {
+  width: 340px;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-caption);
+}
+
+.danger {
+  color: var(--color-danger);
 }
 
 .source-link {

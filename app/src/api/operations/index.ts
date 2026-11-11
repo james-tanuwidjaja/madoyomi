@@ -4,3 +4,4 @@ export * from "./entries";
 export * from "./subscriptions";
 export * from "./preferences";
 export * from "./playback";
+export * from "./player";

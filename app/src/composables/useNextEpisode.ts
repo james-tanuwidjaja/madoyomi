@@ -7,6 +7,7 @@ import { useVideoChoicesStore } from "../stores/videoChoices";
 import { episodeProgress, resumePoint } from "../utils/progress";
 import { initialPick, rememberedHoster, videoOf } from "../utils/videos";
 import { usePlayEpisode } from "./usePlayback";
+import { useWatchedThreshold } from "./usePlayerSettings";
 
 /** What the picker shows when it opens because something failed, and the video it preselects instead. */
 export interface PickerFailure {
@@ -29,7 +30,8 @@ export interface NextEpisodeOptions {
  * with a next episode (the end of the file, or a quit past the watched threshold), `offer` is that episode with a
  * countdown of {@link NEXT_EPISODE_COUNTDOWN_SECONDS} s (null without auto-play). When it reaches 0, or on `playNow`,
  * the next episode plays without the picker (Stage 3's decision): the videos are fetched, the remembered choice for
- * the source is taken (else the source's pick), and it plays from its resume point (as the picker's default), else
+ * the source is taken (else the player settings' preference, else the source's pick; Stage 5), and it plays from its
+ * resume point (as the picker's default, with the settings' watched threshold), else
  * from the start. If that can't work, the picker opens for that episode with why.
  *
  * `cancel`, a new session (another Play), and the page going away (the scope's end) stop it. `cancel` and the page
@@ -42,6 +44,7 @@ export function useNextEpisode(options: NextEpisodeOptions) {
   const prefs = usePlayerPrefsStore();
   const choices = useVideoChoicesStore();
   const play = usePlayEpisode();
+  const threshold = useWatchedThreshold();
 
   const offer = shallowRef<{ episode: Episode; secondsLeft: number | null } | null>(null);
   const starting = ref(false);
@@ -126,7 +129,11 @@ export function useNextEpisode(options: NextEpisodeOptions) {
       if (!chosen) {
         return fail("Couldn't play the next episode", new Error("There was no video to play."));
       }
-      const resumeAt = resumePoint(episode.isWatched, episodeProgress(episode, null));
+      const resumeAt = resumePoint(
+        episode.isWatched,
+        episodeProgress(episode, null),
+        threshold.value,
+      );
       if (mine !== generation) return;
       await play.mutateAsync({
         episodeId: episode.id,

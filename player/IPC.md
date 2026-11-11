@@ -3,20 +3,22 @@
 Madoyomi plays episodes in **mpv, in its own window**, and the **backend owns the process** (Phase 4 §9). The UI asks
 the backend to play (`playEpisode`) and the backend does the rest. This file is the contract between the backend
 (`server/core/src/main/kotlin/madoyomi/core/player/`) and mpv: the command line and include file (Stage 1), then the
-IPC pipe, what is observed and when progress is saved (Stage 2), and what happens when mpv can't open the video
-(Stage 4).
+IPC pipe, what is observed and when progress is saved (Stage 2), what happens when mpv can't open the video
+(Stage 4), and which tracks it plays (Stage 5).
 
 ## Finding mpv and its config
 
 | What | Where from (first match) |
 | --- | --- |
-| `mpv.exe` | the player settings' override (Stage 5) → `MADOYOMI_MPV` → `mpv.exe` on `PATH` |
+| `mpv.exe` | the player settings' path (Settings → Player, `<data dir>/player-settings.json`; Stage 5) → `MADOYOMI_MPV` → `mpv.exe` on `PATH` |
 | config dir (`--config-dir`) | `MADOYOMI_PLAYER_DIR` if it is a directory → `<data dir>/player` (created empty) |
 
 The Tauri shell sets `MADOYOMI_MPV` to the repo's `tools/bin/mpv/mpv.exe` in dev and to the bundled
 `resources/mpv/mpv.exe` in release (Phase 7), when the file is there; otherwise it sets nothing and the backend uses
 `PATH`. It sets `MADOYOMI_PLAYER_DIR` to this directory (`player/`) in dev and to `resources/player` in release. A
-missing mpv is the error `PLAYER_NOT_FOUND`; a launch that fails is `PLAYER_FAILED`.
+missing mpv is the error `PLAYER_NOT_FOUND` (its `details.origin` says which of the three named it: `SETTINGS`,
+`ENV`, …); a launch that fails is `PLAYER_FAILED`. The settings' check (`mpvCheck`) runs `<mpv> --version` and wants a
+line starting with "mpv ".
 
 ## The command line
 
@@ -102,12 +104,13 @@ accepts several clients, so a script can read properties while the backend is co
 
 **Commands sent.**
 - `observe_property` (above), right after connecting.
-- `sub-add <url> select|auto <title>` and `audio-add <url> auto <title>` (async), once the file is open, for the
-  video's external tracks: the title is the source's label (`Track.lang`, e.g. "English"), so mpv's menus show it
-  rather than the URL's file name. The first subtitle track is selected (as mpv selects a single `--sub-file`). The
-  first audio track is selected only when the file has no audio of its own (checked with `get_property track-list`
-  first): mpv's own track selection has already run when the tracks arrive, and an HLS stream whose audio comes only
-  as external tracks would otherwise play silent. mpv numbers the tracks in the order they finish loading.
+- `sub-add <url> auto <title>` and `audio-add <url> auto <title>` (async), once the file is open, for the video's
+  external tracks: the title is the source's label (`Track.lang`, e.g. "English"), so mpv's menus show it rather than
+  the URL's file name. None is selected as it is added. mpv numbers the tracks per type in the order they finish
+  loading.
+- Once they have all answered (at most 30 s), `get_property track-list`, then `set_property sid <id|"no">` and
+  `set_property aid <id>`: the tracks the player settings choose (Stage 5, below). Without external tracks this only
+  happens when a language or "subtitles off" is set.
 - `quit` to stop a session (`stopPlayback`, a new `playEpisode`, the backend's shutdown). mpv then exits with code 0.
   Only if it is still running 3 s later (or the pipe never connected) is the process killed (TerminateProcess, code 1).
 
@@ -122,8 +125,8 @@ written:
 A write with the same values as the last one is skipped, and a duration of 0 never replaces a known one. On the
 backend's own shutdown nothing is written (the database may be closing too): the last save is at most 5 s old.
 
-**Watched.** The first time `time-pos / duration` reaches the threshold (85 %; the player settings, Stage 5) in a
-session, `EPISODE.watched` is set if it isn't already, and a WATCHED event goes out. It is tried once per session: an
+**Watched.** The first time `time-pos / duration` reaches the threshold (the player settings' "Mark as watched at",
+50–95 %, default 85 %; read at every position, so a change applies to the session that plays) in a session, `EPISODE.watched` is set if it isn't already, and a WATCHED event goes out. It is tried once per session: an
 episode the user unmarks while it plays isn't marked again by that session.
 
 **Events** (GraphQL `playbackEvents(episodeId)`, nothing replayed):
@@ -172,3 +175,18 @@ Madoyomi's) is looked at once more before it is reported:
 - A new `playEpisode` or `stopPlayback` while the videos are fetched again cancels the retry: the failed session's
   `CLOSED` goes out at once, and nothing plays.
 
+## Which tracks play (Stage 5)
+
+The player settings name a subtitle and an audio language (or "Off" for subtitles), from a table of 21 languages
+(`PlayerLanguages`: English and native names, ISO 639-1 and 639-2 codes). A track matches by its `title` (the source's
+label for an external track) or its `lang` (mpv's code for the file's own): one of its words is a name or a three-letter
+code ("English (eng)", "English [CC]", "Português (Brasil)", "jpn"), or the whole label is a code with an optional
+region ("en", "en-US", "pt_BR").
+
+| | A language that matches | No language, or none matches |
+| --- | --- | --- |
+| subtitles | the first match: the file's own tracks first, then the source's in the source's order; a forced track only if nothing else matches | the source's first subtitle track (Stage 2's rule), else mpv's own choice; "Off" is `sid=no` |
+| audio | the first match, in the same order | the file's own audio as mpv chose it, else the source's first audio track (an HLS stream without audio of its own) |
+
+The backend logs what it set ("subtitles track 2, audio track 3"). A track that fails to load is logged and left out of
+the choice.

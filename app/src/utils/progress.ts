@@ -7,8 +7,8 @@ import type { Episode, PlaybackSession } from "../api/types";
  */
 
 /**
- * The share of the duration at which the backend marks an episode watched (`PlaybackSessions.watchedThreshold`).
- * Stage 5's player settings make it a setting; until then the UI uses the same constant.
+ * The default share of the duration at which the backend marks an episode watched. Since Stage 5 it is a player
+ * setting (`PlayerSettings.watchedThreshold`, 50–95 %); the UI uses this only until the backend's value is known.
  */
 export const WATCHED_THRESHOLD = 0.85;
 

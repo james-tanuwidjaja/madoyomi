@@ -28,6 +28,7 @@ export const PLAYBACK_SESSION_FIELDS = /* GraphQL */ `
 const HOSTER_CHOICE_FIELDS = /* GraphQL */ `
   fragment HosterChoiceFields on EpisodeHosterType {
     index
+    sourceIndex
     name
     lazy
     state
@@ -39,6 +40,8 @@ const HOSTER_CHOICE_FIELDS = /* GraphQL */ `
       resolution
       bitrate
       preferred
+      sourceIndex
+      matchesPreference
       initialized
       subtitleTracks {
         lang

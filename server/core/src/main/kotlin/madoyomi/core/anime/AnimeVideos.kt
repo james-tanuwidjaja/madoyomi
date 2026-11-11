@@ -21,6 +21,10 @@ import madoyomi.core.anime.model.table.EpisodeTable
 import madoyomi.core.error.ErrorClassifier
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
+import madoyomi.core.player.PlayerSettings
+import madoyomi.core.player.PlayerSettingsStore
+import madoyomi.core.player.VideoPreferences
+import madoyomi.core.player.VideoPreferences.Ranked
 import okhttp3.Headers
 
 /**
@@ -37,9 +41,13 @@ import okhttp3.Headers
  * - **Resolving.** A video that isn't `initialized` may need the source's `resolveVideo` before it plays (AnimePahe:
  *   the page URL becomes the stream URL). [resolveVideo] does that on the video of the last fetch, kept in memory for
  *   a while per episode.
+ * - **The player settings' preference** (Phase 4 Stage 5, [VideoPreferences]): after the source's sorts, the hosters
+ *   and each hoster's videos are sorted by the preferred server and quality (stable), as the settings were when the
+ *   fetch started. Indexes are positions in that order, for the whole fetch; `sourceIndex` is the source's own.
  */
 object AnimeVideos {
     data class EpisodeHoster(
+        /** The position in the list: the source's order, then the preferred server's ([VideoPreferences]). */
         val index: Int,
         val name: String,
         val url: String,
@@ -49,6 +57,8 @@ object AnimeVideos {
         /** Why the hoster failed (`state = ERROR`): the error's code and message, as GraphQL/REST would report it. */
         val errorCode: ErrorCode?,
         val errorMessage: String?,
+        /** The position in the source's own order. */
+        val sourceIndex: Int = index,
     )
 
     enum class HosterState { READY, IDLE, ERROR }
@@ -70,6 +80,10 @@ object AnimeVideos {
         val audioTracks: List<VideoTrack>,
         val timestamps: List<VideoTimestamp>,
         val mpvArgs: List<VideoHeader>,
+        /** The position in the source's own order ([index]: in the list, sorted by the preference). */
+        val sourceIndex: Int = index,
+        /** Of the preferred server, or at the hoster's target quality ([VideoPreferences]); false without one. */
+        val matchesPreference: Boolean = false,
     )
 
     data class VideoHeader(
@@ -91,8 +105,10 @@ object AnimeVideos {
 
     private class Fetch(
         val source: AnimeSource,
-        val hosters: List<Hoster>,
-        val videos: Array<List<Video>?>,
+        val hosters: List<Ranked<Hoster>>,
+        val videos: Array<List<Ranked<Video>>?>,
+        /** The player settings when the fetch started: its lazy hosters are sorted by them too. */
+        val settings: PlayerSettings,
         val at: Long = System.currentTimeMillis(),
     )
 
@@ -108,8 +124,9 @@ object AnimeVideos {
     /** The hosters of the episode [episodeId], with the videos of every hoster that isn't `lazy`. */
     suspend fun fetchEpisodeVideos(episodeId: Int): List<EpisodeHoster> {
         val (source, episode) = sourceAndEpisode(episodeId)
-        val hosters = hostersOf(source, episode)
-        val fetch = Fetch(source, hosters, arrayOfNulls(hosters.size))
+        val settings = PlayerSettingsStore.current()
+        val hosters = VideoPreferences.sortHosters(hostersOf(source, episode), settings) { it.hosterName }
+        val fetch = Fetch(source, hosters, arrayOfNulls(hosters.size), settings)
         // only while the source is still the live one: an unload between getting it and here has already run
         // dropStale, and the fetch would keep the unloaded extension's class loader
         synchronized(cache) { if (AnimeGetSource.cached(source.id) === source) cache[episodeId] = fetch }
@@ -151,7 +168,8 @@ object AnimeVideos {
         }
         val videos = fetch.videos[hosterIndex] ?: emptyList()
         checkIndex(videoIndex, videos.size, "video")
-        val video = videos[videoIndex]
+        val ranked = videos[videoIndex]
+        val video = ranked.item
         val source = fetch.source
         val resolved =
             if (source is AnimeHttpSource && !video.initialized) {
@@ -163,8 +181,9 @@ object AnimeVideos {
             } else {
                 video
             }
-        fetch.videos[hosterIndex] = videos.toMutableList().also { it[videoIndex] = resolved }
-        return toEpisodeVideo(source, videoIndex, resolved)
+        val kept = ranked.copy(item = resolved)
+        fetch.videos[hosterIndex] = videos.toMutableList().also { it[videoIndex] = kept }
+        return toEpisodeVideo(source, videoIndex, kept)
     }
 
     private fun details(episodeId: Int) = mapOf("episodeId" to episodeId)
@@ -210,6 +229,7 @@ object AnimeVideos {
         synchronized(cache) { cache[episodeId] }
             ?.hosters
             ?.getOrNull(hosterIndex)
+            ?.item
             ?.hosterName
 
     /** For tests: the episodes with a kept fetch. */
@@ -284,9 +304,16 @@ object AnimeVideos {
     ): EpisodeHoster {
         val hoster = fetch.hosters[index]
         fetch.videos[index]?.let { return toEpisodeHoster(fetch.source, index, hoster, HosterState.READY, it) }
-        if (hoster.lazy && !force) return toEpisodeHoster(fetch.source, index, hoster, HosterState.IDLE, emptyList())
+        if (hoster.item.lazy && !force) return toEpisodeHoster(fetch.source, index, hoster, HosterState.IDLE, emptyList())
         return try {
-            val videos = videosOf(fetch.source, hoster)
+            val videos =
+                VideoPreferences.sortVideos(
+                    videosOf(fetch.source, hoster.item),
+                    fetch.settings,
+                    hoster.item.hosterName,
+                    title = { it.videoTitle },
+                    resolution = { it.resolution },
+                )
             fetch.videos[index] = videos
             toEpisodeHoster(fetch.source, index, hoster, HosterState.READY, videos)
         } catch (e: CancellationException) {
@@ -326,27 +353,32 @@ object AnimeVideos {
     private fun toEpisodeHoster(
         source: AnimeSource,
         index: Int,
-        hoster: Hoster,
+        ranked: Ranked<Hoster>,
         state: HosterState,
-        videos: List<Video>,
+        videos: List<Ranked<Video>>,
         errorCode: ErrorCode? = null,
         errorMessage: String? = null,
-    ) = EpisodeHoster(
-        index = index,
-        name = hoster.hosterName,
-        url = hoster.hosterUrl,
-        lazy = hoster.lazy,
-        state = state,
-        videos = videos.mapIndexed { i, video -> toEpisodeVideo(source, i, video) },
-        errorCode = errorCode,
-        errorMessage = errorMessage,
-    )
+    ): EpisodeHoster {
+        val hoster = ranked.item
+        return EpisodeHoster(
+            index = index,
+            name = hoster.hosterName,
+            url = hoster.hosterUrl,
+            lazy = hoster.lazy,
+            state = state,
+            videos = videos.mapIndexed { i, video -> toEpisodeVideo(source, i, video) },
+            errorCode = errorCode,
+            errorMessage = errorMessage,
+            sourceIndex = ranked.sourceIndex,
+        )
+    }
 
     private fun toEpisodeVideo(
         source: AnimeSource,
         index: Int,
-        video: Video,
+        ranked: Ranked<Video>,
     ): EpisodeVideo {
+        val video = ranked.item
         val headers: Headers? =
             video.headers ?: (source as? AnimeHttpSource)?.let { AnimeSourceCalls.callBlocking(it, "headers") { it.headers } }
         return EpisodeVideo(
@@ -363,6 +395,8 @@ object AnimeVideos {
             audioTracks = video.audioTracks.map { VideoTrack(it.url, it.lang) },
             timestamps = video.timestamps.map { VideoTimestamp(it.start, it.end, it.name, it.type.name) },
             mpvArgs = video.mpvArgs.map { (name, value) -> VideoHeader(name, value) },
+            sourceIndex = ranked.sourceIndex,
+            matchesPreference = ranked.matchesPreference,
         )
     }
 }

@@ -11,8 +11,13 @@ import madoyomi.core.error.ErrorCode
 
 /** A hoster (server) of an episode and its videos. Never persisted: video URLs expire. */
 data class EpisodeHosterType(
-    @GraphQLDescription("Position in the episode's hoster list (the source's order), for fetchHosterVideos/resolveEpisodeVideo")
+    @GraphQLDescription(
+        "Position in the episode's hoster list (the source's order, then the preferred server's), for " +
+            "fetchHosterVideos/resolveEpisodeVideo",
+    )
     val index: Int,
+    @GraphQLDescription("Position in the source's own order")
+    val sourceIndex: Int,
     val name: String,
     val url: String,
     @GraphQLDescription("The source loads this hoster's videos only on request (fetchHosterVideos)")
@@ -25,6 +30,7 @@ data class EpisodeHosterType(
 ) {
     constructor(hoster: AnimeVideos.EpisodeHoster) : this(
         index = hoster.index,
+        sourceIndex = hoster.sourceIndex,
         name = hoster.name,
         url = hoster.url,
         lazy = hoster.lazy,
@@ -37,8 +43,17 @@ data class EpisodeHosterType(
 
 /** A playable video: what the player needs (URL, headers, tracks, mpv arguments). */
 data class EpisodeVideoType(
-    @GraphQLDescription("Position in its hoster's video list (sorted by the source), for resolveEpisodeVideo")
+    @GraphQLDescription(
+        "Position in its hoster's video list (sorted by the source, then by the preferred server and quality), for " +
+            "resolveEpisodeVideo",
+    )
     val index: Int,
+    @GraphQLDescription("Position in the source's own order")
+    val sourceIndex: Int,
+    @GraphQLDescription(
+        "Of the preferred server, or at the hoster's quality closest to the preferred one (false without a preference)",
+    )
+    val matchesPreference: Boolean,
     val videoTitle: String,
     val videoUrl: String,
     @GraphQLDescription("The lib-14 page URL the video came from, empty if none")
@@ -58,6 +73,8 @@ data class EpisodeVideoType(
 ) {
     constructor(video: AnimeVideos.EpisodeVideo) : this(
         index = video.index,
+        sourceIndex = video.sourceIndex,
+        matchesPreference = video.matchesPreference,
         videoTitle = video.videoTitle,
         videoUrl = video.videoUrl,
         videoPageUrl = video.videoPageUrl,
