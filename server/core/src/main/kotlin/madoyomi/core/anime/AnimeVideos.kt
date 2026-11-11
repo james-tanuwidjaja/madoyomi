@@ -189,6 +189,29 @@ object AnimeVideos {
         synchronized(cache) { cache.values.removeIf { AnimeGetSource.cached(it.source.id) !== it.source } }
     }
 
+    /**
+     * The hosters of the episode's last fetch as they are now (loaded ones READY, the rest IDLE), without asking the
+     * source; null if there is none kept. The player picks the next video to offer from it (Phase 4 Stage 4).
+     */
+    internal fun cachedHosters(episodeId: Int): List<EpisodeHoster>? {
+        val fetch = synchronized(cache) { cache[episodeId] } ?: return null
+        return fetch.hosters.indices.map { i ->
+            val videos = fetch.videos[i]
+            val state = if (videos != null) HosterState.READY else HosterState.IDLE
+            toEpisodeHoster(fetch.source, i, fetch.hosters[i], state, videos.orEmpty())
+        }
+    }
+
+    /** The name of hoster [hosterIndex] in the episode's last fetch, if it is kept. */
+    internal fun hosterName(
+        episodeId: Int,
+        hosterIndex: Int,
+    ): String? =
+        synchronized(cache) { cache[episodeId] }
+            ?.hosters
+            ?.getOrNull(hosterIndex)
+            ?.hosterName
+
     /** For tests: the episodes with a kept fetch. */
     internal fun cachedEpisodes(): Set<Int> = synchronized(cache) { cache.keys.toSet() }
 

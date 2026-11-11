@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import madoyomi.core.player.PlaybackSessions
+import madoyomi.core.player.VideoRef
 import suwayomi.tachidesk.graphql.directives.RequireAuth
 import suwayomi.tachidesk.server.JavalinSetup.future
 import java.util.concurrent.CompletableFuture
@@ -56,7 +57,18 @@ data class PlaybackSessionType(
 }
 
 /** [PlaybackSessions.EventType] in the schema. */
-enum class PlaybackEventKind { STARTED, PROGRESS, WATCHED, ENDED, ERROR, CLOSED }
+enum class PlaybackEventKind { STARTED, PROGRESS, WATCHED, ENDED, RETRYING, ERROR, CLOSED }
+
+@GraphQLDescription("A video by what stays the same between fetches of an episode's videos (indexes don't)")
+data class PlaybackVideoRefType(
+    @GraphQLDescription("EpisodeHosterType.name")
+    val hosterName: String,
+    @GraphQLDescription("EpisodeVideoType.videoTitle")
+    val videoTitle: String,
+    val resolution: Int?,
+) {
+    constructor(ref: VideoRef) : this(ref.hosterName, ref.videoTitle, ref.resolution)
+}
 
 @GraphQLDescription("Something that happened in a playback session (playbackEvents)")
 data class PlaybackEventType(
@@ -67,8 +79,16 @@ data class PlaybackEventType(
     val nextEpisodeId: Int?,
     @GraphQLDescription("ENDED: mpv's end-file reason (eof, or quit for a quit past the watched threshold)")
     val reason: String?,
-    @GraphQLDescription("ERROR: what went wrong")
+    @GraphQLDescription("RETRYING, ERROR: what went wrong")
     val message: String?,
+    @GraphQLDescription("RETRYING, ERROR: the last HTTP error status in mpv's log, if any")
+    val httpStatus: Int?,
+    @GraphQLDescription("ERROR: whether the videos had been fetched again before it (the failure is final)")
+    val retried: Boolean,
+    @GraphQLDescription("RETRYING, ERROR: the video that failed")
+    val failedVideo: PlaybackVideoRefType?,
+    @GraphQLDescription("ERROR: the video to offer instead, the next one in the source's order, if there is one")
+    val nextVideo: PlaybackVideoRefType?,
 ) {
     constructor(event: PlaybackSessions.Event) : this(
         type = PlaybackEventKind.valueOf(event.type.name),
@@ -76,6 +96,10 @@ data class PlaybackEventType(
         nextEpisodeId = event.nextEpisodeId,
         reason = event.reason,
         message = event.message,
+        httpStatus = event.httpStatus,
+        retried = event.retried,
+        failedVideo = event.failedVideo?.let(::PlaybackVideoRefType),
+        nextVideo = event.nextVideo?.let(::PlaybackVideoRefType),
     )
 }
 
@@ -84,8 +108,9 @@ class PlaybackSubscription {
     @RequireAuth
     @GraphQLDescription(
         "Playback events of every session, or only of episodeId: STARTED (IPC connected), PROGRESS (at most once a " +
-            "second, and on pause, resume and seek), WATCHED (once per session), ENDED (with the next episode), ERROR " +
-            "(mpv ended early), CLOSED (always last)",
+            "second, and on pause, resume and seek), WATCHED (once per session), ENDED (with the next episode), " +
+            "RETRYING (mpv couldn't open the video: its videos are fetched again once), ERROR (mpv ended early; with " +
+            "the next video to offer), CLOSED (always last)",
     )
     fun playbackEvents(episodeId: Int? = null): Flow<PlaybackEventType> =
         PlaybackSessions.events

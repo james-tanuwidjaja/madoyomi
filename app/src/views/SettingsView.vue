@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { ToggleGroupItem, ToggleGroupRoot, type AcceptableValue } from "reka-ui";
+import {
+  SwitchRoot,
+  SwitchThumb,
+  ToggleGroupItem,
+  ToggleGroupRoot,
+  type AcceptableValue,
+} from "reka-ui";
 import { useSources } from "../composables/useSources";
 import { useBackendStore } from "../stores/backend";
 import { useMediaKindStore } from "../stores/mediaKind";
+import { NEXT_EPISODE_COUNTDOWN_SECONDS, usePlayerPrefsStore } from "../stores/playerPrefs";
 import { THEME_CHOICES, useThemeStore, type ThemeChoice } from "../stores/theme";
 import { formatLang } from "../utils/format";
 import { canBrowse, sourceAccess } from "../utils/sources";
@@ -13,11 +20,13 @@ import PageLayout from "../components/PageLayout.vue";
 
 /*
  * Settings (Phase 3 step 17): the theme and language, where the backend keeps its data and logs, and the current
- * kind's sources that have settings of their own (each opens /settings/source/:id).
+ * kind's sources that have settings of their own (each opens /settings/source/:id). Phase 4 Stage 4 adds Playback:
+ * whether the next episode plays by itself (kept on this device until Stage 5's player settings).
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
 const theme = useThemeStore();
+const playerPrefs = usePlayerPrefsStore();
 
 const THEME_LABELS: Record<ThemeChoice, string> = {
   system: "System",
@@ -89,6 +98,29 @@ const unknown = computed(
             <span class="summary">English is the only language so far.</span>
           </div>
           <span class="value" data-testid="language">English</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="group" aria-labelledby="settings-playback">
+      <h2 id="settings-playback">Playback</h2>
+      <div class="card">
+        <div class="row">
+          <div class="text">
+            <span id="settings-autoplay">Auto-play the next episode</span>
+            <span class="summary">
+              When an episode ends, the next one plays after {{ NEXT_EPISODE_COUNTDOWN_SECONDS }} s,
+              with your last choice of video for its source. Off, it is only offered.
+            </span>
+          </div>
+          <SwitchRoot
+            v-model="playerPrefs.autoPlayNext"
+            class="switch"
+            aria-labelledby="settings-autoplay"
+            data-testid="autoplay-switch"
+          >
+            <SwitchThumb class="switch-thumb" />
+          </SwitchRoot>
         </div>
       </div>
     </section>
@@ -302,5 +334,37 @@ h2 {
   background: var(--color-surface-raised);
   color: var(--color-text);
   box-shadow: 0 0 0 1px var(--color-border);
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--color-text-secondary);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.switch[data-state="checked"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.switch-thumb {
+  display: block;
+  width: 12px;
+  height: 12px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  transition: transform var(--duration-fast) var(--easing-standard);
+}
+
+.switch[data-state="checked"] .switch-thumb {
+  background: var(--color-on-accent);
+  transform: translateX(20px);
 }
 </style>

@@ -72,14 +72,14 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 ### Selection & errors
 - [ ] Preferred quality/server sorting
 - [x] Lazy `videoUrlParse` resolution (Stage 1: `playEpisode` resolves the video right before the launch, through Phase 2's `resolveVideo`; `PlaybackApiTest`)
-- [ ] 403/expired retry + fallback to next video
-- [ ] Proxy fallback for headers mpv can't send
+- [x] 403/expired retry + fallback to next video (Stage 4: `PlaybackSessions` fetches the videos again once and plays the same video from where it failed (RETRYING), else ERROR with the next video, which the app preselects in the reopened picker; `VideoChoicesTest`, `PlaybackApiTest`, `AnimeDetailsView.spec.ts`, and live through the API and in `pnpm tauri dev` with the header proxy's expiring mode, §10)
+- [ ] Proxy fallback for headers mpv can't send (**deferred**, Stage 4: measured live, every header of AnimeGG (2) and KickAssAnime (7) reaches mpv's requests verbatim, so there is no header mpv can't send; §9, §10)
 
 ### Frontend
 - [x] `VideoPicker` dialog with remembered choice (Stage 3: the hosters with Load/Retry, quality and track counts, "Source's pick" and "Last used", the last choice per source on this device; `VideoPicker.spec.ts`, `videoChoices.spec.ts`, `videos.spec.ts`, and live in `pnpm tauri dev`: a non-default video played, and was preselected as "Last used" after an app restart, §10)
 - [x] Resume / start-over prompt (Stage 3: the picker's footer between 1 % and 85 %; `progress.spec.ts`, `VideoPicker.spec.ts`, `AnimeDetailsView.spec.ts`, and live in `pnpm tauri dev`: "Resume from 12:37" after an app restart, and mpv started 0.00 s from the stored position, §10)
 - [x] Progress + watched state in episode list; bulk mark (Stage 3: live rows from `playbackEvents` through `stores/playback.ts`, the Watched badge at once, checkboxes with Shift+click ranges and "Mark previous as watched", through `updateEpisodes`; `EntryItemList.spec.ts`, `realtime.spec.ts`, `AnimeDetailsView.spec.ts`, `EpisodeUpdateApiTest`, and live in `pnpm tauri dev`, §10)
-- [ ] Next-episode toast / auto-play setting
+- [x] Next-episode toast / auto-play setting (Stage 4: `NextEpisodeToast` with a 10 s countdown, `useNextEpisode`, "Auto-play the next episode" in Settings → Playback, on by default, on this device; `NextEpisodeToast.spec.ts`, `playerPrefs.spec.ts`, `playback.spec.ts`, `AnimeDetailsView.spec.ts`, `SettingsView.spec.ts`, and live in `pnpm tauri dev`, §10)
 - [ ] Player settings section
 
 ### Tests
@@ -94,11 +94,11 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 
 - [x] Watch an episode from the UI, close mpv halfway, reopen the app, and resume within ±5 s of where you stopped. (Stage 3, live in `pnpm tauri dev` on the seeded `live-data`: quit at 757.6 s, stored 757666 ms, the app closed and started again, and mpv resumed at 757.666 s, 0.00 s off, §10. The exit run repeats it from a fresh data dir.)
 - [x] An episode passing the watched threshold shows as watched in the UI without a refresh. (Stage 3, live in `pnpm tauri dev`: a seek to 1290 s of 1475 s (87 %) showed the Watched badge on the playing row at once, §10. The exit run repeats it from a fresh data dir.)
-- [ ] The next episode starts from the end-of-episode prompt.
+- [x] The next episode starts from the end-of-episode prompt. (Stage 4, live in `pnpm tauri dev` on the seeded `live-data`: episode 3 played to its end showed "Next: Episode 4" with its countdown, and 11.8 s after the end episode 4 played with the remembered `[DUBBED] AnimeGG:360p`, without the picker; Cancel stopped it, and Play now started it at once, §10. The exit run repeats it from a fresh data dir.)
 
 ## 7. Risks & notes
 
-- Video URLs needing headers/cookies → 403 (PLAN.md §6, "Video URLs require headers/cookies"). Always pass `Video.headers`; the proxy is the fallback.
+- Video URLs needing headers/cookies → 403 (PLAN.md §6, "Video URLs require headers/cookies"). Always pass `Video.headers`; the proxy is the fallback. Stage 4 measured every header arriving verbatim, so the proxy is deferred until a source needs one (§9).
 - Many source URLs expire quickly: resolve them right before launch and retry once.
 - Named pipe names must be unique per session to avoid clashes with a stale mpv.
 
@@ -129,6 +129,13 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - live through the API: a non-default video, a resume after a backend restart (0.00 s off), WATCHED at 90 %, and the bulk marks;
      - live in `pnpm tauri dev` (§10): the picker with the DUBBED 360p played (height 360), a quit halfway shown as "11:57 left", "Last used" and "Resume from 12:37" after an app restart with mpv 0.00 s off, the row live while playing and paused, the Watched badge at 87 % without a refresh, and the three bulk marks. Both §6 criteria they cover are ticked. No fix was needed.
 4. **Next episode and errors** (steps 8, 9, 11, 15): the next-episode toast with a countdown and auto-play; on a 403/404 or an early exit, the videos fetched again once, then the next video offered. The proxy fallback is decided by measurement (mpv sends every header itself, so it is likely deferred). Verified with an expiring URL from the header proxy (`spikes/mpv-play/header-proxy.mjs`) and live.
+   - *Done* (2026-11-11):
+     - server: `VideoChoices` (the same video found again after a refetch, the next video to offer) and `MpvLog` (the HTTP status from mpv's log, an early `eof`); `PlaybackSessions` retries a failed session once (RETRYING, the videos fetched again, the same video from where it failed), else ERROR with `retried`, `httpStatus`, `failedVideo` and `nextVideo`; `AnimeVideos.cachedHosters`;
+     - tests: `VideoChoicesTest` (8) and 8 new `PlaybackApiTest` cases with `FakeMpvServer` as mpv, which now fails by its URL (refused at once, mid-play, an early `eof` after a 403, refused again after the refetch, the video gone after the refetch, a failure without an HTTP error, a stop during the retry);
+     - app: `NextEpisodeToast` and `useNextEpisode` (a 10 s countdown, auto-play with the remembered choice and no picker, from the resume point; Cancel, another Play and leaving the page stop it), "Auto-play the next episode" in Settings → Playback (`stores/playerPrefs.ts`), "Retrying…" on the row, and the picker reopened with the error and the next video preselected;
+     - the header proxy got an expiring mode (`/expire/<token>`), and the header measurement found nothing mpv can't send, so the proxy fallback is deferred;
+     - live through the API: refused at once, then played from the asked 60 s (0.00 s off); expired mid-play (mpv's `eof` at 15:00 of 25:00 with a 403), then played on from 900 s; refused twice, then ERROR with `[SUBBED] AnimeGG:720p` as the next video;
+     - live in `pnpm tauri dev` (§10): the toast's countdown played episode 4 with the remembered video, Cancel during the countdown and during the start played nothing (a fix: see §10), a refused URL was retried and played, and a double refusal reopened the picker with the next video, which played. The §6 criterion is ticked.
 5. **Player settings** (steps 9, 16): the watched threshold, preferred quality, server and subtitle/audio language (sorting), and the mpv path override, in a Settings section. Verified by unit tests and a live change that takes effect.
 6. **Exit run**: the step 20 format matrix (MP4, HLS, MKV with ASS, external subtitles, multiple audio tracks, expiring URLs), every §6 criterion from a fresh data dir, and a fix round. The embedded `--wid` prototype (step 17) stays a stretch goal after the exit, not part of it.
 
@@ -228,6 +235,28 @@ Decided in the stage (the prompt left these to the stage; defaults, not asked):
   - Chapters aren't selectable yet (Phase 5).
 - **`updateEpisode` / `updateEpisodes`** (api, `AnimeMutation`, in the shape of upstream's `updateChapter(s)`). The patch is `isWatched`, `isBookmarked` and `lastSecondSeen` (milliseconds, a `LongString`). Episodes are returned in the given order, each once, and an unknown id is `NOT_FOUND` with nothing written.
 - **Unmarking clears the position.** `isWatched: false` sets `last_second_seen` to 0, as the Aniyomi app's `SetSeenStatus` does, so an unwatched episode starts from the beginning without a resume prompt. A `lastSecondSeen` in the same patch wins, clamped to 0 and to the known duration. Marking watched keeps the position (Stage 2's rule), and the duration is never changed. A session playing the episode keeps saving its position and doesn't mark it again (Stage 2's once-per-session rule).
+
+### Stage 4 (2026-11-11)
+
+Decided in the stage (defaults, not asked):
+- **The next-episode toast** appears on the details page of the anime that played, when a session ENDS (the end of the file, or a quit past 85 %) with a next episode in the source's order: "Next: <episode>", a countdown, **Play now** and **Cancel**. It is drawn by the episode list (`useNextEpisode`), so it is only there while that page is open.
+- **Auto-play is on by default**, a device preference like the others (Phase 3 §9): `localStorage` `madoyomi.autoPlayNext`, switched in Settings → Playback ("Auto-play the next episode"). Stage 5 moves it into the player settings section. Off, the toast only offers the episode ("Auto-play is off"), without a countdown.
+- **The countdown is 10 s** (`NEXT_EPISODE_COUNTDOWN_SECONDS`): enough to read the toast and reach Cancel, short enough to keep watching. mpv's window closes at the end of the file (`keep-open=no`), so the toast is in view.
+- **Auto-play skips the picker** (Stage 3's note): it fetches the episode's videos, takes the remembered choice for the source (a lazy remembered hoster is loaded first), else the source's pick, and plays. That is what Enter in the picker would do. The choice is remembered again, as any play.
+- **It starts from the episode's resume point, by the picker's own rule:** between 1 % and 85 %, from the stored position; otherwise (a watched episode, one below 1 % or without a duration) from the start. So an episode partly watched before continues, as "Resume" is the picker's default. A watched one starts over, as in Aniyomi.
+- **When auto-play can't play** (no video, the source fails, `PLAYER_NOT_FOUND`…), the picker opens for that episode with the error, so the user can choose.
+- **What stops it:** Cancel; another Play (a new session that isn't the one it started); opening the picker; leaving the page. Cancel and leaving the page also stop a start already on its way: a start still fetching the videos plays nothing, and one whose `playEpisode` was already sent is stopped with `stopPlayback` once it returns (found live, §10). Opening the picker only dismisses the toast, since the user is about to play something.
+- **When a session is retried** (`PlaybackSessions`, contract in player/IPC.md "When the video doesn't play"): ERROR's conditions (mpv's `end-file` with `reason: error`, or a non-zero exit that wasn't Madoyomi's), and then either:
+  - **early**: mpv never reported a position (`time-pos`) in that session, so it never got the video playing (refused at once, a crash at start, an exit before the pipe opened); or
+  - **an expired URL**: mpv's log has an HTTP 401, 403, 404 or 410.
+
+  A failure after playback started without such a status (a decoding error, a crash) is ERROR at once, without a refetch.
+- **The HTTP status is read from mpv's log**, both are used: the `end-file` event says that it failed (`reason: error`, `file_error: "loading failed"`, no status), and the last `HTTP error NNN` that FFmpeg wrote to `<data dir>/logs/mpv.log` (the session's own output, at `--msg-level=all=warn`) says why. The status goes into the message ("… (HTTP 403)") and the event's `httpStatus`.
+- **An `eof` that isn't the end:** a URL that expires while it plays makes mpv log the 403 and end the file as `eof` with exit code 0 (found live). An `eof` more than 10 s before a known duration, with an HTTP error in the log, is treated as a failure ("mpv stopped reading the video at 15:00 of 25:00"), not as ENDED. Without an HTTP error it stays the end of the file.
+- **The retry:** once per play (a retried session that fails is final). The backend sends RETRYING, fetches the episode's videos again in the background, finds **the same video** (the hoster by name, then the video by title, else by resolution; nothing else stands in), resolves it and plays it from the failed session's last position, else where it started. The failed session's CLOSED follows. A `playEpisode` or `stopPlayback` meanwhile cancels the retry. The row says "Retrying…" from RETRYING to that CLOSED.
+- **The fallback:** when it isn't retried or the retry fails (the source fails, the video is gone, mpv can't start, or it fails again), ERROR carries `retried`, `httpStatus`, `failedVideo` and `nextVideo`: the next video in the source's order after the failed one (the READY hosters in order, each one's videos in order, wrapping around; never the failed one; none when there is no other). The app reopens the picker for that episode with the error and that video preselected ("… is selected instead"). The remembered choice changes only if the user plays it.
+- **The proxy fallback is deferred** (step 11, PLAN.md §6 "Video URLs require headers/cookies"). Measured through the header proxy, every header AnimeGG (2) and KickAssAnime (7) send reached mpv's request verbatim, values with commas and semicolons included, and KickAssAnime's `accept` replaced mpv's own. The include file (Stage 1) sends each header on its own line, so the only headers mpv can't send are those Stage 1 leaves out (an invalid name or a line break), which no measured source has. Revisit if a source needs one, or for cookies set during playback.
+- **Test-only ways in:** `FakeMpvServer` (a test file) fails as its URL says (`fakempv-error`, `fakempv-fail-at`, `fakempv-eof-at`, `fakempv-status`), so a scripted fake source hands it a URL that fails on the first fetch only. Live, a scratch wrapper set as `MADOYOMI_MPV` (gitignored, `tools/dev-data/agent/mpvwrap`) sent a launch's URL through the header proxy's new expiring mode. Nothing in the release code path knows about either.
 
 ## 10. Findings log
 
@@ -381,3 +410,59 @@ Decided in the stage (the prompt left these to the stage; defaults, not asked):
   - the subtitle and audio counts in the picker: AnimeGG's videos have none, and KickAssAnime wasn't played in this stage (`VideoPicker.spec.ts` covers them);
   - Start over and the Enter key on the preselected button: only Resume and Play were clicked (`VideoPicker.spec.ts`);
   - that a PROGRESS event refetches nothing was seen only as the row updating each second without the list flickering; `realtime.spec.ts` covers it, and a WebSocket reconnect forgetting the session is covered only there.
+
+### Stage 4 (2026-11-11)
+
+- **Baseline before the stage** (feat/phase-4-picker merged as #29; rerun before the server edits):
+  - server: `.\gradlew.bat build` green with 717 tests, 0 failures (core 640 with 8 skipped, AndroidCompat 7, ext-host 8, api 62);
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: 37 files, 307 passed + 9 skipped; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` clean;
+  - the live spec: 9/9 with 38 documents validated;
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - server: 733 tests, 0 failures (core 648 with 8 skipped, AndroidCompat 7, ext-host 8, api 70). The 16 new ones are `VideoChoicesTest` (8) and 8 `PlaybackApiTest` cases; two existing `PlaybackApiTest` cases now also check the retry;
+  - smoke: 24/24 on the new jar;
+  - app: 40 files, 325 passed + 9 skipped (18 new): `NextEpisodeToast.spec.ts` 2, `playback.spec.ts` 3, `playerPrefs.spec.ts` 2, `AnimeDetailsView.spec.ts` 8 (the countdown and auto-play, Play now with the source's pick, Cancel/another Play/leaving the page, Cancel during the start, auto-play off, the picker when it can't auto-play, "Retrying…", the picker after an ERROR), `VideoPicker.spec.ts` 2, `SettingsView.spec.ts` 1. `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` are clean;
+  - the live spec: 9/9 on the new jar, with 38 documents validated (the playback subscription has the new fields);
+  - `cargo test`: 17 (no Rust change).
+- **A flaky core test:** `ExtensionThreadsTest` ("source-pool threads created from extension code don't keep its class loader") failed once ("12, was 26"): it compares the shared source pool's size before and after, and idle threads of earlier tests timed out in between. It passed on the rerun, and this stage doesn't touch it.
+- **mpv's log has the status, `end-file` doesn't.** A refused URL gives `end-file` with `reason: error` and `file_error: "loading failed"`, exit code 2, and `[ffmpeg] http: HTTP error 403 Forbidden` in `mpv.log` at warn level.
+- **An expired URL mid-play is an `eof`.** With AnimeGG's MP4 through the proxy's expiring mode (403 ten seconds after the first request), a seek past the cache made mpv log the 403 and an "End of file" from FFmpeg, then end the file as `eof` with exit code 0, at the seek target (15:00 of 25:00). Before the rule in §9 this was ENDED with the next episode: the first live run showed it.
+- **The header measurement** (the proxy's expiring mode without an expiry logs each token's request headers once; compared with the session's include file):
+
+  | Source | Headers in the include file | Arrived verbatim | mpv's own |
+  |---|---|---|---|
+  | AnimeGG (MP4) | 2: `user-agent`, `referer` (the User-Agent has commas and semicolons) | 2 | `accept`, `range`, `icy-metadata`, `host`, `connection` |
+  | KickAssAnime (HLS, the playlist request) | 7: `accept`, `accept-language` (`en-US,en;q=0.9`), `origin`, `sec-fetch-dest`, `sec-fetch-mode`, `sec-fetch-site`, `user-agent` | 7 | `range`, `icy-metadata`, `host`, `connection` (the source's `accept` replaced mpv's) |
+
+  The first two runs of the script reported 0: it read the proxy's log before the wrapper had logged the launch's token. The comparison now waits for it.
+- **Live through the API** (a scratch script driving the real jar, with a scratch mpv wrapper as `MADOYOMI_MPV` that sends the URL through the header proxy's expiring mode by plan; AnimeGG, One Piece ep. 3, `[SUBBED] AnimeGG:1080p`):
+
+  | Case | Events | Result |
+  |---|---|---|
+  | refused at once (403), from 60 s | STARTED → RETRYING (`loading failed (HTTP 403)`, `httpStatus` 403) → CLOSED (exit 2) → STARTED (the new session) → PROGRESS | the same video, first position 60.00 s and mpv's `time-pos` 60.00 (asked 60) |
+  | expires 10 s after the first request; played from 120 s, a seek to 900 s after 11 s | STARTED → PROGRESS ×15 → RETRYING ("mpv stopped reading the video at 15:00 of 25:00 (HTTP 403)") → CLOSED (exit 0) → STARTED → PROGRESS | the new session started at 900.00 s (mpv `time-pos` 900.00) |
+  | refused, and refused again after the refetch | STARTED → RETRYING → CLOSED → STARTED → ERROR (`retried`, `httpStatus` 403, `nextVideo` `[SUBBED] AnimeGG:720p`) → CLOSED | nothing plays; the next video is the one after the failed one |
+
+  The proxy logged the 403s with the requests' ranges. Each run put ep. 3 back to unwatched with position 0.
+- **Live in `pnpm tauri dev`** (driven by clicks with computer use on the seeded `live-data`, with the same wrapper as `MADOYOMI_MPV`, passing URLs through unless a plan line said otherwise; mpv muted and seeked over its pipe). AnimeGG, One Piece, the remembered choice `[DUBBED] AnimeGG:360p`:
+
+  | Step | Result |
+  |---|---|
+  | Settings → Playback | "Auto-play the next episode", on |
+  | Play on ep. 3, the picker's preselected `[DUBBED] AnimeGG:360p`, a seek to 8 s before the end | ENDED (eof, next episode 4) at 23:30:02.6; the toast; episode 4 started at 23:30:14.3 (the 10 s countdown and the fetch) with `[DUBBED] AnimeGG:360p`, no picker; mpv's title "One Piece - Episode 4 …", the row "Playing" |
+  | ep. 4 to its end; the toast already "Starting…"; Cancel | **found:** the toast went away but episode 5 played: Cancel only dropped a start still fetching the videos, and this one's `playEpisode` was already sent. Fixed: a Cancel (or leaving the page) during the start stops what it started once `playEpisode` returns; opening the picker only dismisses (§9). A test was added |
+  | ep. 5 resumed from 0:35, to its end | "Next: Episode 6 …", "Plays in 10 s", counting down; Cancel at "Plays in 2 s": nothing played in the next 15 s |
+  | ep. 5 again, to its end; Play now, then Cancel straight after | the first two tries after the fix still played episode 6, and no stop was logged. With an on-screen trace, two tries in a row went Play now → Cancel 0.2 s later → the fetch returned 0.4 s after that and was dropped, and nothing played; once more without the trace, the same. The first two weren't explained: the whole start took under a second, and the trace wasn't there yet. The case of a `playEpisode` already sent is only covered by `AnimeDetailsView.spec.ts` |
+  | Play now (in the tries above) | the next episode started within a second, with the remembered video |
+  | ep. 6, the first URL refused (403), Resume from 3:05 | "loading failed (HTTP 403); fetching the videos again", and 0.5 s later the same `[DUBBED] AnimeGG:360p` from the resume point (`time-pos` 193.6 s soon after). "Retrying…" lasted those 0.5 s, too short to see on screen (`AnimeDetailsView.spec.ts` covers it) |
+  | ep. 7, refused, and refused again after the refetch | the picker reopened: "Couldn't play [DUBBED] AnimeGG:360p", "mpv could not play the video: loading failed (HTTP 403)", "[SUBBED] AnimeGG:1080p is selected instead" (the next one, wrapping around); its Play: mpv `height` 1080 |
+  | the restore | `[DUBBED] AnimeGG:360p` played once on ep. 7 (the remembered choice back), then eps. 3–7 marked unwatched in bulk. Stored: eps. 1–2 watched (1499958 ms), eps. 3–7 unwatched with `lastSecondSeen` 0 (their durations are now known); 2 of 1167 episodes watched |
+
+  No `token=` in `madoyomi.log`, `sidecar.log`, `sidecar.1.log`, `mpv.log` or the `pnpm tauri dev` output. The backend stopped with code 0 when the window closed, and mpv wrote nothing into `player/`.
+- **The tooling for this session.** The agent's shell was the Linux VM again, so builds, tests and `pnpm tauri dev` ran through the job runner (`tools/dev-data/agent/`, gitignored). An earlier session wrote most of this stage's code and the API live checks; this one fixed a test name the Kotlin compiler rejects on Windows (a `:` in a backticked name), the header measurement's script, and the Cancel bug, and ran the rest. Computer use's "open application" on the app's exe started a second instance on the default data dir (`%APPDATA%\Madoyomi`); it was closed at once. The `pnpm tauri dev` window is already running and only needs a screenshot.
+- **Not checked:**
+  - Cancel live while a `playEpisode` is in flight (the start took under a second); `AnimeDetailsView.spec.ts` covers it;
+  - auto-play switched off, live: `AnimeDetailsView.spec.ts` and `SettingsView.spec.ts` cover the toast without a countdown and the switch;
+  - "Retrying…" on screen (too short with a local refusal), and leaving the page during the countdown (`AnimeDetailsView.spec.ts`);
+  - a 404 or an expiring HLS stream: the proxy's expiring mode served AnimeGG's MP4 only. KickAssAnime's HLS goes through the proxy only for its playlist (the segments' relative URLs would miss it); the step 20 matrix in the exit run has expiring URLs.

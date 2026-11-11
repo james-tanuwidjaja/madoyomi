@@ -6,6 +6,8 @@ import type {
   ExtensionStore,
   Manga,
   MediaKind,
+  PlaybackEvent,
+  PlaybackSession,
   Source,
 } from "../api/types";
 
@@ -204,4 +206,42 @@ export function makeMangaSource(overrides: Partial<Source> = {}): Source {
     },
     ...overrides,
   });
+}
+
+/** A running playback session of episode 1001 of anime 12 (as `makeEpisodes` numbers them). */
+export function makePlaybackSession(overrides: Partial<PlaybackSession> = {}): PlaybackSession {
+  return {
+    id: "s1",
+    episodeId: 1001,
+    animeId: 12,
+    title: "One Piece - Episode 1",
+    videoTitle: "1080p",
+    state: "RUNNING",
+    startedAt: "1",
+    endedAt: null,
+    exitCode: null,
+    positionSeconds: null,
+    durationSeconds: null,
+    paused: false,
+    ...overrides,
+  };
+}
+
+/** A `playbackEvents` event of `type` for `session` (default: {@link makePlaybackSession}). */
+export function makePlaybackEvent(
+  type: PlaybackEvent["type"],
+  overrides: Partial<PlaybackEvent> = {},
+): PlaybackEvent {
+  return {
+    type,
+    session: makePlaybackSession(),
+    nextEpisodeId: null,
+    reason: null,
+    message: null,
+    httpStatus: null,
+    retried: false,
+    failedVideo: null,
+    nextVideo: null,
+    ...overrides,
+  };
 }

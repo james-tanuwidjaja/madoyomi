@@ -550,8 +550,20 @@ export interface PlaybackSession {
   paused: boolean;
 }
 
-/** `PlaybackEventType.type` (Phase 4 Stage 2). CLOSED is always a session's last event. */
-export type PlaybackEventKind = "STARTED" | "PROGRESS" | "WATCHED" | "ENDED" | "ERROR" | "CLOSED";
+/**
+ * `PlaybackEventType.type` (Phase 4 Stage 2). CLOSED is always a session's last event. RETRYING (Stage 4): mpv
+ * couldn't open the video, and the backend fetches the episode's videos again once; the session's CLOSED follows,
+ * then the new session's events, or ERROR.
+ */
+export type PlaybackEventKind =
+  "STARTED" | "PROGRESS" | "WATCHED" | "ENDED" | "RETRYING" | "ERROR" | "CLOSED";
+
+/** `PlaybackVideoRefType`: a video by its hoster's name and its title and resolution (indexes change per fetch). */
+export interface PlaybackVideoRef {
+  hosterName: string;
+  videoTitle: string;
+  resolution: number | null;
+}
 
 /** `playbackEvents`: something that happened in a playback session. */
 export interface PlaybackEvent {
@@ -561,6 +573,14 @@ export interface PlaybackEvent {
   nextEpisodeId: number | null;
   /** ENDED: mpv's end-file reason ("eof", or "quit" past the watched threshold). */
   reason: string | null;
-  /** ERROR: what went wrong. */
+  /** RETRYING, ERROR: what went wrong. */
   message: string | null;
+  /** RETRYING, ERROR: the last HTTP error status in mpv's log, if any. */
+  httpStatus: number | null;
+  /** ERROR: the videos had been fetched again before it (the failure is final). */
+  retried: boolean;
+  /** RETRYING, ERROR: the video that failed. */
+  failedVideo: PlaybackVideoRef | null;
+  /** ERROR: the video to offer instead, the next in the source's order, if there is one. */
+  nextVideo: PlaybackVideoRef | null;
 }

@@ -6,6 +6,7 @@ import type { QueryClient } from "@tanstack/vue-query";
 import { createQueryClient } from "../../api/realtime";
 import { ApiError } from "../../api/client";
 import type { Episode, HosterChoice, PlaybackSession, VideoChoice } from "../../api/types";
+import type { PickerFailure } from "../../composables/useNextEpisode";
 import { usePlaybackStore } from "../../stores/playback";
 import { VIDEO_CHOICES_KEY, useVideoChoicesStore } from "../../stores/videoChoices";
 import { makeEpisodes } from "../../test/fixtures";
@@ -86,11 +87,18 @@ const checkedVideo = () =>
   );
 const hosterEl = (index: number) => q(`[data-testid="picker-hoster"][data-index="${index}"]`)!;
 
-async function open(episode: Episode = makeEpisodes(1)[0]!) {
+async function open(episode: Episode = makeEpisodes(1)[0]!, failure: PickerFailure | null = null) {
   wrapper = mountView(
     VideoPicker,
     { pinia, queryClient },
-    { open: true, episode, sourceId: SOURCE, sourceName: "AnimeGG", "onUpdate:open": vi.fn() },
+    {
+      open: true,
+      episode,
+      sourceId: SOURCE,
+      sourceName: "AnimeGG",
+      failure,
+      "onUpdate:open": vi.fn(),
+    },
   );
   await flushPromises();
   return wrapper;
@@ -247,6 +255,43 @@ describe("VideoPicker", () => {
     expect(w.emitted("started")?.[0]?.[0]).toMatchObject({ episodeId: 1001 });
   });
 
+  it("opened after a failure, shows it and preselects the video it names instead of the remembered one", async () => {
+    useVideoChoicesStore().remember(SOURCE, {
+      hosterName: "Server 0",
+      videoTitle: "1080p",
+      resolution: 1080,
+    });
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster(0), hoster(1)]);
+    await open(makeEpisodes(1)[0]!, {
+      title: "Couldn't play 1080p",
+      error: new Error("mpv could not play the video: loading failed (HTTP 403)"),
+      preselect: { hosterName: "Server 1", videoTitle: "720p", resolution: 720 },
+    });
+
+    const failure = q('[data-testid="picker-failure"]')!.textContent!;
+    expect(failure).toContain("Couldn't play 1080p");
+    expect(failure).toContain("HTTP 403");
+    expect(q('[data-testid="picker-instead"]')!.textContent).toContain("720p is selected instead");
+    expect(
+      checkedVideo()!.closest('[data-testid="picker-hoster"]')!.getAttribute("data-index"),
+    ).toBe("1");
+    expect(checkedVideo()!.textContent).toContain("720p");
+    // the remembered one is still marked as such
+    expect(hosterEl(0).querySelector('[data-testid="last-used"]')).not.toBeNull();
+  });
+
+  it("opened after a failure whose video isn't there, preselects as usual", async () => {
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster(0)]);
+    await open(makeEpisodes(1)[0]!, {
+      title: "Couldn't play the next episode",
+      error: new Error("There was no video to play."),
+      preselect: { hosterName: "Gone", videoTitle: "720p", resolution: 720 },
+    });
+    expect(q('[data-testid="picker-failure"]')!.textContent).toContain("no video to play");
+    expect(q('[data-testid="picker-instead"]')).toBeNull();
+    expect(checkedVideo()!.textContent).toContain("720p");
+  });
+
   it("preselects the remembered choice in another episode, by hoster name and title or resolution", async () => {
     useVideoChoicesStore().remember(SOURCE, {
       hosterName: "Backup",
@@ -353,6 +398,10 @@ describe("VideoPicker", () => {
       nextEpisodeId: null,
       reason: null,
       message: null,
+      httpStatus: null,
+      retried: false,
+      failedVideo: null,
+      nextVideo: null,
     });
     const [episode] = makeEpisodes(1);
     await open({ ...episode!, lastSecondSeen: "300000", totalSeconds: "1500000" });
