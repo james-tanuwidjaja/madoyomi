@@ -90,6 +90,9 @@ function session(episodeId: number): PlaybackSession {
     startedAt: "1700000000000",
     endedAt: null,
     exitCode: null,
+    positionSeconds: null,
+    durationSeconds: null,
+    paused: false,
   };
 }
 

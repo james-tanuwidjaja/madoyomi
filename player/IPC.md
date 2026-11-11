@@ -2,7 +2,8 @@
 
 Madoyomi plays episodes in **mpv, in its own window**, and the **backend owns the process** (Phase 4 §9). The UI asks
 the backend to play (`playEpisode`) and the backend does the rest. This file is the contract between the backend
-(`server/core/src/main/kotlin/madoyomi/core/player/`) and mpv. Stage 2 adds the IPC client and the observed properties.
+(`server/core/src/main/kotlin/madoyomi/core/player/`) and mpv: the command line and include file (Stage 1), then the
+IPC pipe, what is observed and when progress is saved (Stage 2).
 
 ## Finding mpv and its config
 
@@ -45,9 +46,10 @@ arrives verbatim (quotes, commas, semicolons, non-ASCII). The file is deleted wh
 | header `User-Agent` | `user-agent` |
 | header `Referer` | `referrer` |
 | every other header | one `http-header-fields-append=Name: value` each (never the comma-joined `http-header-fields`, which splits a value at `,`; Phase 0 S4) |
-| each subtitle track URL | `sub-files-append` |
-| each audio track URL | `audio-files-append` |
 | `Video.mpvArgs` (lib 16) | `<name>=<value>`, except the reserved options below |
+
+The external subtitle and audio tracks are not in this file: they are added over IPC once the file is open, so they
+get the source's label as their title (see below).
 
 Left out (and logged as a warning): a header with an invalid name or a line break in its value, a track without a
 URL, and an `mpvArgs` option that would take control away from Madoyomi: the IPC options, `config`, `config-dir`,
@@ -71,6 +73,68 @@ can also read a command line, and headers may carry cookies.
 
 ## IPC (Stage 2)
 
-The pipe is `\\.\pipe\madoyomi-mpv-<session>`, mpv's JSON IPC: one JSON object per line, commands as
-`{"command": [...], "request_id": n}`. Stage 2 adds the client, `observe_property` on `time-pos`, `duration`, `pause`,
-`eof-reached` and `track-list`, and a graceful `quit` before the process is killed.
+The pipe is `\\.\pipe\madoyomi-mpv-<session>` (a Unix socket `/tmp/madoyomi-mpv-<session>.sock` elsewhere), mpv's
+JSON IPC: one JSON object per line, UTF-8, in both directions. The client is `MpvIpcClient`; the session logic is
+`PlaybackSessions` and `PlaybackTracker`.
+
+**Connecting.** mpv creates the pipe a moment after it starts (about 1 s for a local start, longer while an HLS stream
+opens). The backend retries every 100 ms for up to 60 s, and stops trying when mpv exits. The pipe is opened with
+overlapped I/O (`AsynchronousFileChannel`): with a synchronous handle a pending read would block every write. mpv
+accepts several clients, so a script can read properties while the backend is connected.
+
+**Messages.**
+- A command is `{"command": [...], "request_id": n}` (ids from 1, per connection), plus `"async": true` for
+  `sub-add`/`audio-add`. Its reply is `{"request_id": n, "error": "success", "data": …}`; any other `error` fails it.
+- Everything else is an event: `{"event": "property-change", "id": <ours>, "name": …, "data": …}`, `file-loaded`,
+  `seek`, `playback-restart`, `end-file` (`reason`: `eof`, `quit`, `error` with `file_error`, `stop`), …
+- When mpv exits, the pipe closes: the client closes, and commands still waiting fail.
+
+**Observed** (`observe_property`, ids 1–5; mpv sends the current value at once, then each change):
+
+| id | Property | Used for |
+| --- | --- | --- |
+| 1 | `time-pos` | the position (saved, progress events, the watched threshold) |
+| 2 | `duration` | the threshold and the saved duration (`null`/0 while unknown: no threshold) |
+| 3 | `pause` | a save at once on pause; progress events on pause and resume |
+| 4 | `eof-reached` | the end of the file (with `end-file` `eof`; `keep-open=no` makes mpv exit right after) |
+| 5 | `track-list` | a non-empty list means the file is open already (the pipe connected after `file-loaded`) |
+
+**Commands sent.**
+- `observe_property` (above), right after connecting.
+- `sub-add <url> select|auto <title>` and `audio-add <url> auto <title>` (async), once the file is open, for the
+  video's external tracks: the title is the source's label (`Track.lang`, e.g. "English"), so mpv's menus show it
+  rather than the URL's file name. The first subtitle track is selected (as mpv selects a single `--sub-file`). The
+  first audio track is selected only when the file has no audio of its own (checked with `get_property track-list`
+  first): mpv's own track selection has already run when the tracks arrive, and an HLS stream whose audio comes only
+  as external tracks would otherwise play silent. mpv numbers the tracks in the order they finish loading.
+- `quit` to stop a session (`stopPlayback`, a new `playEpisode`, the backend's shutdown). mpv then exits with code 0.
+  Only if it is still running 3 s later (or the pipe never connected) is the process killed (TerminateProcess, code 1).
+
+**Progress.** It goes into the episode's `EPISODE.last_second_seen` and `total_seconds`, in **milliseconds** despite
+the names, as the Aniyomi app stores them (its player writes `position * 1000`), so backups and history agree. It is
+written:
+- every 5 s of playback (not while paused), starting with the first position;
+- at once on pause, after a seek (the first position once playback restarts), when the watched threshold is reached,
+  and at `end-file`;
+- when the session ends (mpv exited, or the backend stopped it), with the last position mpv reported.
+
+A write with the same values as the last one is skipped, and a duration of 0 never replaces a known one. On the
+backend's own shutdown nothing is written (the database may be closing too): the last save is at most 5 s old.
+
+**Watched.** The first time `time-pos / duration` reaches the threshold (85 %; the player settings, Stage 5) in a
+session, `EPISODE.watched` is set if it isn't already, and a WATCHED event goes out. It is tried once per session: an
+episode the user unmarks while it plays isn't marked again by that session.
+
+**Events** (GraphQL `playbackEvents(episodeId)`, nothing replayed):
+
+| Event | When |
+| --- | --- |
+| `STARTED` | the pipe is connected |
+| `PROGRESS` | the position moved (at most once a second), or mpv paused, resumed or seeked |
+| `WATCHED` | the episode was marked watched (once per session) |
+| `ENDED` | the end of the file (`reason: eof`), or the user quit past the threshold (`reason: quit`); `nextEpisodeId` is the next episode in the source's order (`source_order` + 1 and up), if any |
+| `ERROR` | mpv ended early: `end-file` with `error` (`message`: "mpv could not play the video: <file_error>"), or a non-zero exit code |
+| `CLOSED` | the session is over (always its last event), with its final state |
+
+A stop by Madoyomi gives no ENDED or ERROR, only CLOSED. Each event carries the session with `positionSeconds`,
+`durationSeconds` and `paused`.

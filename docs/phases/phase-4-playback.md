@@ -64,10 +64,10 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 - [x] `player/mpv.conf` + `input.conf` in place (Stage 1, with `player/IPC.md`; used live through `MADOYOMI_PLAYER_DIR`)
 
 ### IPC & progress
-- [ ] Named-pipe JSON IPC client with `observe_property`
-- [ ] Progress saved periodically and on quit
-- [ ] Watched threshold marks the episode once
-- [ ] `playback.*` WS events
+- [x] Named-pipe JSON IPC client with `observe_property` (Stage 2: `MpvIpcClient`, overlapped I/O on the pipe; `MpvIpcClientTest` on a real named pipe, and live with AnimeGG and KickAssAnime, §10)
+- [x] Progress saved periodically and on quit (Stage 2: `PlaybackTracker` + `EpisodeProgress`, milliseconds in `EPISODE`; `PlaybackTrackerTest`, `EpisodeProgressTest`, `PlaybackApiTest`, and live: a quit halfway stored mpv's last position, §10)
+- [x] Watched threshold marks the episode once (Stage 2: 85 %, once per session; `PlaybackTrackerTest`, `PlaybackApiTest`, and live with a seek to 99 %, §10)
+- [x] `playback.*` WS events (Stage 2: the GraphQL subscription `playbackEvents` over the existing WebSocket: STARTED, PROGRESS, WATCHED, ENDED with the next episode, ERROR, CLOSED; `PlaybackApiTest`, and live, §10)
 
 ### Selection & errors
 - [ ] Preferred quality/server sorting
@@ -84,7 +84,7 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 
 ### Tests
 - [x] Launcher argument unit tests (Stage 1: `MpvCommandTest`, `MpvLocatorTest`)
-- [ ] IPC client test with fake pipe
+- [x] IPC client test with fake pipe (Stage 2: `MpvIpcClientTest` against `FakeMpvServer`, a fake mpv on a real Windows named pipe, which `PlaybackApiTest` also runs as mpv)
 - [ ] Manual format matrix passed
 
 ### Stretch
@@ -116,6 +116,11 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - app: Play's choice of video, its errors, and the busy row; the shell: the mpv and config-dir resolution;
      - live through the API (§10): AnimeGG's MP4 with its Referer from 60 s and KickAssAnime's HLS with 6 headers, 8 subtitles and 2 audio tracks, both advancing over the IPC pipe; a session replacing another; a killed backend's mpv ended by the next one; `PLAYER_NOT_FOUND`; no token or header on mpv's command line or in the logs;
      - live in `pnpm tauri dev`: Play on an AnimeGG and a KickAssAnime episode opened mpv with the episode's title; quitting mpv, closing the app and killing the app each left no mpv.
+   - *Done* (2026-11-11):
+     - server: `MpvIpcClient` (the named pipe with overlapped I/O, retries, replies, events, `observe_property`), `PlaybackTracker` (saves, the watched mark, progress events, how a session ended), `EpisodeProgress` (milliseconds in `EPISODE`, the next episode), the external tracks added over IPC with their labels, a graceful `quit`, and the subscription `playbackEvents`;
+     - tests: `MpvIpcClientTest` (7) on a real named pipe served by `FakeMpvServer` (Java + JNA, test only), `PlaybackTrackerTest` (10), `EpisodeProgressTest` (3), and 3 new `PlaybackApiTest` cases with `FakeMpvServer` as mpv (progress, watched, ENDED with the next episode; a stop by `quit`; a failed load as ERROR);
+     - app: `playbackEvents` refetches the anime's episodes on WATCHED and CLOSED, so the list's Watched badge follows; the session fields and the event type are in `types.ts`;
+     - live through the API (§10): AnimeGG from 60 s, a save every 5 s, a seek to halfway and a quit stored mpv's last position to the millisecond; the same episode from halfway with a seek to 99 % was marked watched once, then ENDED with the next episode; KickAssAnime's 8 subtitle and 2 audio tracks carry their labels, and `stopPlayback` quit mpv with code 0.
 2. **IPC and progress** (steps 4–8, 19): `MpvIpcClient` on the named pipe (`observe_property` on `time-pos`, `duration`, `pause`, `eof-reached`, `track-list`), a graceful `quit` before the kill, progress saved every 5 s and on pause and quit into `EPISODE.last_second_seen`/`total_seconds`, the episode marked watched once at the threshold, and a GraphQL subscription with progress, ended and error events. Verified by a fake-pipe test and a live check of the stored values after quitting halfway.
 3. **Picker, resume and watched state in the UI** (steps 12–14): `VideoPicker` (hosters, quality, subtitle and audio counts, the last choice remembered per source), the "Resume from mm:ss / Start over" prompt, progress bars and watched marks that update live, and bulk mark watched/unwatched (`updateEpisodes`). Verified by component tests and live.
 4. **Next episode and errors** (steps 8, 9, 11, 15): the next-episode toast with a countdown and auto-play; on a 403/404 or an early exit, the videos fetched again once, then the next video offered. The proxy fallback is decided by measurement (mpv sends every header itself, so it is likely deferred). Verified with an expiring URL from the header proxy (`spikes/mpv-play/header-proxy.mjs`) and live.
@@ -164,6 +169,26 @@ Decided in the stage (defaults, not asked):
 - **mpv's config** (`player/mpv.conf`): no watch-later files (Madoyomi keeps the position), `keep-open=no` (so mpv ends at the end of the file, for Stage 4's next-episode flow), a larger demuxer cache, `hwdec=auto-safe`. `input.conf` makes `Shift+Q` quit without writing a watch-later file. `player/.gitignore` keeps anything mpv might write there out of git.
 - **Play in the UI until the picker:** each episode row gets a Play button that takes the first READY hoster (in the source's order) and its `preferred` video, else its first. The row says "Starting…" until mpv is up. A failure shows above the rows: the failed hoster's error, `PLAYER_NOT_FOUND` with a hint, or "no video".
 
+### Stage 2 (2026-11-11)
+
+Decided in the stage (defaults, not asked):
+- **Progress is stored in milliseconds**, in the existing `EPISODE.last_second_seen` and `total_seconds`, despite their names. The Aniyomi app's player writes `position * 1000` and `duration * 1000` into these fields (`PlayerViewModel.onSecondReached`), so backups and Phase 6's history agree with Aniyomi's. The GraphQL fields keep Aniyomi's names (`lastSecondSeen`, `totalSeconds`), now described as milliseconds. No migration.
+- **The IPC client is plain JDK:** the named pipe is opened as an `AsynchronousFileChannel`, so with overlapped I/O, and a reader thread waits on reads while other threads write. A synchronous handle (`RandomAccessFile`) would serialize them: a pending read would block every command. Elsewhere it is a Unix socket (`SocketChannel`). JNA is a test dependency only: the fake mpv has to *serve* a named pipe, which Java can't do.
+- **What is saved, and when:**
+  - every 5 s of playback, starting with the first position;
+  - at once on pause, after a seek (the first position once playback restarts), at the threshold and at `end-file`;
+  - when the session ends, with the last position mpv reported.
+
+  A save with the same values is skipped, and a duration of 0 never replaces a known one. Nothing is written from the backend's shutdown hook, because the database may be closing too: the last save is at most 5 s old.
+- **Watched:** at 85 % of the duration (`PlaybackSessions.watchedThreshold`, Stage 5's setting), tried once per session. `watched` is set only if it isn't already, so an episode the user unmarks while it plays isn't marked again by that session. A video without a duration (live) is never marked. The position is kept when an episode is marked (Aniyomi's "preserve watch position" default).
+- **Ended:** at the end of the file, or when the user quits past the threshold (Phase 4 step 8's "quit near the end": the credits). The next episode is the following one in the source's order (`source_order` + 1 and up, the same anime). A stop by Madoyomi (`stopPlayback`, a new `playEpisode`) is never ENDED or ERROR.
+- **Error:** mpv's `end-file` with `reason: error` ("mpv could not play the video: <file_error>"), or a non-zero exit code that wasn't ours.
+- **Events:** the GraphQL subscription `playbackEvents(episodeId)`: STARTED (the pipe connected), PROGRESS (at most once a second, and at once on pause, resume and seek), WATCHED, ENDED (`nextEpisodeId`, `reason`), ERROR (`message`), CLOSED (always last). Each carries the session, which now has `positionSeconds`, `durationSeconds` and `paused` (also in `playbackSession`). Nothing is replayed.
+- **Stopping:** `quit` over IPC first, then wait up to 3 s for mpv to exit (code 0). Only then, or when the pipe never connected, is the process destroyed (TerminateProcess, code 1). The same applies to the backend's shutdown hook (2 s).
+- **External tracks over IPC:** subtitle and audio tracks are added with `sub-add`/`audio-add` (async), with the source's label as their title, once the file is open (`file-loaded`, or a non-empty `track-list` if the pipe connected late), instead of `sub-files-append`/`audio-files-append` in the include file. Those can't name a track, so mpv showed the URL's file name. The first subtitle track is selected (as mpv selects a single `--sub-file`), and the first audio track only when the file has no audio of its own (found live: KickAssAnime's HLS has none, and mpv's selection has already run when the tracks arrive, so it played silent). Stage 5's language preference will choose between them. The trade-off: without the pipe, there are no external tracks, but there is no progress either.
+- **The pipe:** the backend retries every 100 ms for up to 60 s after the start, and stops when mpv exits. A session without a pipe plays on, but nothing is saved (logged).
+- **UI, only what this stage needs:** the app subscribes to `playbackEvents` and fetches the anime's episodes again on WATCHED and CLOSED, so the episode list's watched state (`isWatched`, already shown) and the stored position follow without a manual refresh. Progress bars, the resume prompt and live progress are Stage 3.
+
 ## 10. Findings log
 
 ### Stage 1 (2026-11-07)
@@ -208,3 +233,44 @@ Decided in the stage (defaults, not asked):
   - the header proxy (`spikes/mpv-play/header-proxy.mjs`): AnimeGG's real host refuses a request without its Referer, which covers the same thing; Stage 4 uses the proxy for expiring URLs;
   - a release build's paths (`resources/mpv`, `resources/player`): only the shell's unit test covers them (Phase 7);
   - a subtitle track's language label in mpv: external tracks load by URL, and mpv shows their file names. Stage 2 can name them over IPC (`sub-add` with a title).
+
+### Stage 2 (2026-11-11)
+
+- **Baseline before the stage** (feat/phase-4-launcher merged):
+  - server: `.\gradlew.bat build` green with 688 tests, 0 failures (core 620 with 8 skipped, AndroidCompat 7, ext-host 8, api 53);
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean;
+  - the live spec on the baseline jar: 8/9. The schema check failed only on this stage's new fields (`playbackEvents`, `positionSeconds`, `durationSeconds`, `paused`), because the app's documents were already edited when it ran. The baseline's own 35 documents validated;
+  - app: Stage 1's record (34 files, 266 passed + 9 skipped), not rerun before the edits. The first run on this branch had 266 passing plus 1 failing (a subscription count this stage changed), so no earlier test was lost.
+- **After the stage:**
+  - server: 711 tests, 0 failures (core 640 with 8 skipped, AndroidCompat 7, ext-host 8, api 56). That is 23 new ones: `MpvIpcClientTest` 7, `PlaybackTrackerTest` 10, `EpisodeProgressTest` 3, `PlaybackApiTest` 3. `MpvCommandTest`'s track test was rewritten for the tracks over IPC;
+  - smoke: 24/24 on the new jar;
+  - app: 34 files, 267 passed + 9 skipped (the new realtime test); `pnpm lint`, `pnpm typecheck` and `pnpm format:check` clean;
+  - the live spec: 9/9 on the new jar, with 36 documents validated (35 before; `PLAYBACK_EVENTS_SUBSCRIPTION` is new);
+  - `cargo test`: 17 (no Rust change).
+- **The overlapped pipe works as expected.** `AsynchronousFileChannel.open(Path.of("\\\\.\\pipe\\…"), READ, WRITE)` opens mpv's pipe. Reads and writes run at once from different threads, which `MpvIpcClientTest` checks with 100 commands from 4 threads while events stream. A broken pipe fails the pending read with an `IOException`, which is how the client sees mpv exit.
+- **Live through the API** (a scratch script driving the real jar and the installed mpv on the seeded data dir; mpv muted over a second IPC client). AnimeGG, One Piece ep. 2, `[SUBBED] AnimeGG:1080p` (MP4, duration 1500.125 s):
+
+  | Step | Stored (`episodes` query) |
+  |---|---|
+  | before | `isWatched` false, `lastSecondSeen` 0, `totalSeconds` 0 |
+  | played from 60 s, read at ~72 s | `lastSecondSeen` 70070, `totalSeconds` 1500125 (the 5 s save at 70 s) |
+  | a seek to 750 s, then `quit` over IPC at mpv's `time-pos` 752.043710 | `lastSecondSeen` 752043, `totalSeconds` 1500125, `isWatched` false |
+  | played again from 750 s, a seek to 1488 s (99 %), played to the end | `isWatched` true, `lastSecondSeen` 1499958 |
+
+  The events, in order (PROGRESS runs collapsed):
+  - the quit halfway: STARTED → PROGRESS ×17 (60.0 … 752.0) → CLOSED (EXITED, exit 0, position 752.04);
+  - the seek to the end: STARTED → PROGRESS ×4 (750.0 … 752.0) → WATCHED (1488) → PROGRESS ×12 (1488.1 … 1499.2) → ENDED (`next=3`, `reason=eof`) → CLOSED (EXITED, exit 0).
+
+  The first run of the same script, on episode 1, gave the same values and `next=2`. The log has "episode 2 marked watched at 1488.0 s" and "ended (eof), next episode 3".
+- **KickAssAnime** (Bungou Stray Dogs 5th Season ep. 1, VidStreaming HLS with 8 subtitle and 2 audio tracks): every track shows its label as its title in mpv ("English (eng)", "Japanese", …). The source's first subtitle (English) is selected. mpv numbers the tracks in the order they finish loading (async), so English came out as track 8 rather than 1. `stopPlayback` quit mpv over IPC: STOPPED, exit code 0, 6.09 s stored as 6089 ms, `totalSeconds` 1420045.
+- **Found live and fixed:** the HLS stream has no audio of its own. With `audio-add … auto` arriving after mpv's track selection, no audio track was selected, so the video played silent (hidden by the mute). Stage 1's `--audio-files-append` was selected at load. Now the session checks `track-list` first and selects the first external audio track when there is no other: `aid=1` (Japanese, the source's first) in the rerun.
+- **No token** in `madoyomi.log`, `sidecar.log`, `sidecar.1.log` or `mpv.log` after the runs. mpv wrote nothing into `player/`.
+- **The tooling for this session.**
+  - The Gradle daemon a job's build starts inherits the job's output pipe and keeps it open, so a `cmd /c gradlew … > file` inside a runner job never returns. The baseline job hung that way and the user ended it. Later jobs start Gradle with `Start-Process … -PassThru` and `WaitForExit()`, with no redirected handles.
+  - PowerShell pitfalls in the scratch scripts: `$Args` is an automatic variable (a parameter of that name was empty), `Sequence` is a reserved word, and a script-level `[string]$Pick` parameter type-constrained the variable `$pick` (names are case-insensitive).
+- **Not checked:**
+  - in `pnpm tauri dev`: the Watched badge appearing without a manual refresh. The app refetches the episodes on WATCHED and CLOSED (`realtime.spec.ts`), and the badge reads `isWatched` (`EntryItemList`), but this wasn't clicked through live. Stage 3 adds live progress, and checks it with the §6 criteria;
+  - the backend's own shutdown while mpv plays: it quits mpv over IPC now (2 s, then the kill), as Stage 1's hook did with the kill alone. A unit test doesn't reach a shutdown hook, and it wasn't rerun live;
+  - a quit past the threshold giving ENDED with `reason=quit` live: the tracker's tests cover it.
+

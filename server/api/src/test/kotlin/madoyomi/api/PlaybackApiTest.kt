@@ -10,13 +10,31 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import madoyomi.core.anime.model.table.EpisodeTable
+import madoyomi.core.player.FakeMpvServer
 import madoyomi.core.player.MpvCommand
+import madoyomi.core.player.MpvIpcClient
 import madoyomi.core.player.MpvLocator
 import madoyomi.core.player.PlaybackSessions
 import okhttp3.Headers.Companion.headersOf
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.condition.EnabledOnOs
+import org.junit.jupiter.api.condition.OS
+import suwayomi.tachidesk.server.database.dbTransaction
 import java.io.File
+import java.util.Collections
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
@@ -31,6 +49,10 @@ import kotlin.test.assertTrue
  * `playEpisode`, `stopPlayback` and `playbackSession` (Phase 4 Stage 1) with a fake mpv ([FakeMpv], a small Java
  * program started as mpv would be): the video resolved before the launch, the command line and include file, one
  * session at a time, mpv exiting by itself, a missing mpv, and the orphans of a crashed backend.
+ *
+ * Stage 2, over IPC with a fake mpv that serves a real named pipe ([FakeMpvServer] as a process, on Windows): progress
+ * saved into `EPISODE` while playing and at the end, the watched mark, the external tracks with their titles, a
+ * graceful `quit`, and the `playbackEvents` subscription (ENDED with the next episode, ERROR, CLOSED).
  */
 class PlaybackApiTest : AnimeApiTest() {
     private class PlaySource : AnimeHttpSource() {
@@ -95,7 +117,8 @@ class PlaybackApiTest : AnimeApiTest() {
         PlaybackSessions.executable = defaultExecutable
     }
 
-    private val sessionFields = "id episodeId animeId title videoTitle state startedAt endedAt exitCode"
+    private val sessionFields =
+        "id episodeId animeId title videoTitle state startedAt endedAt exitCode positionSeconds durationSeconds paused"
 
     private fun play(
         episodeId: Int,
@@ -175,8 +198,8 @@ class PlaybackApiTest : AnimeApiTest() {
         assertTrue("force-media-title=%21%One Piece - Episode 1\n" in include, include)
         assertTrue("referrer=%25%https://play.example.org/\n" in include, include)
         assertTrue("http-header-fields-append=%29%sec-ch-ua: \"Chromium\";v=\"130\"\n" in include, include)
-        assertTrue("sub-files-append=%19%https://subs/en.vtt\n" in include, include)
-        assertTrue("audio-files-append=%20%https://audio/ja.m4a\n" in include, include)
+        // the tracks are added over IPC with their labels (Stage 2), not from the include file
+        assertFalse("sub-files-append" in include || "audio-files-append" in include, include)
         assertTrue("demuxer-max-bytes=%3%50M\n" in include, include)
         assertFalse("evil.lua" in include, include)
 
@@ -295,5 +318,192 @@ class PlaybackApiTest : AnimeApiTest() {
                 .filter { it.startsWith("orphan") || it.startsWith("reused") },
         )
         File(records, "orphan-test.txt").delete()
+    }
+
+    // Stage 2: over IPC, with FakeMpvServer (core's tests) as mpv
+
+    private val ipcClasspath =
+        listOf(FakeMpvServer::class.java, com.sun.jna.Native::class.java, com.sun.jna.platform.win32.Kernel32::class.java)
+            .map {
+                File(
+                    it.protectionDomain.codeSource.location
+                        .toURI(),
+                ).path
+            }.distinct()
+            .joinToString(File.pathSeparator)
+
+    /** mpv is [FakeMpvServer]: a fake file of [duration] seconds played at [speed]× real time. */
+    private fun fakeIpc(
+        duration: Double,
+        speed: Double,
+        mode: String = "play",
+        loadMillis: Long = 300,
+    ) {
+        PlaybackSessions.executable = {
+            listOf(
+                java,
+                "-Dfakempv.duration=$duration",
+                "-Dfakempv.speed=$speed",
+                "-Dfakempv.mode=$mode",
+                "-Dfakempv.loadMillis=$loadMillis",
+                "-cp",
+                ipcClasspath,
+                "madoyomi.core.player.FakeMpvServer",
+            )
+        }
+    }
+
+    private val eventFields = "type nextEpisodeId reason message session { $sessionFields }"
+
+    /**
+     * Runs [block] while `playbackEvents(episodeId)` collects, until [until] holds for the events seen (or a minute
+     * passes); returns [block]'s result and the events.
+     */
+    private fun <T> withEvents(
+        episodeId: Int,
+        until: (List<Any?>) -> Boolean = { events -> events.any { it.path("type") == "CLOSED" } },
+        block: () -> T,
+    ): Pair<T, List<Any?>> =
+        runBlocking {
+            val events = Collections.synchronizedList(mutableListOf<Any?>())
+            val before = PlaybackSessions.eventSubscribers.value
+            val job =
+                launch(Dispatchers.Default) {
+                    subscribe("subscription { playbackEvents(episodeId: $episodeId) { $eventFields } }").collect { response ->
+                        response.assertNoErrors()
+                        events += response.dataPath("playbackEvents")
+                    }
+                }
+            withTimeout(10_000) { while (PlaybackSessions.eventSubscribers.value <= before) delay(10) }
+            val result = withContext(Dispatchers.IO) { block() }
+            withTimeout(60_000) { while (!until(events.toList())) delay(20) }
+            job.cancel()
+            result to events.toList()
+        }
+
+    private fun progressOf(episodeId: Int) =
+        dbTransaction {
+            EpisodeTable.selectAll().where { EpisodeTable.id eq episodeId }.single().let {
+                Triple(it[EpisodeTable.lastSecondSeen], it[EpisodeTable.totalSeconds], it[EpisodeTable.watched])
+            }
+        }
+
+    /** The lines the fake mpv of session [id] was sent (written when it exits). */
+    private fun receivedBy(id: String): List<String> {
+        val file = File(records, "madoyomi-mpv-$id.received")
+        val deadline = System.currentTimeMillis() + 10_000
+        while (!file.isFile) {
+            check(System.currentTimeMillis() < deadline) { "the fake mpv of $id wrote nothing" }
+            Thread.sleep(50)
+        }
+        return file.readLines().also { file.delete() }
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `over IPC the progress is saved, the episode marked watched once, and the end of the file is ENDED with the next episode`() {
+        fakeIpc(duration = 20.0, speed = 5.0)
+        val source = PlaySource()
+        register(source)
+        val anime = animeRow(source.id, "/anime", title = "One Piece")
+        val first = episodeRow(anime, "/episode/1", order = 1)
+        val second = episodeRow(anime, "/episode/2", order = 2)
+
+        val (id, events) =
+            withEvents(first) { play(first, start = 2.0).assertNoErrors().dataPath("playEpisode", "session", "id") as String }
+        recordOf(id)
+        val types = events.map { it.path("type") }
+        assertEquals("STARTED", types.first(), types.toString())
+        assertEquals("CLOSED", types.last(), types.toString())
+        assertTrue("PROGRESS" in types, types.toString())
+        assertEquals(1, types.count { it == "WATCHED" }, types.toString())
+        assertTrue(types.indexOf("WATCHED") < types.indexOf("ENDED"), types.toString())
+        assertFalse("ERROR" in types, types.toString())
+        val ended = events.single { it.path("type") == "ENDED" }
+        assertEquals(second, ended.path("nextEpisodeId"))
+        assertEquals("eof", ended.path("reason"))
+        val watched = events.single { it.path("type") == "WATCHED" }
+        assertTrue((watched.path("session", "positionSeconds") as Double) >= 17.0)
+
+        val closed = events.last().path("session")
+        assertEquals("EXITED", closed.path("state"))
+        assertEquals(0, closed.path("exitCode"))
+        assertEquals(20.0, closed.path("durationSeconds"))
+        assertEquals(Triple(20_000L, 20_000L, true), progressOf(first), "milliseconds, as Aniyomi stores them")
+        assertEquals(Triple(0L, 0L, false), progressOf(second))
+
+        // the external tracks went over IPC, with their labels as titles; the first subtitle track selected, and the
+        // first audio track too, since the fake's file has no audio of its own
+        val sent = receivedBy(id)
+        assertTrue(
+            sent.any { "\"sub-add\",\"https://subs/en.vtt\",\"select\",\"English\"" in it && "\"async\":true" in it },
+            sent.toString(),
+        )
+        assertTrue(sent.any { "\"audio-add\",\"https://audio/ja.m4a\",\"select\",\"Japanese\"" in it }, sent.toString())
+        madoyomi.core.player.PlaybackTracker.OBSERVED.forEach { name ->
+            assertTrue(
+                sent.any {
+                    "\"observe_property\"" in it &&
+                        "\"$name\"" in it
+                },
+                name,
+            )
+        }
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `stopPlayback quits mpv over IPC and keeps the position, with no ENDED`() {
+        fakeIpc(duration = 1000.0, speed = 1.0)
+        val episodeId = episode(PlaySource())
+
+        val (stopped, events) =
+            withEvents(episodeId) {
+                val id = play(episodeId, start = 100.0).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+                recordOf(id)
+                val deadline = System.currentTimeMillis() + 20_000
+                while (((currentSession().path("positionSeconds") as? Double) ?: 0.0) < 101.5) {
+                    check(System.currentTimeMillis() < deadline) { "no position over IPC" }
+                    Thread.sleep(50)
+                }
+                // a second IPC client on the same pipe (mpv allows several) sees the titled tracks
+                val tracks =
+                    assertNotNull(MpvIpcClient.connect("madoyomi-mpv-$id", 5_000, onEvent = {})).use { client ->
+                        client.command("get_property", "track-list").get(5, TimeUnit.SECONDS) as JsonArray
+                    }
+                assertEquals(
+                    listOf("English", "Japanese"),
+                    tracks.map { it as JsonObject }.filter { it.containsKey("title") }.map { it["title"]?.jsonPrimitive?.content },
+                )
+                graphql("mutation { stopPlayback(input: {}) { session { $sessionFields } } }")
+                    .assertNoErrors()
+                    .dataPath("stopPlayback", "session")
+            }
+        assertEquals("STOPPED", stopped.path("state"))
+        assertEquals(0, stopped.path("exitCode"), "mpv quit (TerminateProcess would give 1)")
+        val types = events.map { it.path("type") }
+        assertEquals("CLOSED", types.last(), types.toString())
+        assertFalse("ENDED" in types || "ERROR" in types || "WATCHED" in types, types.toString())
+        val (position, duration, watched) = progressOf(episodeId)
+        assertTrue(position in 101_500L..120_000L, "position $position")
+        assertEquals(1_000_000L, duration)
+        assertFalse(watched)
+        assertTrue(receivedBy(stopped.path("id") as String).any { "\"quit\"" in it })
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `a video that fails to load is ERROR, then CLOSED`() {
+        fakeIpc(duration = 100.0, speed = 1.0, mode = "error", loadMillis = 2_000)
+        val episodeId = episode(PlaySource())
+        val (id, events) =
+            withEvents(episodeId) { play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String }
+        recordOf(id)
+        receivedBy(id)
+        assertEquals(listOf("STARTED", "ERROR", "CLOSED"), events.map { it.path("type") })
+        assertEquals("mpv could not play the video: loading failed", events[1].path("message"))
+        assertEquals("EXITED", events.last().path("session", "state"))
+        assertEquals(2, events.last().path("session", "exitCode"))
+        assertEquals(Triple(0L, 0L, false), progressOf(episodeId))
     }
 }

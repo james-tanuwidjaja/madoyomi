@@ -15,6 +15,6 @@ import madoyomi.core.graphql.GraphQLSchemaContribution
 class MadoyomiSchema : GraphQLSchemaContribution {
     override val queries: List<Any> = listOf(TrustQuery(), AnimeSourceQuery(), AnimeQuery(), EpisodeQuery(), PlaybackQuery())
     override val mutations: List<Any> = listOf(TrustMutation(), AnimeMutation(), PlaybackMutation())
-    override val subscriptions: List<Any> = listOf(ExtensionSubscription())
+    override val subscriptions: List<Any> = listOf(ExtensionSubscription(), PlaybackSubscription())
     override val dataLoaders: List<KotlinDataLoader<*, *>> = animeDataLoaders
 }
