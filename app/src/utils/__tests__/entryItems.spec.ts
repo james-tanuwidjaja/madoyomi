@@ -39,7 +39,34 @@ describe("entry items", () => {
       done: false,
       bookmarked: true,
       filler: true,
+      progress: { positionMs: 0, durationMs: 0 },
     });
+    // the stored position, or the live session's for the episode mpv plays
+    const stopped = { ...e, lastSecondSeen: "752043", totalSeconds: "1500125" };
+    expect(fromEpisode(stopped)).toMatchObject({
+      progress: { positionMs: 752043, durationMs: 1500125 },
+    });
+    expect(fromEpisode(stopped).playing).toBeUndefined();
+    const live = {
+      id: "s1",
+      episodeId: e.id,
+      animeId: e.animeId,
+      title: "t",
+      videoTitle: "v",
+      state: "RUNNING" as const,
+      startedAt: "1",
+      endedAt: null,
+      exitCode: null,
+      positionSeconds: 800,
+      durationSeconds: 1500.125,
+      paused: true,
+    };
+    expect(fromEpisode(stopped, live)).toMatchObject({
+      progress: { positionMs: 800000, durationMs: 1500125 },
+      playing: "paused",
+    });
+    expect(fromEpisode(stopped, { ...live, paused: false }).playing).toBe("playing");
+    expect(fromEpisode(stopped, { ...live, episodeId: 1 }).playing).toBeUndefined();
     const [c] = makeChapters(1);
     expect(fromChapter({ ...c, isRead: true, scanlator: "TCB", uploadDate: "0" })).toMatchObject({
       number: 1,

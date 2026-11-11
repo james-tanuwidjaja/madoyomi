@@ -138,3 +138,8 @@ episode the user unmarks while it plays isn't marked again by that session.
 
 A stop by Madoyomi gives no ENDED or ERROR, only CLOSED. Each event carries the session with `positionSeconds`,
 `durationSeconds` and `paused`.
+
+**Resuming (Stage 3).** The UI's video picker offers "Resume from mm:ss" when the stored position is at least 1 % and
+below the watched threshold of the stored duration, and plays with `startSeconds = lastSecondSeen / 1000` (the
+`--start` of the command line). A watched episode starts at 0. Marking an episode unwatched (`updateEpisodes`) sets
+`last_second_seen` back to 0.

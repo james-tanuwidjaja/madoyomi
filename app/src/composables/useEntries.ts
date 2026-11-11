@@ -11,8 +11,9 @@ import {
   refreshAnime,
   refreshManga,
   setInLibrary,
+  updateEpisodes,
 } from "../api/operations";
-import type { Anime, MediaKind, SourcePage } from "../api/types";
+import type { Anime, Episode, EpisodePatch, MediaKind, SourcePage } from "../api/types";
 import { queryKeys, type BrowseKey } from "./queryKeys";
 
 /*
@@ -189,6 +190,32 @@ export function useSetInLibrary() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.library(r.kind) });
       const parentId = r.kind === "anime" ? (entry as Anime).parentId : null;
       if (parentId) void queryClient.invalidateQueries({ queryKey: queryKeys.seasons(parentId) });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Watched marks (Phase 4 Stage 3)
+
+export interface UpdateEpisodesRequest {
+  ids: number[];
+  patch: EpisodePatch;
+}
+
+/**
+ * Marks episodes watched or unwatched (`updateEpisodes`; unwatched also clears the position, as in Aniyomi). The
+ * episodes as stored replace their rows in the anime's cached list, so the list isn't fetched again.
+ */
+export function useUpdateEpisodes(animeId: MaybeRefOrGetter<number>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (r: UpdateEpisodesRequest) => updateEpisodes(r.ids, r.patch),
+    onSuccess: (updated) => {
+      const byId = new Map(updated.map((e) => [e.id, e]));
+      queryClient.setQueryData<Episode[]>(
+        queryKeys.episodes(toValue(animeId)),
+        (list) => list && list.map((e) => byId.get(e.id) ?? e),
+      );
     },
   });
 }

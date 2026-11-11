@@ -2,6 +2,7 @@ import { effectScope, watch } from "vue";
 import { QueryClient } from "@tanstack/vue-query";
 import { useBackendStore } from "../stores/backend";
 import { useEventsStore } from "../stores/events";
+import { usePlaybackStore } from "../stores/playback";
 import { queryKeys } from "../composables/queryKeys";
 import { api, isApiError } from "./client";
 import {
@@ -14,7 +15,13 @@ import {
   EXTENSION_STORE_REFRESHED_SUBSCRIPTION,
   PLAYBACK_EVENTS_SUBSCRIPTION,
 } from "./operations/subscriptions";
-import type { ExtensionInstallProgress, ExtensionStoreRefreshed, PlaybackEvent } from "./types";
+import type {
+  Episode,
+  ExtensionInstallProgress,
+  ExtensionStoreRefreshed,
+  PlaybackEvent,
+  PlaybackSession,
+} from "./types";
 import { mediaKindOf } from "./types";
 
 /**
@@ -52,9 +59,12 @@ export interface RealtimeOptions {
  *   port after a restart;
  * - subscribes to `extensionInstallProgress` and `extensionStoreRefreshed` for the app's lifetime, records them in
  *   the events store and invalidates the queries they change;
- * - subscribes to `playbackEvents`: when an episode is marked watched or a session closes (its progress saved), the
- *   anime's episode list is fetched again (Phase 4 Stage 2; Stage 3 shows live progress);
- * - after a reconnect (events may have been missed: nothing is replayed) invalidates the extension and repo queries;
+ * - subscribes to `playbackEvents` (Phase 4): every event of a session goes into the playback store, from which the
+ *   episode list draws the playing row's progress live (Stage 3: PROGRESS refetches nothing). WATCHED marks the
+ *   episode in the cached list at once, and CLOSED writes its last position there; both then fetch the anime's
+ *   episodes again, as stored;
+ * - after a reconnect (events may have been missed: nothing is replayed) invalidates the extension and repo queries,
+ *   and forgets the session it was following (its CLOSED may be lost; a backend restart ends mpv anyway);
  * - when the backend comes back, refetches the queries that failed while it was away.
  *
  * Call after Pinia is installed. Returns a function that stops all of it.
@@ -66,6 +76,16 @@ export function startRealtime(options: RealtimeOptions): {
   const { queryClient } = options;
   const backend = useBackendStore();
   const events = useEventsStore();
+  const playback = usePlaybackStore();
+
+  /** Patches one episode in its anime's cached list (if that list is cached). */
+  const patchEpisode = (session: PlaybackSession, patch: (e: Episode) => Episode) =>
+    queryClient.setQueryData<Episode[]>(
+      queryKeys.episodes(session.animeId),
+      (list) => list && list.map((e) => (e.id === session.episodeId ? patch(e) : e)),
+    );
+  const invalidateEpisodes = (session: PlaybackSession) =>
+    void queryClient.invalidateQueries({ queryKey: queryKeys.episodes(session.animeId) });
 
   const invalidateExtensions = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.extensionStores() });
@@ -80,7 +100,14 @@ export function startRealtime(options: RealtimeOptions): {
     },
     onConnected: ({ first }) => {
       events.connections++;
-      if (!first) invalidateExtensions();
+      if (!first) {
+        invalidateExtensions();
+        const stale = playback.session;
+        if (stale) {
+          playback.clear();
+          invalidateEpisodes(stale);
+        }
+      }
     },
   });
 
@@ -119,8 +146,22 @@ export function startRealtime(options: RealtimeOptions): {
     {},
     {
       next: ({ playbackEvents: e }) => {
-        if (e.type === "WATCHED" || e.type === "CLOSED") {
-          void queryClient.invalidateQueries({ queryKey: queryKeys.episodes(e.session.animeId) });
+        playback.apply(e);
+        if (e.type === "WATCHED") {
+          patchEpisode(e.session, (ep) => ({ ...ep, isWatched: true }));
+          invalidateEpisodes(e.session);
+        } else if (e.type === "CLOSED") {
+          const { positionSeconds, durationSeconds } = e.session;
+          if (positionSeconds != null) {
+            patchEpisode(e.session, (ep) => ({
+              ...ep,
+              lastSecondSeen: String(Math.round(positionSeconds * 1000)),
+              totalSeconds: durationSeconds
+                ? String(Math.round(durationSeconds * 1000))
+                : ep.totalSeconds,
+            }));
+          }
+          invalidateEpisodes(e.session);
         }
       },
       error: (e) => console.warn("playbackEvents subscription failed:", e.code, e.message),

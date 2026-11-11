@@ -1,4 +1,5 @@
-import type { Chapter, Episode } from "../api/types";
+import type { Chapter, Episode, PlaybackSession } from "../api/types";
+import { episodeProgress, type Progress } from "./progress";
 
 /*
  * Episodes and chapters as one kind of row, with the details page's sort and filters (Phase 3 step 15). Pure, so
@@ -16,14 +17,21 @@ export interface ListItem {
   /** The source's order, oldest = 1. */
   sourceOrder: number;
   scanlator: string | null;
-  /** Watched or read. Phase 6 records it; until then nothing sets it. */
+  /** Watched (the backend marks it at the threshold; the list marks it by hand) or read (Phase 5). */
   done: boolean;
   bookmarked: boolean;
   /** Anime only: the source marks it as a filler. */
   filler: boolean;
+  /** Anime only: where playback stopped (or is, while it plays), in milliseconds. */
+  progress?: Progress;
+  /** Anime only: mpv is playing it now (or has it paused). */
+  playing?: "playing" | "paused";
 }
 
-export function fromEpisode(e: Episode): ListItem {
+/** An episode as a row; `live` (the session mpv plays) overlays its position when it is this episode. */
+export function fromEpisode(e: Episode, live?: PlaybackSession | null): ListItem {
+  const playing =
+    live && live.episodeId === e.id ? (live.paused ? "paused" : "playing") : undefined;
   return {
     id: e.id,
     name: e.name,
@@ -34,6 +42,8 @@ export function fromEpisode(e: Episode): ListItem {
     done: e.isWatched,
     bookmarked: e.isBookmarked,
     filler: e.fillermark,
+    progress: episodeProgress(e, live),
+    ...(playing ? { playing } : {}),
   };
 }
 

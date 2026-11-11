@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { nextTick } from "vue";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
@@ -6,8 +7,9 @@ import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import ChapterList from "../ChapterList.vue";
 import EpisodeList from "../EpisodeList.vue";
 import { ITEM_SORT_KEY, useItemListStore } from "../../stores/itemList";
+import { usePlaybackStore } from "../../stores/playback";
 import { makeChapters, makeEpisodes } from "../../test/fixtures";
-import type { Episode } from "../../api/types";
+import type { Episode, PlaybackSession } from "../../api/types";
 
 /*
  * The episode and chapter lists (EntryItemList through its two wrappers). jsdom has no layout, so the scroll area's
@@ -39,7 +41,7 @@ function stub(
 
 async function mountEpisodes(episodes: Episode[], animeId = 12) {
   wrapper = mount(EpisodeList, {
-    props: { animeId, episodes },
+    props: { animeId, episodes, sourceId: "2196071447214431390", sourceName: "AnimeGG" },
     // EpisodeList's Play is a vue-query mutation
     global: { plugins: [pinia, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
     attachTo: document.body,
@@ -154,6 +156,118 @@ describe("EpisodeList / ChapterList", () => {
 
     expect(wrapper.find('[data-testid="items-none"]').text()).toBe("No episodes yet.");
     expect(wrapper.find('[data-testid="item-scanlator"]').exists()).toBe(false);
-    expect(wrapper.text()).toContain("Play opens the episode's first video in mpv");
+    expect(wrapper.text()).toContain("Play lets you choose the video");
+  });
+
+  it("shows how far each episode was watched: time left and a bar, nothing for a watched or unstarted one", async () => {
+    const [e1, e2, e3, e4] = makeEpisodes(4);
+    await mountEpisodes([
+      { ...e1!, lastSecondSeen: "752043", totalSeconds: "1500125" },
+      { ...e2!, lastSecondSeen: "1499958", totalSeconds: "1500125", isWatched: true },
+      { ...e3!, lastSecondSeen: "61000", totalSeconds: "0" },
+      e4!,
+    ]);
+    const row = (name: string) => rows().find((r) => r.find(".name").text() === name)!;
+
+    expect(row("Episode 1").find('[data-testid="item-progress-text"]').text()).toBe("12:28 left");
+    const bar = row("Episode 1").find('[data-testid="item-progress-bar"]');
+    expect(bar.attributes("aria-valuenow")).toBe("50.1");
+    expect(row("Episode 2").find('[data-testid="item-progress-text"]').exists()).toBe(false);
+    expect(row("Episode 2").text()).toContain("Watched");
+    // a position without a duration: no bar
+    expect(row("Episode 3").find('[data-testid="item-progress-text"]').text()).toBe(
+      "Stopped at 1:01",
+    );
+    expect(row("Episode 3").find('[data-testid="item-progress-bar"]').exists()).toBe(false);
+    expect(row("Episode 4").find('[data-testid="item-progress-text"]').exists()).toBe(false);
+  });
+
+  it("follows the episode mpv plays live, from the playback store", async () => {
+    await mountEpisodes(makeEpisodes(2));
+    const playback = usePlaybackStore();
+    const live: PlaybackSession = {
+      id: "s1",
+      episodeId: 1001,
+      animeId: 12,
+      title: "t",
+      videoTitle: "v",
+      state: "RUNNING",
+      startedAt: "1",
+      endedAt: null,
+      exitCode: null,
+      positionSeconds: 60,
+      durationSeconds: 1500,
+      paused: false,
+    };
+    const event = (session: PlaybackSession) => ({
+      type: "PROGRESS" as const,
+      session,
+      nextEpisodeId: null,
+      reason: null,
+      message: null,
+    });
+    const first = () => rows().find((r) => r.find(".name").text() === "Episode 1")!;
+
+    playback.apply(event(live));
+    await nextTick();
+    expect(first().find('[data-testid="item-playing"]').text()).toBe("Playing");
+    expect(first().find('[data-testid="item-progress-text"]').text()).toBe("24:00 left");
+
+    playback.apply(event({ ...live, positionSeconds: 750, paused: true }));
+    await nextTick();
+    expect(first().find('[data-testid="item-playing"]').text()).toBe("Paused");
+    expect(first().find('[data-testid="item-progress-bar"]').attributes("aria-valuenow")).toBe(
+      "50",
+    );
+
+    // another anime's session doesn't touch this list
+    playback.apply(event({ ...live, animeId: 99, episodeId: 1002 }));
+    await nextTick();
+    expect(wrapper.find('[data-testid="item-playing"]').exists()).toBe(false);
+  });
+
+  it("selects rows with their checkboxes, a range with Shift, all shown, and clears", async () => {
+    await mountEpisodes(makeEpisodes(5));
+    const boxes = () => wrapper.findAll('[data-testid="item-select"]');
+    const checked = () =>
+      rows()
+        .filter((r) => (r.find('[data-testid="item-select"]').element as HTMLInputElement).checked)
+        .map((r) => r.find(".name").text());
+    expect(wrapper.find('[data-testid="bulk-bar"]').exists()).toBe(false);
+
+    // shown newest first: 5, 4, 3, 2, 1
+    await boxes()[0]!.trigger("click");
+    await boxes()[3]!.trigger("click", { shiftKey: true });
+    expect(checked()).toEqual(["Episode 5", "Episode 4", "Episode 3", "Episode 2"]);
+    expect(wrapper.find('[data-testid="selected-count"]').text()).toBe("4 selected");
+    expect(wrapper.find('[data-action="mark-watched"]').exists()).toBe(true);
+    // with several selected there is no "previous"
+    expect(wrapper.find('[data-action="mark-previous"]').exists()).toBe(false);
+
+    // a Shift+click on a selected row clears the range from the last one clicked
+    await boxes()[2]!.trigger("click", { shiftKey: true });
+    expect(checked()).toEqual(["Episode 5", "Episode 4"]);
+
+    await wrapper.find('[data-action="select-all"]').trigger("click");
+    expect(checked()).toHaveLength(5);
+    await wrapper.find('[data-action="clear-selection"]').trigger("click");
+    expect(checked()).toEqual([]);
+    expect(wrapper.find('[data-testid="bulk-bar"]').exists()).toBe(false);
+
+    // the selection belongs to the entry shown
+    await boxes()[1]!.trigger("click");
+    expect(checked()).toEqual(["Episode 4"]);
+    await wrapper.setProps({ animeId: 13, episodes: makeEpisodes(5, 13, 1) });
+    expect(checked()).toEqual([]);
+  });
+
+  it("doesn't make chapters selectable", async () => {
+    wrapper = mount(ChapterList, {
+      props: { mangaId: 34, chapters: makeChapters(2) },
+      global: { plugins: [pinia] },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="item-select"]').exists()).toBe(false);
   });
 });
