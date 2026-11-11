@@ -190,8 +190,8 @@ Milestones:
 - [x] Next-episode flow (Stage 4: the toast with a 10 s countdown after an episode ends, auto-play with the remembered choice and no picker, from the resume point, on by default in Settings → Playback; Cancel, another Play and leaving the page stop it; live in `pnpm tauri dev`, where episode 4 started from episode 3's end with the remembered video; phase-4 §10)
 - [x] Expired-URL retry / fallback (Stage 4: a refused or expired URL (the HTTP status from mpv's log) or a start that never played fetches the videos again once and plays the same video from where it failed; if that fails, the picker reopens with the next video preselected; live with an expiring URL from the header proxy, through the API and in `pnpm tauri dev`; phase-4 §10)
 
-**Phase 4 in progress: Stage 4 of 6 done (2026-11-11).** The stage plan and the two decisions are in phase-4 §8–§9: mpv plays **in its own window** for the MVP (embedding is a stretch goal), and **the backend owns the mpv process**. Stage 1 added the launcher and the process handling:
-- `madoyomi.core.player` finds mpv (the override, `MADOYOMI_MPV`, PATH), builds its command line and runs one session at a time;
+**Phase 4 in progress: Stage 5 of 6 done (2026-11-12).** The stage plan and the two decisions are in phase-4 §8–§9: mpv plays **in its own window** for the MVP (embedding is a stretch goal), and **the backend owns the mpv process**. Stage 1 added the launcher and the process handling:
+- `madoyomi.core.player` finds mpv (the player settings' path since Stage 5, `MADOYOMI_MPV`, PATH), builds its command line and runs one session at a time;
 - the source's headers, tracks and options reach mpv through a per-session include file, not the command line;
 - mpv dies with the app (Job Object) and with the backend (shutdown hook), and a restarted backend ends the mpv a crashed one left;
 - the API has `playEpisode`, `stopPlayback` and `playbackSession`, and each episode row has a Play button.
@@ -211,13 +211,22 @@ Stage 3 added the picker, resuming and the watched state in the UI:
 Both §6 criteria it covers passed live in `pnpm tauri dev` (resume within ±5 s after an app restart, the badge without a refresh).
 
 Stage 4 added the next episode and the error handling:
-- when an episode ends (or is quit past 85 %), a toast offers the next one with a 10 s countdown, then plays it with the remembered choice for the source, without the picker, from its resume point. Auto-play is on by default (Settings → Playback, on this device until Stage 5), and Cancel, another Play or leaving the page stops it;
+- when an episode ends (or is quit past 85 %), a toast offers the next one with a 10 s countdown, then plays it with the remembered choice for the source, without the picker, from its resume point. Auto-play is on by default (Settings → Playback, now Player, on this device), and Cancel, another Play or leaving the page stops it;
 - when mpv can't open the video (it never played, or its log has an HTTP 401/403/404/410, or a URL that expired while playing ended the file early), the backend fetches the videos again once and plays the same video from where it failed (the new RETRYING event). If that fails, ERROR names the next video in the source's order, and the app reopens the picker with it preselected;
 - the proxy fallback is deferred: every header of AnimeGG and KickAssAnime reached mpv's requests verbatim (§6).
 
 The §6 criterion "the next episode starts from the end-of-episode prompt" passed live in `pnpm tauri dev`.
 
-Next: Stage 5, player settings: the watched threshold, preferred quality, server and subtitle/audio language (with the sorting), and the mpv path override, in a Settings section.
+Stage 5 added the player settings (Settings → **Player**):
+- they are the backend's, in `<data dir>/player-settings.json`, through `playerSettings`/`setPlayerSettings` (plus `playerLanguages` and `mpvCheck`), since the backend applies them; each change is used from the next play. Auto-play stays a device preference, in the same section;
+- **Mark as watched at** 50–95 % (default 85 %): the watched mark, read at every position, and the resume prompt;
+- **preferred quality and server**: the backend sorts each episode's hosters and videos by them after the source's own sort (the server first, then the closest quality) and marks the matches. The picker marks that pick **Preferred**; what it preselects, and what auto-play plays, is the last choice for the source, else the preference's, else the source's (the user's decision, phase-4 §9);
+- **subtitle and audio language** (or subtitles off): once the tracks load, the backend sets mpv's `sid`/`aid` to the first track in that language, the file's own or the source's, else Stage 2's rule;
+- **mpv**: a path that comes before `MADOYOMI_MPV` and PATH, with Check (`mpv --version`); a wrong one is `PLAYER_NOT_FOUND` naming the setting.
+
+All of it was checked live through the API and in `pnpm tauri dev` (phase-4 §10).
+
+Next: Stage 6, the exit run: the step 20 format matrix (MP4, HLS, MKV with ASS, external subtitles, multiple audio tracks, expiring URLs), every §6 criterion from a fresh data dir, and a fix round.
 
 ### Phase 5 — Manga reader
 Details: [phase-5-manga-reader.md](phases/phase-5-manga-reader.md)
@@ -333,7 +342,7 @@ WS     /ws                                downloads, updates, playback progress 
 
 These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06), and so is [Phase 3](phases/phase-3-frontend-mvp.md) (2026-11-07, seven stages: the shell and sidecar, the API layer, Repos and Extensions, Browse and Source, Details and Library, Settings, and the exit run).
 
-[Phase 4](phases/phase-4-playback.md) (playback in mpv) is in progress: Stage 4 of 6 is done (2026-11-11). Stage 1 settled mpv in its own window, owned by the backend (§7), and added the launcher and Play. Stage 2 added the IPC client, progress saving, the watched mark and the playback events. Stage 3 added the video picker, the resume prompt, live progress and the Watched badge in the episode list, and bulk marks (`updateEpisodes`). Stage 4 added the next-episode toast with auto-play and the retry on expired URLs with the next video as the fallback (the header proxy deferred by measurement). Stage 5 adds the player settings.
+[Phase 4](phases/phase-4-playback.md) (playback in mpv) is in progress: Stage 5 of 6 is done (2026-11-12). Stage 1 settled mpv in its own window, owned by the backend (§7), and added the launcher and Play. Stage 2 added the IPC client, progress saving, the watched mark and the playback events. Stage 3 added the video picker, the resume prompt, live progress and the Watched badge in the episode list, and bulk marks (`updateEpisodes`). Stage 4 added the next-episode toast with auto-play and the retry on expired URLs with the next video as the fallback (the header proxy deferred by measurement). Stage 5 added the player settings (the watched threshold, the preferred quality and server with the sorting, the subtitle and audio language, the mpv path), kept by the backend. Stage 6 is the exit run.
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

@@ -209,4 +209,19 @@ class PlaybackTrackerTest {
         assertEquals(PlaybackTracker.Outcome.Failed("mpv exited with code 1"), killed.finish(stopped = false, exitCode = 1))
         assertEquals(PlaybackTracker.Outcome.Closed, killed.finish(stopped = false, exitCode = 1), "finish runs once")
     }
+
+    @Test
+    fun `the threshold is read at every position, so a change applies to the session that plays (Stage 5)`() {
+        var threshold = 0.85
+        val live = PlaybackTracker(hooks, watchedThreshold = { threshold }, clock = { now })
+        live.onMessage(msg("""{"event":"property-change","id":2,"name":"duration","data":100.0}"""))
+        live.onMessage(msg("""{"event":"property-change","id":1,"name":"time-pos","data":60.0}"""))
+        assertEquals(0, markCalls)
+        threshold = 0.6
+        live.onMessage(msg("""{"event":"property-change","id":1,"name":"time-pos","data":60.5}"""))
+        assertEquals(1, markCalls)
+        // and a quit past the new threshold is the end of the episode
+        threshold = 0.5
+        assertEquals(PlaybackTracker.Outcome.Ended("quit"), live.finish(stopped = false, exitCode = 0))
+    }
 }

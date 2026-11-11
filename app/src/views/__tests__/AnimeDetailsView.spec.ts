@@ -15,6 +15,7 @@ import type {
 } from "../../api/types";
 import { queryKeys } from "../../composables/queryKeys";
 import { resetAutoRefresh } from "../../composables/useEntries";
+import { DEFAULT_PLAYER_SETTINGS } from "../../composables/usePlayerSettings";
 import {
   makeAnime,
   makeEpisodes,
@@ -40,6 +41,7 @@ const ops = vi.hoisted(() => ({
   playEpisode: vi.fn(),
   stopPlayback: vi.fn(),
   updateEpisodes: vi.fn(),
+  fetchPlayerSettings: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -61,6 +63,7 @@ let episodes: Episode[];
 function hoster(over: Partial<HosterChoice> = {}): HosterChoice {
   return {
     index: 0,
+    sourceIndex: 0,
     name: "Main",
     lazy: false,
     state: "READY",
@@ -73,6 +76,8 @@ function hoster(over: Partial<HosterChoice> = {}): HosterChoice {
         resolution: 720,
         bitrate: null,
         preferred: false,
+        sourceIndex: 0,
+        matchesPreference: false,
         initialized: true,
         subtitleTracks: [],
         audioTracks: [],
@@ -83,6 +88,8 @@ function hoster(over: Partial<HosterChoice> = {}): HosterChoice {
         resolution: 1080,
         bitrate: null,
         preferred: true,
+        sourceIndex: 1,
+        matchesPreference: false,
         initialized: false,
         subtitleTracks: [{ lang: "English" }],
         audioTracks: [],
@@ -135,6 +142,7 @@ beforeEach(() => {
   ops.fetchEpisodes.mockImplementation(async () => episodes);
   ops.fetchSeasons.mockResolvedValue([]);
   ops.refreshAnime.mockImplementation(async () => refreshResult());
+  ops.fetchPlayerSettings.mockResolvedValue(DEFAULT_PLAYER_SETTINGS);
   ops.setInLibrary.mockImplementation(async (_k: string, _id: number, inLibrary: boolean) => {
     stored = { ...stored, inLibrary, inLibraryAt: inLibrary ? "1700000000" : stored.inLibraryAt };
     return stored;
@@ -682,5 +690,74 @@ describe("AnimeDetailsView: the next episode and failed videos (Phase 4 Stage 4)
       videoIndex: 0,
       startSeconds: null,
     });
+  });
+});
+
+describe("AnimeDetailsView: the player settings (Phase 4 Stage 5)", () => {
+  const toast = () => wrapper.find('[data-testid="next-episode"]');
+  const ended = () =>
+    usePlaybackStore().apply(
+      makePlaybackEvent("ENDED", {
+        session: makePlaybackSession({ episodeId: 1001, state: "EXITED" }),
+        nextEpisodeId: 1002,
+        reason: "eof",
+      }),
+    );
+  const backup = (matchesPreference: boolean) =>
+    hoster({
+      index: 1,
+      sourceIndex: 1,
+      name: "Backup",
+      videos: [{ ...hoster().videos[0]!, videoTitle: "480p", resolution: 480, matchesPreference }],
+    });
+
+  beforeEach(() => {
+    ops.playEpisode.mockImplementation(async (r: { episodeId: number }) => session(r.episodeId));
+  });
+
+  it("auto-plays the preference's pick without a remembered choice, and the remembered one over it", async () => {
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster(), backup(true)]);
+    await mountDetails();
+    ended();
+    await flushPromises();
+    await toast().find('[data-action="play-next"]').trigger("click");
+    await flushPromises();
+    // not the source's pick (Main 1080p): the video the backend marks as the preference's
+    expect(ops.playEpisode).toHaveBeenLastCalledWith(
+      expect.objectContaining({ episodeId: 1002, hosterIndex: 1, videoIndex: 0 }),
+    );
+
+    useVideoChoicesStore().remember(animegg.id, {
+      hosterName: "Main",
+      videoTitle: "720p",
+      resolution: 720,
+    });
+    ended();
+    await flushPromises();
+    await toast().find('[data-action="play-next"]').trigger("click");
+    await flushPromises();
+    expect(ops.playEpisode).toHaveBeenLastCalledWith(
+      expect.objectContaining({ episodeId: 1002, hosterIndex: 0, videoIndex: 0 }),
+    );
+  });
+
+  it("resumes below the backend's watched threshold, not the default one", async () => {
+    ops.fetchPlayerSettings.mockResolvedValue({
+      ...DEFAULT_PLAYER_SETTINGS,
+      watchedThreshold: 0.95,
+    });
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster()]);
+    // 90 %: past the default 85 %, below 95 %
+    episodes = makeEpisodes(3).map((e) =>
+      e.id === 1002 ? { ...e, lastSecondSeen: "1350000", totalSeconds: "1500000" } : e,
+    );
+    await mountDetails();
+    ended();
+    await flushPromises();
+    await toast().find('[data-action="play-next"]').trigger("click");
+    await flushPromises();
+    expect(ops.playEpisode).toHaveBeenCalledWith(
+      expect.objectContaining({ episodeId: 1002, startSeconds: 1350 }),
+    );
   });
 });

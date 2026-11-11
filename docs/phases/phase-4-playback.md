@@ -11,7 +11,7 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 - Phase 2: `GET /api/episodes/{id}/videos` returns `Video` with headers, subtitle and audio tracks.
 - Phase 3: Details screen with the episode list.
 - Phase 0 S4: working mpv command line and named-pipe IPC notes.
-- mpv: in dev, `tools/bin/mpv/mpv.exe` if present, else `mpv.exe` on PATH (bundled in Phase 7; §9 "Where mpv comes from").
+- mpv: the path in Settings → Player if set (Stage 5), else in dev `tools/bin/mpv/mpv.exe` if present, else `mpv.exe` on PATH (bundled in Phase 7; §9 "Where mpv comes from").
 
 ## 3. Deliverables
 
@@ -70,7 +70,7 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 - [x] `playback.*` WS events (Stage 2: the GraphQL subscription `playbackEvents` over the existing WebSocket: STARTED, PROGRESS, WATCHED, ENDED with the next episode, ERROR, CLOSED; `PlaybackApiTest`, and live, §10)
 
 ### Selection & errors
-- [ ] Preferred quality/server sorting
+- [x] Preferred quality/server sorting (Stage 5: `VideoPreferences` after the source's sorts, stable, the server then the hoster's closest quality, with `sourceIndex` and `matchesPreference`; the picker's and auto-play's pick ranked remembered, preference, source; `VideoPreferencesTest`, `PlayerSettingsApiTest`, `videos.spec.ts`, `VideoPicker.spec.ts`, `AnimeDetailsView.spec.ts`, and live through the API and in `pnpm tauri dev` on AnimeGG and KickAssAnime, §10)
 - [x] Lazy `videoUrlParse` resolution (Stage 1: `playEpisode` resolves the video right before the launch, through Phase 2's `resolveVideo`; `PlaybackApiTest`)
 - [x] 403/expired retry + fallback to next video (Stage 4: `PlaybackSessions` fetches the videos again once and plays the same video from where it failed (RETRYING), else ERROR with the next video, which the app preselects in the reopened picker; `VideoChoicesTest`, `PlaybackApiTest`, `AnimeDetailsView.spec.ts`, and live through the API and in `pnpm tauri dev` with the header proxy's expiring mode, §10)
 - [ ] Proxy fallback for headers mpv can't send (**deferred**, Stage 4: measured live, every header of AnimeGG (2) and KickAssAnime (7) reaches mpv's requests verbatim, so there is no header mpv can't send; §9, §10)
@@ -80,7 +80,7 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 - [x] Resume / start-over prompt (Stage 3: the picker's footer between 1 % and 85 %; `progress.spec.ts`, `VideoPicker.spec.ts`, `AnimeDetailsView.spec.ts`, and live in `pnpm tauri dev`: "Resume from 12:37" after an app restart, and mpv started 0.00 s from the stored position, §10)
 - [x] Progress + watched state in episode list; bulk mark (Stage 3: live rows from `playbackEvents` through `stores/playback.ts`, the Watched badge at once, checkboxes with Shift+click ranges and "Mark previous as watched", through `updateEpisodes`; `EntryItemList.spec.ts`, `realtime.spec.ts`, `AnimeDetailsView.spec.ts`, `EpisodeUpdateApiTest`, and live in `pnpm tauri dev`, §10)
 - [x] Next-episode toast / auto-play setting (Stage 4: `NextEpisodeToast` with a 10 s countdown, `useNextEpisode`, "Auto-play the next episode" in Settings → Playback, on by default, on this device; `NextEpisodeToast.spec.ts`, `playerPrefs.spec.ts`, `playback.spec.ts`, `AnimeDetailsView.spec.ts`, `SettingsView.spec.ts`, and live in `pnpm tauri dev`, §10)
-- [ ] Player settings section
+- [x] Player settings section (Stage 5: Settings → Player, the backend's `player-settings.json` through `playerSettings`/`setPlayerSettings`: the watched threshold, quality, server, subtitle and audio language (`TrackSelection` over IPC), the mpv path with `mpvCheck`, each used from the next play; auto-play stays on the device; `PlayerSettingsTest`, `TrackSelectionTest`, `PlayerLanguagesTest`, `MpvLocatorTest`, `PlaybackApiTest`, `SettingsView.spec.ts`, and live, §10)
 
 ### Tests
 - [x] Launcher argument unit tests (Stage 1: `MpvCommandTest`, `MpvLocatorTest`)
@@ -137,6 +137,12 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - live through the API: refused at once, then played from the asked 60 s (0.00 s off); expired mid-play (mpv's `eof` at 15:00 of 25:00 with a 403), then played on from 900 s; refused twice, then ERROR with `[SUBBED] AnimeGG:720p` as the next video;
      - live in `pnpm tauri dev` (§10): the toast's countdown played episode 4 with the remembered video, Cancel during the countdown and during the start played nothing (a fix: see §10), a refused URL was retried and played, and a double refusal reopened the picker with the next video, which played. The §6 criterion is ticked.
 5. **Player settings** (steps 9, 16): the watched threshold, preferred quality, server and subtitle/audio language (sorting), and the mpv path override, in a Settings section. Verified by unit tests and a live change that takes effect.
+   - *Done* (2026-11-12):
+     - server: `PlayerSettings`/`PlayerSettingsStore` (`<data dir>/player-settings.json`), `VideoPreferences` (the order by the preferred server and quality, in `AnimeVideos`, with `sourceIndex` and `matchesPreference`), `PlayerLanguages` and `TrackSelection` (`sid`/`aid` set over IPC once the tracks load), the threshold read at every position, the mpv path first in `MpvLocator` with `mpvCheck`; GraphQL `playerSettings`, `setPlayerSettings`, `playerLanguages`, `mpvCheck`;
+     - tests: 33 new (26 core, 7 api), among them a fake mpv with tracks of its own and per-type track ids;
+     - app: Settings → **Player** (auto-play, "Mark as watched at", quality, server, subtitles, audio, mpv with Check), `usePlayerSettings`, the resume prompt and auto-play on the backend's threshold, the picker's **Preferred** mark and the ranking remembered → preference → source (the user's decision, §9); 13 new tests;
+     - live through the API: the order for 720p and 2160p on AnimeGG and KickAssAnime, WATCHED at 62 % with 60 %, Spanish/English and off/Japanese on KickAssAnime's 8 subtitle and 2 audio tracks, and a wrong, a right and a cleared mpv path;
+     - live in `pnpm tauri dev` (§10): 95 % made a 90 % episode offer "Resume from 22:07", 85 % didn't; 720p put `[SUBBED] AnimeGG:720p` first as Preferred while the remembered `[DUBBED] AnimeGG:360p` stayed preselected, and auto-play played it on the next episode; KickAssAnime preselected its 720p and mpv played Spanish subtitles and English audio; a wrong mpv path was `PLAYER_NOT_FOUND` naming the setting, the right one played, and clearing it went back to PATH. No fix was needed.
 6. **Exit run**: the step 20 format matrix (MP4, HLS, MKV with ASS, external subtitles, multiple audio tracks, expiring URLs), every §6 criterion from a fresh data dir, and a fix round. The embedded `--wid` prototype (step 17) stays a stretch goal after the exit, not part of it.
 
 ## 9. Decision record
@@ -257,6 +263,36 @@ Decided in the stage (defaults, not asked):
 - **The fallback:** when it isn't retried or the retry fails (the source fails, the video is gone, mpv can't start, or it fails again), ERROR carries `retried`, `httpStatus`, `failedVideo` and `nextVideo`: the next video in the source's order after the failed one (the READY hosters in order, each one's videos in order, wrapping around; never the failed one; none when there is no other). The app reopens the picker for that episode with the error and that video preselected ("… is selected instead"). The remembered choice changes only if the user plays it.
 - **The proxy fallback is deferred** (step 11, PLAN.md §6 "Video URLs require headers/cookies"). Measured through the header proxy, every header AnimeGG (2) and KickAssAnime (7) send reached mpv's request verbatim, values with commas and semicolons included, and KickAssAnime's `accept` replaced mpv's own. The include file (Stage 1) sends each header on its own line, so the only headers mpv can't send are those Stage 1 leaves out (an invalid name or a line break), which no measured source has. Revisit if a source needs one, or for cookies set during playback.
 - **Test-only ways in:** `FakeMpvServer` (a test file) fails as its URL says (`fakempv-error`, `fakempv-fail-at`, `fakempv-eof-at`, `fakempv-status`), so a scripted fake source hands it a URL that fails on the first fetch only. Live, a scratch wrapper set as `MADOYOMI_MPV` (gitignored, `tools/dev-data/agent/mpvwrap`) sent a launch's URL through the header proxy's new expiring mode. Nothing in the release code path knows about either.
+
+### Stage 5 (2026-11-12)
+
+Decided by the user:
+- **The remembered choice comes first.** What the picker preselects, and what auto-play plays: the last choice for the source (Stage 3), else the player settings' preferred server and quality, else the source's pick. The preference orders the list either way, and decides for a source not played yet, or when the remembered hoster isn't in the episode (a remembered hoster whose video is gone gives that hoster's preference video). The reason: a per-source choice such as a dub (`[DUBBED] AnimeGG:360p`) says more than a global quality.
+
+Decided in the stage (defaults, not asked):
+- **The player settings are the backend's**, kept in `<data dir>/player-settings.json` (Madoyomi's own file; upstream's `server.conf` would mean editing upstream's `ServerConfig` and its generated code), and reached through GraphQL: `playerSettings`, `setPlayerSettings(input: {patch})`, `playerLanguages`, `mpvCheck(path)`. The reasons:
+  - the backend is what applies them: the watched mark (the tracker), which mpv starts (`MpvLocator`), the tracks it selects over IPC once they are loaded, and the order of the videos, which the indexes of `playEpisode` and Stage 4's "next video" use;
+  - they go with the data dir, as the library does: a fresh data dir starts from the defaults, and the app and a script on the same data dir agree;
+  - a device preference sent with each play wouldn't reach the retry, which runs in the backend.
+
+  A file that can't be read gives the defaults (logged), a value out of range in it its default, and an unknown key is ignored. A change is written to a temporary file and moved over the old one.
+- **Auto-play stays a device preference** (`localStorage` `madoyomi.autoPlayNext`): only the UI acts on it. It moved into the Player section, which says it is kept on this device.
+- **The watched threshold is 50 % to 95 %, in steps of 5** (default 85 %; a value between steps is rounded to one, one outside is `BAD_REQUEST`). 100 % isn't offered: mpv's last `time-pos` stops short of the duration (1499.958 s of 1500.125 s in Stage 2), so the mark would never come. The tracker reads it at every position, so a change applies to the session that plays, and to "a quit past the threshold is ENDED". The app's resume prompt and auto-play's resume point use the backend's value (85 % until it is known).
+- **Sorting (step 9)**, after the source's `sortHosters()`/`sortVideos()`, both stable (`VideoPreferences`):
+  - hosters whose name contains the preferred server (ignoring case) go first;
+  - in each hoster, first the preferred server's videos (the hoster's name or the video's title contains it: a source without hosters, such as AnimeGG, puts the server into the title), then, within each of those, the videos at the hoster's *target* quality: the preferred one if the hoster has it, else the highest below it, else the lowest above it, or its highest for "Highest". A video's quality is its `resolution`, else the last "<digits>p" in its title;
+  - the settings are read when the fetch starts, and a lazy hoster loaded later in the same fetch is sorted by them too. `index` is the position in the sorted list (what `playEpisode`, `fetchHosterVideos` and `resolveEpisodeVideo` take), and the new `sourceIndex` is the source's own position, on hosters and videos;
+  - the new `matchesPreference` marks the videos that are of the preferred server or at the target quality (false without a preference). The preference's pick is the first such video in the list's order, marked **Preferred** in the picker. "Source's pick" still means the source's own: its first READY hoster by `sourceIndex`, and that hoster's `preferred` video, else its first by `sourceIndex`;
+  - Stage 4's `VideoChoices.next` (the video offered after a failure) follows the sorted order, so it is the next best by the preference.
+- **Track languages.** The settings name a language from a built-in table of 21 (`PlayerLanguages`: English and native names, ISO 639-1 and 639-2 codes). A track's label or `lang` matches when one of its words is a name or a three-letter code ("English (eng)", "English [CC]", "Português (Brasil)", "jpn"), or the whole label is a code with an optional region ("en", "en-US", "pt_BR"). A two-letter code inside a longer label doesn't count, so "it" in a title isn't Italian.
+- **Which tracks play** (`TrackSelection`): the external tracks are now all added with `auto`. Once they have loaded (or failed, at most 30 s), the session reads `track-list` and sets `sid` and `aid`:
+  - a language selects the first matching track, the file's own tracks before the source's (in the source's order), a forced (signs-only) track only when nothing else matches;
+  - subtitles "Off" sets `sid=no`;
+  - no language, or nothing matching, keeps Stage 2's rule: the source's first subtitle track, else mpv's own choice; the file's own audio, else the source's first audio track.
+
+  This also runs for a file with tracks of its own and no external ones (an MKV) when a language is set. The choice is logged ("subtitles track 2, audio track 3").
+- **The mpv path** comes first in `MpvLocator` (then `MADOYOMI_MPV`, then PATH). Surrounding quotes are taken off (Explorer's "Copy as path" adds them). A path that isn't a file is `PLAYER_NOT_FOUND`, "mpv was not found at … (set in Settings → Player)", with `details.origin` `SETTINGS`. A wrong path can be saved, since the user may fix the file rather than the setting; the check shows it. `mpvCheck(path)` checks a typed path, and without one the mpv the backend would start now: the file is there, and `<it> --version` exits with 0 within 10 s and prints a line starting with "mpv ". Its first line is shown with where the mpv comes from.
+- **The Settings section:** "Playback" became **Player**. It holds auto-play, "Mark as watched at", the preferred quality, the preferred server, subtitles ("The source's first", "Off", a language), audio ("The source's choice", a language) and mpv (a path field with Check). A select saves as it changes; a text field saves when it loses focus or on Enter, trimmed. The value shows at once, and a refused change goes back with the error under the section. Check runs on what is typed without saving it, and after a save the mpv in use is checked again. The `PLAYER_NOT_FOUND` hint now points to Settings → Player.
 
 ## 10. Findings log
 
@@ -466,3 +502,60 @@ Decided in the stage (defaults, not asked):
   - auto-play switched off, live: `AnimeDetailsView.spec.ts` and `SettingsView.spec.ts` cover the toast without a countdown and the switch;
   - "Retrying…" on screen (too short with a local refusal), and leaving the page during the countdown (`AnimeDetailsView.spec.ts`);
   - a 404 or an expiring HLS stream: the proxy's expiring mode served AnimeGG's MP4 only. KickAssAnime's HLS goes through the proxy only for its playlist (the segments' relative URLs would miss it); the step 20 matrix in the exit run has expiring URLs.
+
+### Stage 5 (2026-11-12)
+
+- **Baseline before the stage** (feat/phase-4-next merged as #30; rerun before any edit):
+  - server: `.\gradlew.bat build` green with 733 tests, 0 failures (core 648 with 8 skipped, AndroidCompat 7, ext-host 8, api 70), on the second run. The first failed two core tests that this stage doesn't touch: `ExtensionThreadsTest` (the flaky one, below) and upstream's `CefTest`, which downloads a JBR from GitHub and got `IOException: proxy.example`, the host `SocksProxyTest` sets on the shared `serverConfig` for a moment;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: 40 files (39 + 1 skipped), 325 passed + 9 skipped; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` clean;
+  - the live spec: 9/9 with 38 documents validated;
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - server: 766 tests, 0 failures (core 674 with 8 skipped, AndroidCompat 7, ext-host 8, api 77). The 33 new ones:
+    - core: `VideoPreferencesTest` 7, `TrackSelectionTest` 7, `PlayerSettingsTest` 5, `PlayerLanguagesTest` 3, `MpvLocatorTest` 3 more, `PlaybackTrackerTest` 1 more;
+    - api: `PlayerSettingsApiTest` 4, `PlaybackApiTest` 3 more (the languages over a fake mpv with tracks of its own, the threshold, a wrong mpv path). The Stage 2 track test now expects `auto` and the `sid`/`aid` set after the tracks load;
+  - smoke: 24/24 on the new jar;
+  - app: 40 files, 338 passed + 9 skipped (13 new): `videos.spec.ts` 4, `VideoPicker.spec.ts` 3, `SettingsView.spec.ts` 4, `AnimeDetailsView.spec.ts` 2. `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` are clean;
+  - the live spec: 9/9 on the new jar, with 42 documents validated (`PLAYER_SETTINGS_QUERY`, `SET_PLAYER_SETTINGS_MUTATION`, `PLAYER_LANGUAGES_QUERY` and `MPV_CHECK_QUERY` are new; the hoster fragment has `sourceIndex` and `matchesPreference`);
+  - `cargo test`: 17 (no Rust change).
+- **Two flaky core tests, neither touched here.** `ExtensionThreadsTest`'s "source-pool threads … don't keep its class loader" failed in 3 of the stage's 7 builds, the first baseline run included (before any edit): "the extension's code created pool threads (3, was 19)". It counts the shared source pool's threads before and after starting three tasks, but tasks reuse idle threads that earlier tests left (they idle for 60 s), and idle ones time out meanwhile, so the count can drop without anything leaking. The leak check after it (`GcAssert`) is what matters. Upstream's `CefTest` failed in 2 of 7 ("proxy.example", "bad host"): it downloads a JBR live while `SocksProxyTest` briefly sets those hosts on the shared `serverConfig`. Neither is changed here; the exit run can make the first count its own threads by name. The final build was green.
+- **A test name with `;`** doesn't compile on Windows either ("Name contains illegal characters"), as `:` didn't in Stage 4.
+- **Live through the API** (a scratch script on the seeded `live-data`, the real jar and the installed mpv, muted over a second IPC client):
+
+  | Case | Result |
+  |---|---|
+  | AnimeGG ep. 3, no preference | the source's order: `[SUBBED] AnimeGG:1080p`, 720p, 480p, 360p, `[DUBBED] AnimeGG:360p`; `sourceIndex` = `index`, nothing `matchesPreference` (AnimeGG sets no `resolution`: the height comes from the title) |
+  | the same, preferred quality 720p | `[SUBBED] AnimeGG:720p` first (`sourceIndex` 1, matches), the rest in the source's order |
+  | the same, 2160p (not there) | `[SUBBED] AnimeGG:1080p` first and matching: the highest below |
+  | KickAssAnime BSD5 ep. 1 (one `no_hoster_list` hoster, "VidStreaming - 1080p (1920x1080) - 1.69 Mbps" and so on), 720p | the 720p video first |
+  | threshold 60 %, AnimeGG ep. 3 from 60 s, a seek to 62 % (930 s of 1500.08 s) | WATCHED at 930.0 s; stored `isWatched` true, `lastSecondSeen` 930000; then unmarked (position 0) and the threshold put back |
+  | KickAssAnime ep. 1168 (8 subtitles, "English (eng)" … "Arabic (ara)"; 2 audio, "Japanese", "English"), no language | `sid` = "English (eng)" (the source's first; mpv's track 5, the order they loaded), `aid` = "Japanese" (the source's first: no audio of its own) |
+  | subtitles Spanish, audio English | `sid` = "Spanish (spa)", `aid` = "English" |
+  | subtitles off, audio Japanese | `sid` none, `aid` = "Japanese" |
+  | mpv path `C:\nowhere\mpv.exe` | `playEpisode`: `PLAYER_NOT_FOUND` "mpv was not found at C:\nowhere\mpv.exe (set in Settings → Player)"; `mpvCheck`: not ok, origin `SETTINGS` |
+  | `C:\Program Files\MPV Player\mpv.exe` | `mpvCheck` ok, origin `SETTINGS`, "mpv v0.41.0-244-gaf9c81fa1 …"; the episode played with that mpv (`Win32_Process`) |
+  | cleared | `mpvCheck` ok, origin `PATH`, the same mpv |
+
+- **Live in `pnpm tauri dev`** (driven by clicks with computer use on the seeded `live-data`; mpv muted and read over its pipe; episode 4's position set to 1327.6 s of 1475.1 s, 90 %, before the start):
+
+  | Step | Result |
+  |---|---|
+  | Settings | "Player": auto-play on, "Mark as watched at" 85 %, the source's choice, any server, the source's first subtitles, the source's audio, and "mpv v0.41.0-244-gaf9c81fa1 … C:\Program Files\MPV Player\mpv.exe (from PATH)" |
+  | 95 %, then Play on ep. 4 (90 %) | `player-settings.json` had `0.95` at once; the picker offered **Resume from 22:07** ("You stopped at 22:07") |
+  | 85 % and 720p, Play on ep. 4 again | no resume prompt (90 % is past 85 %), only Play. The order: `[SUBBED] AnimeGG:720p` **Preferred**, `[SUBBED] AnimeGG:1080p` **Source's pick**, 480p, 360p, and `[DUBBED] AnimeGG:360p` **Last used**, preselected (the remembered choice first) |
+  | Play, a seek to 8 s before the end | ENDED (eof, next episode 5); 10.7 s later auto-play played ep. 5 with `[DUBBED] AnimeGG:360p`, the remembered choice over the 720p preference |
+  | subtitles Spanish, audio English; KickAssAnime BSD5 Ep. 1 (no remembered choice on this device) | the picker preselected "VidStreaming - 720p (1280x720) - 836 kbps", marked Preferred ("8 subtitles · 2 audio tracks"; Source's pick on 1080p). Played: mpv `height` 720, `sid` "Spanish (spa)", `aid` "English"; the log: "subtitles track 3, audio track 1" |
+  | mpv path `C:\nowhere\mpv.exe`, Enter | "mpv was not found at C:\nowhere\mpv.exe (set in Settings → Player)" under the field; Play on BSD5 Ep. 1: "Couldn't play the episode", "mpv wasn't found. Install mpv and put it on PATH, or set its path in Settings → Player.", `PLAYER_NOT_FOUND` with the message |
+  | `"C:\Program Files\MPV Player\mpv.exe"` (quoted), Enter | the field without the quotes, "mpv v0.41.0-… (from this setting)"; Play resumed BSD5 Ep. 1 with that mpv |
+  | the field cleared, and quality, subtitles and audio back to the source's | "(from PATH)"; the file at the defaults |
+  | the restore (a server of its own, the app closed) | eps. 1–2 watched (1499958 ms), eps. 3–7 unwatched with `lastSecondSeen` 0; BSD5 Ep. 1 back to 2001 ms; 2 of 1167 One Piece episodes watched |
+
+  No `token=` in `madoyomi.log`, `sidecar.log`, `sidecar.1.log`, `mpv.log` or the `pnpm tauri dev` output; the backend stopped with code 0 when the window closed; mpv wrote nothing into `player/`. The webview still remembers `[DUBBED] AnimeGG:360p` for AnimeGG (auto-play remembered it again) and has auto-play on; it now also remembers "VidStreaming - 720p" for KickAssAnime, from the Play above.
+- **The tooling for this session.** The agent's shell was the Linux VM again, so builds, tests, the API checks and `pnpm tauri dev` ran through the job runner (`tools/dev-data/agent/`, gitignored: `liveplay5.ps1` is this stage's script). A native `<select>`'s drop-down is a window of its own that computer use masks, so the selects were changed with the keyboard (End, Up, Home, typing a letter, Enter). Text pasted with a newline doesn't press Enter in the field: Enter was pressed after it. A scratch variable named `$proc` in the script replaced `MadoyomiServer.ps1`'s own, so its server stop failed (the server exited with the job anyway); renamed.
+- **Not checked:**
+  - a preferred server that reorders hosters live: AnimeGG and KickAssAnime each have a single `no_hoster_list` hoster, one server in their titles ("AnimeGG", "VidStreaming"). `VideoPreferencesTest` and `PlayerSettingsApiTest` (two hosters, "Doodstream" and "VidStreaming") cover it;
+  - the file's own tracks chosen by language live (an MKV with ASS and several audio tracks): `TrackSelectionTest` and `PlaybackApiTest` (a fake mpv with a Japanese audio track of its own) cover it; the exit run's format matrix has an MKV;
+  - a threshold change picked up by the session that plays, live: `PlaybackTrackerTest` covers it; live, the threshold was set before the play;
+  - auto-play playing the preference's pick (no remembered choice) live: every source played in `pnpm tauri dev` has a remembered choice once played from the picker; `AnimeDetailsView.spec.ts` covers it;
+  - a refused setting in the UI (`BAD_REQUEST`): the selects only offer valid values; `SettingsView.spec.ts` covers the rollback.

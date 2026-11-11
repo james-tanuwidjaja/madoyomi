@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client";
 import type { HosterChoice, VideoChoice } from "../../api/types";
 import { noVideoError } from "../../composables/usePlayback";
-import { firstPlayable, initialPick, matchChoice, videoFacts, videoOf } from "../videos";
+import {
+  bestOf,
+  firstPlayable,
+  initialPick,
+  matchChoice,
+  preferencePick,
+  videoFacts,
+  videoOf,
+} from "../videos";
 
 /* Choosing a video: the source's own choice (its order, its preferred video), and the remembered one per source. */
 
@@ -13,6 +21,8 @@ function video(index: number, over: Partial<VideoChoice> = {}): VideoChoice {
     resolution: null,
     bitrate: null,
     preferred: false,
+    sourceIndex: index,
+    matchesPreference: false,
     initialized: true,
     subtitleTracks: [],
     audioTracks: [],
@@ -23,6 +33,7 @@ function video(index: number, over: Partial<VideoChoice> = {}): VideoChoice {
 function hoster(index: number, over: Partial<HosterChoice> = {}): HosterChoice {
   return {
     index,
+    sourceIndex: index,
     name: `h${index}`,
     lazy: false,
     state: "READY",
@@ -155,5 +166,65 @@ describe("videoFacts", () => {
       ),
     ).toEqual(["1080p", "2 subtitles", "1 audio track"]);
     expect(videoFacts(video(0, { videoTitle: "AnimeGG:1080p", resolution: 1080 }))).toEqual([]);
+  });
+});
+
+describe("the preference (Phase 4 Stage 5)", () => {
+  // the list as the backend sorts it: the preferred server's hoster moved ahead of the source's first
+  const sorted = () => [
+    hoster(0, {
+      sourceIndex: 1,
+      name: "Filemoon",
+      videos: [
+        video(0, { sourceIndex: 2, matchesPreference: true }),
+        video(1, { sourceIndex: 0 }),
+        video(2, { sourceIndex: 1 }),
+      ],
+    }),
+    hoster(1, { sourceIndex: 0, name: "VidStreaming", videos: [video(0), video(1)] }),
+  ];
+
+  it("keeps the source's pick on the source's first hoster and video, whatever the list's order", () => {
+    expect(firstPlayable(sorted())).toMatchObject({ hosterName: "VidStreaming", videoIndex: 0 });
+    const reordered = hoster(0, {
+      videos: [video(0, { sourceIndex: 1 }), video(1, { sourceIndex: 0 })],
+    });
+    expect(firstPlayable([reordered])?.videoIndex).toBe(1);
+  });
+
+  it("picks the first video that matches it, in the list's order", () => {
+    expect(preferencePick(sorted())).toMatchObject({ hosterName: "Filemoon", videoIndex: 0 });
+    const later = [
+      hoster(0, { videos: [video(0), video(1)] }),
+      hoster(1, { videos: [video(0), video(1, { matchesPreference: true })] }),
+    ];
+    expect(preferencePick(later)).toMatchObject({ hosterIndex: 1, videoIndex: 1 });
+    expect(preferencePick([hoster(0)])).toBeNull();
+    expect(
+      preferencePick([
+        hoster(0, { state: "ERROR", videos: [video(0, { matchesPreference: true })] }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("ranks the remembered choice first, then the preference, then the source's pick", () => {
+    expect(initialPick(sorted(), null)).toMatchObject({ hosterName: "Filemoon", videoIndex: 0 });
+    expect(
+      initialPick(sorted(), { hosterName: "VidStreaming", videoTitle: "v1", resolution: null }),
+    ).toMatchObject({ hosterName: "VidStreaming", videoIndex: 1 });
+    expect(
+      initialPick([hoster(0, { videos: [video(0), video(1, { preferred: true })] })], null),
+    ).toMatchObject({ videoIndex: 1 });
+  });
+
+  it("falls back to the hoster's preference video when the remembered video isn't there", () => {
+    const pick = matchChoice(sorted(), {
+      hosterName: "Filemoon",
+      videoTitle: "gone",
+      resolution: 4320,
+    });
+    expect(pick).toMatchObject({ hosterName: "Filemoon", videoIndex: 0 });
+    expect(bestOf(sorted()[1]!)?.index).toBe(0);
+    expect(bestOf(hoster(0, { videos: [] }))).toBeNull();
   });
 });

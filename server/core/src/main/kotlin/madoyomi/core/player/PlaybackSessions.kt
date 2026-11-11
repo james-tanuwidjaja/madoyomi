@@ -12,8 +12,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
 import madoyomi.core.anime.AnimeEntries
 import madoyomi.core.anime.AnimeVideos
 import madoyomi.core.anime.AnimeVideos.EpisodeVideo
@@ -46,8 +44,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - mpv gets the backend's environment without `MADOYOMI_TOKEN`.
  * - Over the IPC pipe (Stage 2, [MpvIpcClient]): the session observes mpv's position ([PlaybackTracker]), saves
  *   progress into `EPISODE` ([EpisodeProgress]), marks the episode watched at [watchedThreshold], adds the external
- *   subtitle and audio tracks with their labels, and stops mpv with `quit` before it would kill it. [events] carries
+ *   subtitle and audio tracks with their labels, selects the subtitle and audio track by the player settings'
+ *   languages ([TrackSelection], Stage 5), and stops mpv with `quit` before it would kill it. [events] carries
  *   what happens (nothing is replayed: subscribe first).
+ * - The player settings ([PlayerSettingsStore], Stage 5) are read at each launch: which mpv ([MpvLocator], the
+ *   settings' path first) and the track languages; the watched threshold at every position.
  * - When mpv can't open the video (Stage 4): a failure before playback started, or with an HTTP 401/403/404/410 in
  *   mpv's log, fetches the episode's videos again once (URLs expire), finds the same video ([VideoChoices.find]) and
  *   plays it from where the failed session was (RETRYING, then the new session). If that fails too, ERROR names the
@@ -168,13 +169,15 @@ object PlaybackSessions {
 
     private val hookAdded = AtomicBoolean(false)
 
-    /** The command that starts mpv, before its arguments ([MpvLocator]). Tests replace it with a fake mpv. */
+    /**
+     * The command that starts mpv, before its arguments ([MpvLocator], with the player settings' path first). Tests
+     * replace it with a fake mpv.
+     */
     @Volatile
-    var executable: () -> List<String> = { listOf(MpvLocator.locate().path) }
+    var executable: () -> List<String> = { listOf(MpvLocator.locate(PlayerSettingsStore.current().mpvPath).path) }
 
-    /** The share of the duration at which an episode is marked watched (the player settings, Stage 5). */
-    @Volatile
-    var watchedThreshold: Double = PlaybackTracker.DEFAULT_WATCHED_THRESHOLD
+    /** The share of the duration at which an episode is marked watched: the player settings', read when it is used. */
+    val watchedThreshold: Double get() = PlayerSettingsStore.current().watchedThreshold
 
     /** How long to wait for mpv's IPC pipe after the start (an HLS stream can take a while to open). */
     @Volatile
@@ -273,7 +276,7 @@ object PlaybackSessions {
                     endedAt = null,
                 )
             val entry = Live(session, process, listOf(include, record), built.tracks, ref, attempt, startSeconds)
-            entry.tracker = PlaybackTracker(hooks(entry), watchedThreshold)
+            entry.tracker = PlaybackTracker(hooks(entry), { watchedThreshold })
             live = entry
             last = session
             process.onExit().thenAccept { onExit(entry) }
@@ -504,36 +507,75 @@ object PlaybackSessions {
             }
 
             override fun fileLoaded() {
-                if (entry.tracks.isEmpty()) return
-                entry.client.thenAccept { client -> addTracks(entry, client) }
+                val settings = PlayerSettingsStore.current()
+                if (!TrackSelection.needed(entry.tracks, settings)) return
+                entry.client.thenAccept { client -> addTracks(entry, client, settings) }
             }
         }
 
     /**
-     * `sub-add`/`audio-add` for the video's external tracks, with their labels as titles (mpv loads them async). The
-     * first subtitle track is selected. The first audio track is selected only when the file has no audio of its own
-     * (an HLS stream whose audio comes only as external tracks): mpv's own selection has already run by now.
+     * `sub-add`/`audio-add` for the video's external tracks, with their labels as titles (mpv loads them async, and
+     * none is selected as it is added). Once all are loaded (or failed), the subtitle and audio track are chosen from
+     * mpv's `track-list`, the file's own tracks included ([TrackSelection]: the settings' languages, else Stage 2's
+     * rule), and set as `sid`/`aid`.
      */
     private fun addTracks(
         entry: Live,
         client: MpvIpcClient,
+        settings: PlayerSettings,
     ) {
-        client.command("get_property", "track-list").whenComplete { list, _ ->
-            val hasAudio = (list as? JsonArray)?.any { (it as? JsonObject)?.get("type").asText() == "audio" } == true
-            val firstSubtitle = entry.tracks.indexOfFirst { it.kind == MpvCommand.Track.Kind.SUBTITLE }
-            val firstAudio = if (hasAudio) -1 else entry.tracks.indexOfFirst { it.kind == MpvCommand.Track.Kind.AUDIO }
-            entry.tracks.forEachIndexed { i, track ->
-                val select = i == firstSubtitle || i == firstAudio
-                client.command(*track.command(select).toTypedArray(), async = true).whenComplete { _, error ->
+        val id = entry.session.id
+        val adds =
+            entry.tracks.map { track ->
+                client.command(*track.command(select = false).toTypedArray(), async = true).handle { _, error ->
                     if (error != null && !client.isClosed) {
                         logger.warn {
-                            "playback ${entry.session.id}: mpv could not add the ${track.kind.name.lowercase()} track ${track.title}: ${error.message}"
+                            "playback $id: mpv could not add the ${track.kind.name.lowercase()} track ${track.title}: ${error.message}"
                         }
                     }
                 }
             }
+        CompletableFuture
+            .allOf(*adds.toTypedArray())
+            .orTimeout(TRACKS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .handle { _, _ ->
+                client.command("get_property", "track-list").thenAccept { list ->
+                    val selection = TrackSelection.choose(list, entry.tracks, settings)
+                    apply(client, "sid", selection.subtitle, id)
+                    apply(client, "aid", selection.audio, id)
+                    if (selection.subtitle != TrackSelection.Choice.Keep || selection.audio != TrackSelection.Choice.Keep) {
+                        logger.info { "playback $id: subtitles ${describe(selection.subtitle)}, audio ${describe(selection.audio)}" }
+                    }
+                }
+            }
+    }
+
+    /** How long the external tracks may take to load before the selection is made without the slow ones. */
+    private const val TRACKS_TIMEOUT_SECONDS = 30L
+
+    private fun apply(
+        client: MpvIpcClient,
+        property: String,
+        choice: TrackSelection.Choice,
+        id: String,
+    ) {
+        val value: Any =
+            when (choice) {
+                TrackSelection.Choice.Keep -> return
+                TrackSelection.Choice.Off -> "no"
+                is TrackSelection.Choice.Track -> choice.id
+            }
+        client.command("set_property", property, value).whenComplete { _, error ->
+            if (error != null && !client.isClosed) logger.warn { "playback $id: mpv could not set $property=$value: ${error.message}" }
         }
     }
+
+    private fun describe(choice: TrackSelection.Choice): String =
+        when (choice) {
+            TrackSelection.Choice.Keep -> "as mpv chose"
+            TrackSelection.Choice.Off -> "off"
+            is TrackSelection.Choice.Track -> "track ${choice.id}"
+        }
 
     /** Connects to the session's IPC pipe in the background, then observes the [PlaybackTracker.OBSERVED] properties. */
     private fun connectIpc(entry: Live) {

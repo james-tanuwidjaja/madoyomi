@@ -12,13 +12,16 @@ import {
 import type { Episode, HosterChoice, PlaybackSession, VideoChoice } from "../api/types";
 import type { PickerFailure } from "../composables/useNextEpisode";
 import { noVideoError, useEpisodeVideos, usePlayEpisode } from "../composables/usePlayback";
+import { useWatchedThreshold } from "../composables/usePlayerSettings";
 import { usePlaybackStore } from "../stores/playback";
 import { useVideoChoicesStore } from "../stores/videoChoices";
 import { episodeProgress, formatClock, resumePoint } from "../utils/progress";
 import {
+  bestOf,
   firstPlayable,
   initialPick,
   matchChoice,
+  preferencePick,
   rememberedHoster,
   videoFacts,
   videoOf,
@@ -30,10 +33,12 @@ import ErrorNotice from "./ErrorNotice.vue";
  * The video picker (Phase 4 step 12): Play on an episode opens it. It asks the source for the episode's hosters
  * (`fetchEpisodeVideos`) and lists each with its state: a lazy one loads on request, a failed one shows why and can
  * be retried (`fetchHosterVideos`). Each video shows its quality and its subtitle and audio counts, and the source's
- * own pick is marked. The last choice for this source (the hoster's name, the video's title or resolution; kept on
- * this device) is preselected, else the source's pick, so Enter plays it.
+ * own pick is marked, as is the player settings' preferred server and quality (Stage 5; the backend sorts the list by
+ * it). The last choice for this source (the hoster's name, the video's title or resolution; kept on this device) is
+ * preselected, else the preference's pick, else the source's, so Enter plays it.
  *
- * The resume prompt (step 13) is its footer: an episode stopped between 1 % and the watched threshold offers
+ * The resume prompt (step 13) is its footer: an episode stopped between 1 % and the watched threshold (the player
+ * settings') offers
  * "Resume from mm:ss" and "Start over"; any other plays from the start (a watched one too, as in Aniyomi). The dialog
  * stays open, "Starting…", until mpv is up, and shows a failure there.
  *
@@ -64,12 +69,16 @@ const primaryEl = ref<HTMLButtonElement | null>(null);
 const remembered = computed(() => choices.choiceOf(props.sourceId));
 const lastUsed = computed(() => matchChoice(videos.hosters.value, remembered.value));
 const sourcePick = computed(() => firstPlayable(videos.hosters.value));
+const prefPick = computed(() => preferencePick(videos.hosters.value));
+const threshold = useWatchedThreshold();
 
 const progress = computed(() =>
   props.episode ? episodeProgress(props.episode, playback.session) : null,
 );
 const resumeAt = computed(() =>
-  props.episode && progress.value ? resumePoint(props.episode.isWatched, progress.value) : null,
+  props.episode && progress.value
+    ? resumePoint(props.episode.isWatched, progress.value, threshold.value)
+    : null,
 );
 
 const nothingToPlay = computed(() =>
@@ -136,7 +145,7 @@ watch(
 async function loadHoster(hoster: HosterChoice) {
   const loaded = await videos.loadHoster(hoster.index);
   if (loaded && !chosen.value) {
-    const video = loaded.videos.find((v) => v.preferred) ?? loaded.videos[0];
+    const video = bestOf(loaded);
     if (video) {
       selected.value = {
         hosterIndex: loaded.index,
@@ -177,6 +186,8 @@ async function playFrom(startSeconds: number) {
 
 const isSourcePick = (h: HosterChoice, v: VideoChoice) =>
   sourcePick.value?.hosterIndex === h.index && sourcePick.value.videoIndex === v.index;
+const isPreferencePick = (h: HosterChoice, v: VideoChoice) =>
+  prefPick.value?.hosterIndex === h.index && prefPick.value.videoIndex === v.index;
 const isLastUsed = (h: HosterChoice, v: VideoChoice) =>
   lastUsed.value?.hosterIndex === h.index && lastUsed.value.videoIndex === v.index;
 const hosterLoading = (h: HosterChoice) => videos.loadingHosters.value.includes(h.index);
@@ -290,6 +301,13 @@ const busy = computed(() => play.isPending.value);
               <span v-if="isSourcePick(h, v)" class="badge" data-testid="source-pick">
                 Source's pick
               </span>
+              <span
+                v-if="isPreferencePick(h, v)"
+                class="badge"
+                data-testid="preference-pick"
+                title="Your preferred server or quality (Settings → Player)"
+                >Preferred</span
+              >
               <span v-if="isLastUsed(h, v)" class="badge ok" data-testid="last-used"
                 >Last used</span
               >

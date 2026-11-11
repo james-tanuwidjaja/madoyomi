@@ -7,6 +7,7 @@ import { createQueryClient } from "../../api/realtime";
 import { ApiError } from "../../api/client";
 import type { Episode, HosterChoice, PlaybackSession, VideoChoice } from "../../api/types";
 import type { PickerFailure } from "../../composables/useNextEpisode";
+import { DEFAULT_PLAYER_SETTINGS } from "../../composables/usePlayerSettings";
 import { usePlaybackStore } from "../../stores/playback";
 import { VIDEO_CHOICES_KEY, useVideoChoicesStore } from "../../stores/videoChoices";
 import { makeEpisodes } from "../../test/fixtures";
@@ -16,6 +17,7 @@ const ops = vi.hoisted(() => ({
   fetchEpisodeVideos: vi.fn(),
   fetchHosterVideos: vi.fn(),
   playEpisode: vi.fn(),
+  fetchPlayerSettings: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -36,6 +38,8 @@ function video(index: number, over: Partial<VideoChoice> = {}): VideoChoice {
     resolution: [720, 1080][index] ?? 480,
     bitrate: null,
     preferred: false,
+    sourceIndex: index,
+    matchesPreference: false,
     initialized: true,
     subtitleTracks: [],
     audioTracks: [],
@@ -46,6 +50,7 @@ function video(index: number, over: Partial<VideoChoice> = {}): VideoChoice {
 function hoster(index: number, over: Partial<HosterChoice> = {}): HosterChoice {
   return {
     index,
+    sourceIndex: index,
     name: `Server ${index}`,
     lazy: false,
     state: "READY",
@@ -110,6 +115,7 @@ beforeEach(() => {
   setActivePinia(pinia);
   queryClient = createQueryClient();
   setBackendReady();
+  ops.fetchPlayerSettings.mockResolvedValue(DEFAULT_PLAYER_SETTINGS);
   ops.playEpisode.mockImplementation(async (r: { episodeId: number }) =>
     session({ episodeId: r.episodeId }),
   );
@@ -426,5 +432,71 @@ describe("VideoPicker", () => {
     expect(q('[data-testid="play-error"]')!.textContent).toContain("mpv wasn't found");
     expect(w.emitted("update:open")).toBeUndefined();
     expect(useVideoChoicesStore().choiceOf(SOURCE)).toBeNull();
+  });
+});
+
+describe("VideoPicker: the player settings (Phase 4 Stage 5)", () => {
+  // as the backend sorts them: the preferred server's hoster first, its preferred quality first
+  const sorted = () => [
+    hoster(0, {
+      sourceIndex: 1,
+      name: "Filemoon",
+      videos: [
+        video(0, {
+          videoTitle: "Filemoon 720p",
+          resolution: 720,
+          sourceIndex: 1,
+          matchesPreference: true,
+        }),
+        video(1, { videoTitle: "Filemoon 1080p", resolution: 1080, sourceIndex: 0 }),
+      ],
+    }),
+    hoster(1, {
+      sourceIndex: 0,
+      name: "VidStreaming",
+      videos: [video(0, { videoTitle: "VidStreaming 1080p", resolution: 1080, preferred: true })],
+    }),
+  ];
+  const videoEl = (h: number, v: number) =>
+    hosterEl(h).querySelectorAll<HTMLElement>('[data-testid="picker-video"]')[v]!;
+
+  it("marks and preselects the preference's pick, and keeps the source's pick on the source's first hoster", async () => {
+    ops.fetchEpisodeVideos.mockResolvedValue(sorted());
+    await open();
+    expect(qa(".hoster-name").map((n) => n.textContent)).toEqual(["Filemoon", "VidStreaming"]);
+    expect(videoEl(0, 0).querySelector('[data-testid="preference-pick"]')).not.toBeNull();
+    expect(videoEl(1, 0).querySelector('[data-testid="source-pick"]')).not.toBeNull();
+    expect(qa('[data-testid="preference-pick"]')).toHaveLength(1);
+    expect(checkedVideo()).toBe(videoEl(0, 0));
+  });
+
+  it("preselects the remembered choice over the preference's", async () => {
+    useVideoChoicesStore().remember(SOURCE, {
+      hosterName: "VidStreaming",
+      videoTitle: "VidStreaming 1080p",
+      resolution: 1080,
+    });
+    ops.fetchEpisodeVideos.mockResolvedValue(sorted());
+    await open();
+    expect(checkedVideo()).toBe(videoEl(1, 0));
+    expect(videoEl(1, 0).querySelector('[data-testid="last-used"]')).not.toBeNull();
+    expect(videoEl(0, 0).querySelector('[data-testid="preference-pick"]')).not.toBeNull();
+  });
+
+  it("offers to resume up to the backend's watched threshold", async () => {
+    const at90 = { ...makeEpisodes(1)[0]!, lastSecondSeen: "1350000", totalSeconds: "1500000" };
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster(0)]);
+    await open(at90);
+    // the default 85 %: past it, so it starts over
+    expect(action("resume")).toBeNull();
+    wrapper!.unmount();
+    queryClient.clear();
+
+    ops.fetchPlayerSettings.mockResolvedValue({
+      ...DEFAULT_PLAYER_SETTINGS,
+      watchedThreshold: 0.95,
+    });
+    await open(at90);
+    expect(action("resume")!.textContent).toContain("Resume from 22:30");
   });
 });

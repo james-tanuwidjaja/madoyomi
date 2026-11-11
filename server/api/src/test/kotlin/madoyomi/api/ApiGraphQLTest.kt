@@ -16,6 +16,7 @@ import kotlinx.coroutines.runBlocking
 import madoyomi.core.anime.AnimeGetSource
 import madoyomi.core.extension.ExtensionFiles
 import madoyomi.core.extension.ExtensionLoadGate
+import madoyomi.core.player.PlayerSettingsStore
 import madoyomi.core.repo.StubRepoHttp
 import madoyomi.exthost.ExtensionKind
 import org.jetbrains.exposed.v1.core.DatabaseConfig
@@ -113,10 +114,20 @@ abstract class ApiGraphQLTest : ApplicationTest() {
         TransactionManager.defaultDatabase = database
         serverConfig.extensionStores.value = emptyList()
         resetRuntime()
+        // each test starts from the default player settings, in a file of its own (Phase 4 Stage 5)
+        PlayerSettingsStore.fileOverride =
+            kotlin.io.path
+                .createTempFile("player-settings", ".json")
+                .toFile()
+                .also { it.delete() }
+        PlayerSettingsStore.reload()
     }
 
     @AfterEach
     fun tearDownDatabase() {
+        PlayerSettingsStore.fileOverride?.delete()
+        PlayerSettingsStore.fileOverride = null
+        PlayerSettingsStore.reload()
         resetRuntime()
         serverConfig.extensionStores.value = emptyList()
         TransactionManager.defaultDatabase = previousDefault

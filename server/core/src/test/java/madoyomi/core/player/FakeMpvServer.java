@@ -61,6 +61,10 @@ public final class FakeMpvServer implements AutoCloseable {
         /** With {@code play}: the position at which the file ends early as mpv ends one whose URL stopped answering
          * ({@code end-file} eof, exit 0); negative: never. */
         public double eofAt = -1;
+        /** The file's own audio tracks, by their {@code lang} (Stage 5); the first is selected. */
+        public List<String> ownAudio = new ArrayList<>();
+        /** The file's own subtitle tracks, by their {@code lang}; none selected. */
+        public List<String> ownSubs = new ArrayList<>();
     }
 
     private static final int PIPE_ACCESS_DUPLEX = 3;
@@ -267,9 +271,45 @@ public final class FakeMpvServer implements AutoCloseable {
         video.put("type", "video");
         video.put("selected", true);
         tracks.add(0, video);
+        for (String lang : options.ownAudio) tracks.add(ownTrack("audio", lang, tracksOf("audio") == 0));
+        for (String lang : options.ownSubs) tracks.add(ownTrack("sub", lang, false));
         event("file-loaded");
         property("duration", options.duration);
         property("track-list", tracks());
+    }
+
+    private int tracksOf(String type) {
+        int n = 0;
+        for (Map<String, Object> t : tracks) if (type.equals(t.get("type"))) n++;
+        return n;
+    }
+
+    private Map<String, Object> ownTrack(String type, String lang, boolean selected) {
+        Map<String, Object> t = new LinkedHashMap<>();
+        t.put("id", tracksOf(type) + 1);
+        t.put("type", type);
+        t.put("lang", lang);
+        t.put("external", false);
+        t.put("selected", selected);
+        return t;
+    }
+
+    /** {@code sid}/{@code aid} as mpv sets them: a track id of that type selects it alone, {@code no} none. */
+    private synchronized boolean select(String type, Object value) {
+        Integer id = value instanceof Number ? ((Number) value).intValue() : null;
+        if (id == null && !"no".equals(value) && !Boolean.FALSE.equals(value)) return false;
+        boolean found = id == null;
+        for (Map<String, Object> t : tracks) if (type.equals(t.get("type")) && id != null && id.equals(t.get("id"))) found = true;
+        if (!found) return false;
+        for (Map<String, Object> t : tracks) {
+            if (type.equals(t.get("type"))) t.put("selected", id != null && id.equals(t.get("id")));
+        }
+        return true;
+    }
+
+    private Object selected(String type) {
+        for (Map<String, Object> t : tracks) if (type.equals(t.get("type")) && Boolean.TRUE.equals(t.get("selected"))) return t.get("id");
+        return false;
     }
 
     private void finish(int code) {
@@ -316,6 +356,10 @@ public final class FakeMpvServer implements AutoCloseable {
                 return eof;
             case "track-list":
                 return tracks();
+            case "sid":
+                return selected("sub");
+            case "aid":
+                return selected("audio");
             default:
                 throw new IllegalArgumentException("property unavailable");
         }
@@ -427,6 +471,13 @@ public final class FakeMpvServer implements AutoCloseable {
                         } else if (prop.equals("time-pos")) {
                             reply(id, "success", null);
                             seekTo(((Number) v).doubleValue());
+                        } else if (prop.equals("sid") || prop.equals("aid")) {
+                            if (select(prop.equals("sid") ? "sub" : "audio", v)) {
+                                reply(id, "success", null);
+                                property("track-list", tracks());
+                            } else {
+                                reply(id, "property unavailable", null);
+                            }
                         } else {
                             reply(id, "property not found", null);
                         }
@@ -442,11 +493,14 @@ public final class FakeMpvServer implements AutoCloseable {
                     case "sub-add":
                     case "audio-add": {
                         Map<String, Object> t = new LinkedHashMap<>();
-                        t.put("id", tracks.size() + 1);
-                        t.put("type", name.equals("sub-add") ? "sub" : "audio");
+                        String type = name.equals("sub-add") ? "sub" : "audio";
+                        boolean select = cmd.size() > 2 && "select".equals(cmd.get(2));
+                        if (select) for (Map<String, Object> o : tracks) if (type.equals(o.get("type"))) o.put("selected", false);
+                        t.put("id", tracksOf(type) + 1);
+                        t.put("type", type);
                         t.put("external", true);
                         t.put("external-filename", String.valueOf(cmd.get(1)));
-                        t.put("selected", cmd.size() > 2 && "select".equals(cmd.get(2)));
+                        t.put("selected", select);
                         if (cmd.size() > 3) t.put("title", String.valueOf(cmd.get(3)));
                         tracks.add(t);
                         reply(id, "success", null);
@@ -492,7 +546,8 @@ public final class FakeMpvServer implements AutoCloseable {
      * fakempv-error=<status>} fails to load, and {@code fakempv-fail-at=<seconds>} fails once the position gets
      * there (with {@code fakempv-status=<status>}); {@code fakempv-eof-at=<seconds>} ends the file there as mpv
      * does when a URL stops answering mid-play. With a status other than 0, FFmpeg's {@code HTTP error <status>}
-     * line goes to stdout (mpv's log) when it fails.
+     * line goes to stdout (mpv's log) when it fails. {@code fakempv-audio=jpn,eng} and {@code fakempv-subs=eng} give
+     * the file tracks of its own (Stage 5).
      */
     public static void main(String[] args) throws Exception {
         String pipe = null;
@@ -519,6 +574,10 @@ public final class FakeMpvServer implements AutoCloseable {
         String eofAt = urlParam(url, "fakempv-eof-at");
         if (eofAt != null) o.eofAt = Double.parseDouble(eofAt);
         String httpStatus = status != null ? status : urlParam(url, "fakempv-status");
+        String ownAudio = urlParam(url, "fakempv-audio");
+        if (ownAudio != null) o.ownAudio = List.of(ownAudio.split(","));
+        String ownSubs = urlParam(url, "fakempv-subs");
+        if (ownSubs != null) o.ownSubs = List.of(ownSubs.split(","));
         if (httpStatus != null) o.httpStatus = Integer.parseInt(httpStatus);
         record.append("TOKEN ").append(System.getenv("MADOYOMI_TOKEN") != null).append('\n');
         record.append("INCLUDE\n").append(include == null ? "" : Files.readString(Path.of(include)));

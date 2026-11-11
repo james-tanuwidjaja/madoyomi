@@ -4,7 +4,9 @@ import { flushPromises, type VueWrapper } from "@vue/test-utils";
 import type { QueryClient } from "@tanstack/vue-query";
 
 import { createQueryClient } from "../../api/realtime";
-import type { Source } from "../../api/types";
+import { ApiError } from "../../api/client";
+import type { MpvCheck, PlayerSettings, Source } from "../../api/types";
+import { DEFAULT_PLAYER_SETTINGS } from "../../composables/usePlayerSettings";
 import { useBackendStore } from "../../stores/backend";
 import { AUTO_PLAY_NEXT_KEY } from "../../stores/playerPrefs";
 import { THEME_KEY } from "../../stores/theme";
@@ -14,7 +16,13 @@ import { mountView, setBackendReady } from "../../test/mountView";
 const shell = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => false, invoke: shell.invoke }));
 
-const ops = vi.hoisted(() => ({ fetchSources: vi.fn() }));
+const ops = vi.hoisted(() => ({
+  fetchSources: vi.fn(),
+  fetchPlayerSettings: vi.fn(),
+  fetchPlayerLanguages: vi.fn(),
+  setPlayerSettings: vi.fn(),
+  checkMpv: vi.fn(),
+}));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   ...ops,
@@ -35,6 +43,18 @@ const untrusted = makeSource({
 });
 
 let sources: Source[];
+let player: PlayerSettings;
+
+function mpvFound(path: string | null): MpvCheck {
+  return {
+    ok: true,
+    path: path ?? "C:\\Program Files\\MPV Player\\mpv.exe",
+    origin: path ? "SETTINGS" : "PATH",
+    version: "mpv v0.40.0",
+    errorCode: null,
+    message: null,
+  };
+}
 let pinia: Pinia;
 let queryClient: QueryClient;
 let wrapper: VueWrapper;
@@ -55,6 +75,17 @@ beforeEach(() => {
   queryClient = createQueryClient();
   sources = [kaa, pahe, plain, untrusted];
   ops.fetchSources.mockImplementation(async () => sources);
+  player = { ...DEFAULT_PLAYER_SETTINGS };
+  ops.fetchPlayerSettings.mockImplementation(async () => player);
+  ops.fetchPlayerLanguages.mockResolvedValue([
+    { code: "en", name: "English" },
+    { code: "ja", name: "Japanese" },
+  ]);
+  ops.setPlayerSettings.mockImplementation(async (patch: Partial<PlayerSettings>) => {
+    player = { ...player, ...patch };
+    return player;
+  });
+  ops.checkMpv.mockImplementation(async (path: string | null) => mpvFound(path));
   setBackendReady();
   useBackendStore().mode = "tauri";
 });
@@ -156,5 +187,108 @@ describe("SettingsView", () => {
       "None of your anime sources has settings of its own.",
     );
     expect(wrapper.find("[data-testid='settings-sources-unknown']").exists()).toBe(false);
+  });
+});
+
+describe("SettingsView: Player (Phase 4 Stage 5)", () => {
+  const el = <T extends HTMLElement>(id: string) =>
+    wrapper.find(`[data-testid="${id}"]`).element as T;
+  async function choose(id: string, value: string) {
+    const select = wrapper.find(`[data-testid="${id}"]`);
+    await select.setValue(value);
+    await flushPromises();
+  }
+
+  it("shows the backend's settings and saves each change at once", async () => {
+    player = {
+      ...player,
+      watchedThreshold: 0.9,
+      preferredQuality: "P720",
+      subtitleLanguage: "off",
+    };
+    await mountSettings();
+    expect(el<HTMLSelectElement>("threshold-select").value).toBe("90");
+    expect(wrapper.findAll('[data-testid="threshold-select"] option').map((o) => o.text())).toEqual(
+      ["50 %", "55 %", "60 %", "65 %", "70 %", "75 %", "80 %", "85 %", "90 %", "95 %"],
+    );
+    expect(el<HTMLSelectElement>("quality-select").value).toBe("P720");
+    expect(el<HTMLSelectElement>("subtitle-select").value).toBe("off");
+    expect(wrapper.findAll('[data-testid="audio-select"] option').map((o) => o.text())).toEqual([
+      "The source's choice",
+      "English",
+      "Japanese",
+    ]);
+
+    await choose("threshold-select", "75");
+    expect(ops.setPlayerSettings).toHaveBeenLastCalledWith({ watchedThreshold: 0.75 });
+    await choose("quality-select", "HIGHEST");
+    expect(ops.setPlayerSettings).toHaveBeenLastCalledWith({ preferredQuality: "HIGHEST" });
+    await choose("subtitle-select", "en");
+    expect(ops.setPlayerSettings).toHaveBeenLastCalledWith({ subtitleLanguage: "en" });
+    await choose("audio-select", "ja");
+    expect(ops.setPlayerSettings).toHaveBeenLastCalledWith({ audioLanguage: "ja" });
+    expect(player).toMatchObject({
+      watchedThreshold: 0.75,
+      preferredQuality: "HIGHEST",
+      subtitleLanguage: "en",
+      audioLanguage: "ja",
+    });
+    expect(el<HTMLSelectElement>("threshold-select").value).toBe("75");
+  });
+
+  it("saves the preferred server when the field is left, trimmed, and not when it didn't change", async () => {
+    await mountSettings();
+    const input = wrapper.find('[data-testid="server-input"]');
+    await input.setValue("  VidStreaming ");
+    await input.trigger("blur");
+    await flushPromises();
+    expect(ops.setPlayerSettings).toHaveBeenCalledWith({ preferredServer: "VidStreaming" });
+    expect(el<HTMLInputElement>("server-input").value).toBe("VidStreaming");
+    ops.setPlayerSettings.mockClear();
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(ops.setPlayerSettings).not.toHaveBeenCalled();
+  });
+
+  it("shows the mpv in use, saves a path (quotes taken off), checks it, and checks a typed one", async () => {
+    await mountSettings();
+    expect(ops.checkMpv).toHaveBeenCalledWith(null);
+    expect(wrapper.find('[data-testid="mpv-status"]').text()).toContain("mpv v0.40.0");
+    expect(wrapper.find('[data-testid="mpv-status"]').text()).toContain("(from PATH)");
+
+    const input = wrapper.find('[data-testid="mpv-input"]');
+    await input.setValue('"D:\\mpv\\mpv.exe"');
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(ops.setPlayerSettings).toHaveBeenCalledWith({ mpvPath: "D:\\mpv\\mpv.exe" });
+    expect(ops.checkMpv).toHaveBeenLastCalledWith(null);
+
+    ops.checkMpv.mockResolvedValueOnce({
+      ok: false,
+      path: "C:\\nowhere\\mpv.exe",
+      origin: "SETTINGS",
+      version: null,
+      errorCode: "PLAYER_NOT_FOUND",
+      message: "mpv was not found at C:\\nowhere\\mpv.exe (set in Settings → Player)",
+    });
+    await input.setValue("C:\\nowhere\\mpv.exe");
+    await wrapper.find('[data-action="check-mpv"]').trigger("click");
+    await flushPromises();
+    expect(ops.checkMpv).toHaveBeenLastCalledWith("C:\\nowhere\\mpv.exe");
+    expect(wrapper.find('[data-testid="mpv-status"]').text()).toContain("Settings → Player");
+  });
+
+  it("puts a setting back when the backend refuses it", async () => {
+    await mountSettings();
+    ops.setPlayerSettings.mockRejectedValueOnce(
+      new ApiError({
+        kind: "graphql",
+        code: "BAD_REQUEST",
+        message: "watchedThreshold must be 0.5 to 0.95",
+      }),
+    );
+    await choose("threshold-select", "60");
+    expect(wrapper.find('[data-testid="player-save-error"]').text()).toContain("BAD_REQUEST");
+    expect(el<HTMLSelectElement>("threshold-select").value).toBe("85");
   });
 });

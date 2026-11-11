@@ -25,6 +25,8 @@ import madoyomi.core.player.MpvCommand
 import madoyomi.core.player.MpvIpcClient
 import madoyomi.core.player.MpvLocator
 import madoyomi.core.player.PlaybackSessions
+import madoyomi.core.player.PlayerSettings
+import madoyomi.core.player.PlayerSettingsStore
 import okhttp3.Headers.Companion.headersOf
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -443,14 +445,16 @@ class PlaybackApiTest : AnimeApiTest() {
         assertEquals(Triple(20_000L, 20_000L, true), progressOf(first), "milliseconds, as Aniyomi stores them")
         assertEquals(Triple(0L, 0L, false), progressOf(second))
 
-        // the external tracks went over IPC, with their labels as titles; the first subtitle track selected, and the
-        // first audio track too, since the fake's file has no audio of its own
+        // the external tracks went over IPC, with their labels as titles; then (Stage 5, no language set) the first
+        // subtitle track selected, and the first audio track too, since the fake's file has no audio of its own
         val sent = receivedBy(id)
         assertTrue(
-            sent.any { "\"sub-add\",\"https://subs/en.vtt\",\"select\",\"English\"" in it && "\"async\":true" in it },
+            sent.any { "\"sub-add\",\"https://subs/en.vtt\",\"auto\",\"English\"" in it && "\"async\":true" in it },
             sent.toString(),
         )
-        assertTrue(sent.any { "\"audio-add\",\"https://audio/ja.m4a\",\"select\",\"Japanese\"" in it }, sent.toString())
+        assertTrue(sent.any { "\"audio-add\",\"https://audio/ja.m4a\",\"auto\",\"Japanese\"" in it }, sent.toString())
+        assertTrue(sent.any { "\"set_property\",\"sid\",1" in it }, sent.toString())
+        assertTrue(sent.any { "\"set_property\",\"aid\",1" in it }, sent.toString())
         madoyomi.core.player.PlaybackTracker.OBSERVED.forEach { name ->
             assertTrue(
                 sent.any {
@@ -795,5 +799,116 @@ class PlaybackApiTest : AnimeApiTest() {
         assertEquals(id, currentSession().path("id"), "the retry played nothing")
         recordOf(id)
         receivedBy(id)
+    }
+
+    /** Stage 5: KickAssAnime's shape, two subtitle and two audio tracks, plus a Japanese audio track of the file's own. */
+    private class LanguageSource : AnimeHttpSource() {
+        override val name = "Fake language source"
+        override val lang = "en"
+        override val baseUrl = "https://lang.example.org"
+        override val supportsLatest = false
+
+        override suspend fun getHosterList(episode: SEpisode): List<Hoster> =
+            listOf(Hoster(hosterUrl = "https://h/main", hosterName = "VidStreaming"))
+
+        override suspend fun getVideoList(hoster: Hoster): List<Video> =
+            listOf(
+                Video(
+                    videoUrl = "https://cdn.example.org/ep1.m3u8?fakempv-audio=jpn",
+                    videoTitle = "VidStreaming 1080p",
+                    resolution = 1080,
+                    subtitleTracks = listOf(Track("https://subs/en.vtt", "English (eng)"), Track("https://subs/es.vtt", "Spanish (spa)")),
+                    audioTracks = listOf(Track("https://audio/ja.m4a", "Japanese (jpn)"), Track("https://audio/en.m4a", "English (eng)")),
+                ),
+            )
+    }
+
+    /** Plays [episodeId] on a fake mpv and waits until mpv's `sid` and `aid` satisfy [until] (20 s at most); the session id. */
+    private fun playAndReadTracks(
+        episodeId: Int,
+        until: (Any?, Any?) -> Boolean,
+    ): Triple<Any?, Any?, String> {
+        val id = play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+        recordOf(id)
+        return assertNotNull(MpvIpcClient.connect("madoyomi-mpv-$id", 10_000, onEvent = {})).use { client ->
+            val deadline = System.currentTimeMillis() + 20_000
+            var tracks: Pair<Any?, Any?>
+            do {
+                Thread.sleep(100)
+                tracks =
+                    client
+                        .command("get_property", "sid")
+                        .get(5, TimeUnit.SECONDS)
+                        ?.jsonPrimitive
+                        ?.content to
+                    client
+                        .command("get_property", "aid")
+                        .get(5, TimeUnit.SECONDS)
+                        ?.jsonPrimitive
+                        ?.content
+            } while (!until(tracks.first, tracks.second) && System.currentTimeMillis() < deadline)
+            Triple(tracks.first, tracks.second, id)
+        }
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `the subtitle and audio languages select mpv's tracks - the source's and the file's own (Stage 5)`() {
+        fakeIpc(duration = 1000.0, speed = 1.0)
+        val episodeId = episode(LanguageSource())
+
+        // no language: Stage 2's rule, the source's first subtitle; the file's own audio stays
+        val plain = playAndReadTracks(episodeId) { sid, aid -> sid == "1" && aid == "1" }
+        assertEquals("1" to "1", plain.first to plain.second)
+
+        // fakempv numbers the tracks per type: subtitles 1 English, 2 Spanish; audio 1 its own (jpn), 2 Japanese, 3 English
+        PlayerSettingsStore.update(PlayerSettings.Patch(subtitleLanguage = "es", audioLanguage = "en"))
+        val chosen = playAndReadTracks(episodeId) { sid, aid -> sid == "2" && aid == "3" }
+        assertEquals("2" to "3", chosen.first to chosen.second)
+
+        // subtitles off; Japanese audio: the file's own comes first
+        PlayerSettingsStore.update(PlayerSettings.Patch(subtitleLanguage = "off", audioLanguage = "ja"))
+        val off = playAndReadTracks(episodeId) { sid, aid -> sid == "false" && aid == "1" }
+        assertEquals("false" to "1", off.first to off.second)
+        PlaybackSessions.stop()
+        val sent = receivedBy(off.third)
+        assertTrue(sent.any { "\"set_property\",\"sid\",\"no\"" in it }, sent.toString())
+        assertTrue(sent.any { "\"set_property\",\"aid\",1" in it }, sent.toString())
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `the watched threshold of the settings marks the episode (Stage 5)`() {
+        fakeIpc(duration = 20.0, speed = 5.0)
+        PlayerSettingsStore.update(PlayerSettings.Patch(watchedThreshold = 0.5))
+        val episodeId = episode(PlaySource())
+        val (_, events) = withEvents(episodeId) { play(episodeId, start = 2.0).assertNoErrors() }
+        val watched = events.single { it.path("type") == "WATCHED" }
+        val at = watched.path("session", "positionSeconds") as Double
+        assertTrue(at in 10.0..14.0, "marked at $at s of 20 s, at 50 % and not 85 %")
+    }
+
+    @Test
+    fun `a wrong mpv path in the settings is PLAYER_NOT_FOUND naming the setting, and clearing it falls back (Stage 5)`() {
+        PlaybackSessions.executable = defaultExecutable
+        val missing = File(System.getProperty("java.io.tmpdir"), "madoyomi-no-mpv/mpv.exe").absolutePath
+        PlayerSettingsStore.update(PlayerSettings.Patch(mpvPath = missing))
+        val episodeId = episode(PlaySource())
+
+        val response = play(episodeId)
+        assertEquals("PLAYER_NOT_FOUND", response.errorCode)
+        val error = response.errors!!.first()
+        assertTrue(error.message.contains("Settings → Player"), error.message)
+        assertEquals("SETTINGS", error.extensions?.get("details").path("origin"))
+
+        val check = graphql("query { mpvCheck { ok path origin errorCode message } }").assertNoErrors().dataPath("mpvCheck")
+        assertEquals(false, check.path("ok"))
+        assertEquals("SETTINGS", check.path("origin"))
+        assertEquals("PLAYER_NOT_FOUND", check.path("errorCode"))
+
+        // cleared: MADOYOMI_MPV or PATH again (whatever this machine has), never the setting
+        PlayerSettingsStore.update(PlayerSettings.Patch(mpvPath = ""))
+        val fallback = graphql("query { mpvCheck { ok origin } }").assertNoErrors().dataPath("mpvCheck")
+        assertNotEquals("SETTINGS", fallback.path("origin"))
     }
 }

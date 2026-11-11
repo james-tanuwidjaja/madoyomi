@@ -18,7 +18,8 @@ import kotlinx.serialization.json.JsonObject
  * - **Saved** ([Hooks.save], milliseconds as Aniyomi stores them): every [saveIntervalMillis] while playing, at once on
  *   pause, after a seek (at the first position once playback restarts), when the threshold is reached, at the end of
  *   the file, and in [finish]. A save that would write the same values is skipped.
- * - **Watched** once per session: the first time `time-pos / duration` reaches [watchedThreshold], [Hooks.markWatched]
+ * - **Watched** once per session: the first time `time-pos / duration` reaches [watchedThreshold] (read at every
+ *   position, so a change in the player settings applies to the session that plays), [Hooks.markWatched]
  *   (which leaves an already-watched episode alone). It is not tried again in this session, so an episode the user
  *   unmarks while it plays stays unmarked.
  * - **Progress events** ([Hooks.progress]) at most every [progressEventMillis] while the position moves, and at once
@@ -26,7 +27,7 @@ import kotlinx.serialization.json.JsonObject
  */
 class PlaybackTracker(
     private val hooks: Hooks,
-    private val watchedThreshold: Double = DEFAULT_WATCHED_THRESHOLD,
+    private val watchedThreshold: () -> Double = { DEFAULT_WATCHED_THRESHOLD },
     private val saveIntervalMillis: Long = 5_000,
     private val progressEventMillis: Long = 1_000,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -163,7 +164,7 @@ class PlaybackTracker(
     private fun onPosition(value: Double) {
         position = value
         val total = duration
-        if (!watchedTried && total != null && value / total >= watchedThreshold) {
+        if (!watchedTried && total != null && value / total >= watchedThreshold()) {
             watchedTried = true
             save()
             if (hooks.markWatched()) hooks.watched(snapshot())
@@ -215,7 +216,7 @@ class PlaybackTracker(
         if (stopped) return Outcome.Closed
         val pos = position
         val total = duration
-        val nearEnd = pos != null && total != null && pos / total >= watchedThreshold
+        val nearEnd = pos != null && total != null && pos / total >= watchedThreshold()
         return when {
             eof -> Outcome.Ended("eof")
             endReason == "error" -> Outcome.Failed(fileError?.let { "mpv could not play the video: $it" } ?: "mpv could not play the video")

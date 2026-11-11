@@ -13,8 +13,14 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
-/** Where mpv comes from (Phase 4 §9): the override, the property, `MADOYOMI_MPV`, then `PATH`; and its config dir. */
+/**
+ * Where mpv comes from (Phase 4 §9): the player settings' path, the property, `MADOYOMI_MPV`, then `PATH`; its config
+ * dir; and the settings' check (Stage 5).
+ */
 class MpvLocatorTest {
     private val root: File = Files.createTempDirectory("mpv-locator").toFile()
 
@@ -52,7 +58,7 @@ class MpvLocatorTest {
             }
         assertEquals(ErrorCode.PLAYER_NOT_FOUND, e.code)
         assertEquals(File(missing).absolutePath, e.details["path"])
-        assertEquals("MADOYOMI_MPV", e.details["origin"])
+        assertEquals("ENV", e.details["origin"])
     }
 
     @Test
@@ -96,4 +102,67 @@ class MpvLocatorTest {
         PlaybackSessions.scrubEnvironment(env)
         assertEquals(mapOf("PATH" to "C:/bin"), env)
     }
+
+    @Test
+    fun `the settings' path comes first, quotes taken off, and a wrong one names the setting`() {
+        val settings = mpvIn("settings")
+        val envOf = mapOf("MADOYOMI_MPV" to mpvIn("env").path)
+        val found = MpvLocator.find("\"${settings.path}\"", ::noProperty, envOf::get, windows = true)
+        assertEquals(MpvLocator.Located(settings, MpvLocator.Origin.SETTINGS), found)
+        assertEquals(MpvLocator.Origin.ENV, MpvLocator.find("", ::noProperty, envOf::get, windows = true).origin)
+
+        val e =
+            assertFailsWith<MadoyomiException> {
+                MpvLocator.find(File(root, "gone/mpv.exe").path, ::noProperty, envOf::get, windows = true)
+            }
+        assertEquals(ErrorCode.PLAYER_NOT_FOUND, e.code)
+        assertEquals("SETTINGS", e.details["origin"])
+        assertTrue(e.message!!.contains("Settings → Player"), e.message)
+    }
+
+    @Test
+    fun `the check says why an mpv won't do - missing, not starting, not mpv`() {
+        val missing = MpvLocator.check(File(root, "gone/mpv.exe").path)
+        assertFalse(missing.ok)
+        assertEquals(ErrorCode.PLAYER_NOT_FOUND, missing.errorCode)
+        assertEquals(MpvLocator.Origin.SETTINGS, missing.origin)
+        assertNull(missing.version)
+
+        // a file that isn't a program
+        val text = MpvLocator.check(mpvIn("text", "mpv.txt").path)
+        assertFalse(text.ok)
+        assertEquals(ErrorCode.PLAYER_FAILED, text.errorCode)
+
+        val (version, problem) = MpvLocator.version(listOf(java), 30_000)
+        assertNull(version)
+        assertTrue(problem!!.contains("doesn't look like mpv"), problem)
+    }
+
+    @Test
+    fun `the check takes mpv's version line`() {
+        // a stand-in that prints what mpv --version prints (a single-file Java program)
+        val program =
+            File(root, "FakeVersion.java").apply {
+                writeText(
+                    """
+                    public class FakeVersion {
+                        public static void main(String[] a) {
+                            System.out.println("mpv v0.40.0-test Copyright © 2000-2025 mpv/MPlayer/mplayer2 projects");
+                            System.out.println(" built on Jan  1 2025");
+                        }
+                    }
+                    """.trimIndent(),
+                )
+            }
+        val (version, problem) = MpvLocator.version(listOf(java, program.path), 60_000)
+        assertNull(problem)
+        assertTrue(version!!.startsWith("mpv v0.40.0-test"), version)
+    }
+
+    private val java =
+        ProcessHandle
+            .current()
+            .info()
+            .command()
+            .get()
 }
