@@ -90,6 +90,15 @@ class PlaybackTracker(
     @Synchronized
     fun snapshot() = Snapshot(position, duration, paused)
 
+    /**
+     * Whether mpv never got the video playing: it reported no position, or it ended the file with its own "no audio
+     * or video data played". mpv reports `time-pos` (the start position) once the file is open, before any frame
+     * plays, so an HLS stream whose playlist opens but whose segments all fail has a position (found live, Phase 4
+     * Stage 6).
+     */
+    @get:Synchronized
+    val neverPlayed: Boolean get() = position == null || fileError == NOTHING_PLAYED
+
     /** Whether the threshold was reached in this session (the mark was tried). */
     @get:Synchronized
     val reachedThreshold: Boolean get() = watchedTried
@@ -228,6 +237,9 @@ class PlaybackTracker(
 
     companion object {
         const val DEFAULT_WATCHED_THRESHOLD = 0.85
+
+        /** mpv's `file_error` for a file that ended before any audio or video frame played. */
+        const val NOTHING_PLAYED = "no audio or video data played"
 
         /** `observe_property` ids and names. */
         val OBSERVED = listOf("time-pos", "duration", "pause", "eof-reached", "track-list")

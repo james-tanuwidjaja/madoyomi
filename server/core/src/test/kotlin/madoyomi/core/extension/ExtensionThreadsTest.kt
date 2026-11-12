@@ -214,13 +214,24 @@ class ExtensionThreadsTest {
     fun `source-pool threads created from extension code don't keep its class loader`() {
         val pool = (AnimeSourceCalls.dispatcher as ExecutorCoroutineDispatcher).executor as ThreadPoolExecutor
         assumeTrue(pool.poolSize <= pool.maximumPoolSize - 3, "the source pool has no room for new threads in this JVM")
-        val before = pool.poolSize
+        // the pool's threads are counted by name, not by poolSize: idle ones that earlier tests left end after 60 s,
+        // so the size can drop meanwhile while the extension's code still created its threads (Phase 4 Stage 6)
+        val before = sourcePoolThreadNames()
         val ref = spawnPoolThreads(compileExtension())
-        assertTrue(pool.poolSize >= before + 3, "the extension's code created pool threads (${pool.poolSize}, was $before)")
+        val created = sourcePoolThreadNames() - before
+        assertTrue(created.size >= 3, "the extension's code created pool threads (new: ${created.sorted()})")
         // they idle for 60 s, so they are alive while the loader is checked: they must not inherit its protection
         // domain (the access-control context of the stack that created them) or its context class loader
         GcAssert.assertCollected(ref, "the new pool threads don't keep the extension's class loader")
     }
+
+    /** The live threads of [AnimeSourceCalls.dispatcher]: each gets a new name (`anime-source-<n>`, never reused). */
+    private fun sourcePoolThreadNames(): Set<String> =
+        Thread
+            .getAllStackTraces()
+            .keys
+            .filter { it.isAlive && it.name.startsWith("anime-source-") }
+            .mapTo(HashSet()) { it.name }
 
     private fun spawnPoolThreads(classes: Path): WeakReference<ClassLoader> {
         val loader = loader(classes)
