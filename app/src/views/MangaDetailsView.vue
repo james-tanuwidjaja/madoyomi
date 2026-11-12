@@ -5,6 +5,7 @@ import { isApiError } from "../api/client";
 import { useBackendStore } from "../stores/backend";
 import { useDetailsPage } from "../composables/useDetailsPage";
 import { useChapters, useManga, useRefreshManga } from "../composables/useEntries";
+import { resumeChapter } from "../utils/pagedNav";
 import ChapterList from "../components/ChapterList.vue";
 import EntryHeader from "../components/EntryHeader.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
@@ -14,6 +15,9 @@ import PageLayout from "../components/PageLayout.vue";
  * A manga's details (Phase 3 step 15): the stored entry with its chapters, refreshed from the source (upstream's
  * `fetchManga`, then `fetchChapters`) by the button, and by itself the first time an entry that was never fetched is
  * opened. A source's failure is shown above the stored data, which stays.
+ *
+ * Phase 5 Stage 2: "Start reading" / "Continue reading" opens the first unread chapter in the source's order in the
+ * reader (where it stopped, if it was begun), and the chapter rows open the reader too.
  */
 const props = defineProps<{ id: number }>();
 const backend = useBackendStore();
@@ -28,6 +32,8 @@ const page = useDetailsPage({
   entry,
   refresh: useRefreshManga(),
 });
+
+const resume = computed(() => resumeChapter(chapters.data.value ?? []));
 
 const notStored = computed(
   () => isApiError(manga.error.value) && manga.error.value.code === "NOT_FOUND",
@@ -56,9 +62,18 @@ const notStored = computed(
         :source-link="page.sourceLink.value"
       >
         <template #actions>
+          <RouterLink
+            v-if="resume"
+            class="btn btn-accent"
+            :to="{ name: 'reader', params: { id, chapterId: resume.chapter.id } }"
+            data-action="resume"
+            :title="resume.chapter.name"
+          >
+            {{ resume.started ? `Continue: ${resume.chapter.name}` : "Start reading" }}
+          </RouterLink>
           <button
             type="button"
-            :class="entry.inLibrary ? 'btn' : 'btn btn-accent'"
+            :class="entry.inLibrary || resume ? 'btn' : 'btn btn-accent'"
             :disabled="page.libraryPending.value"
             data-action="library"
             @click="page.toggleLibrary()"

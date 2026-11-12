@@ -1,0 +1,205 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { nextTick, ref } from "vue";
+import { createPinia } from "pinia";
+import { QueryClient } from "@tanstack/vue-query";
+import { flushPromises } from "@vue/test-utils";
+
+import { ApiError } from "../../api/client";
+import { usePageLoader, type PageFetcher } from "../usePageLoader";
+import { withSetup } from "../../test/withSetup";
+
+/*
+ * The reader's page loader (Phase 5 Stage 2) over a scripted fetcher: at most 4 requests at a time, the current page
+ * first, pages leaving the window aborted and their object URLs revoked, and a retry past the cache.
+ */
+interface Call {
+  route: string;
+  reload: boolean;
+  signal: AbortSignal;
+  resolve: (b: Blob) => void;
+  reject: (e: unknown) => void;
+  settled: boolean;
+}
+
+let calls: Call[];
+let revoked: string[];
+let unmount: () => void;
+
+const routes = (n: number) =>
+  Array.from({ length: n }, (_, i) => `/api/v1/manga/34/chapter/1/page/${i}`);
+const index = (c: Call) => Number(c.route.split("/").pop());
+
+const fetcher: PageFetcher = (route, o) =>
+  new Promise<Blob>((resolve, reject) => {
+    const call: Call = {
+      route,
+      reload: o.reload,
+      signal: o.signal,
+      settled: false,
+      resolve: (b) => {
+        call.settled = true;
+        resolve(b);
+      },
+      reject: (e) => {
+        call.settled = true;
+        reject(e);
+      },
+    };
+    calls.push(call);
+    o.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+  });
+
+function setup(pageCount: number, start = 0) {
+  const pages = ref(routes(pageCount));
+  const position = ref(start);
+  const s = withSetup(
+    () =>
+      usePageLoader({
+        pages,
+        position,
+        fetcher,
+        createUrl: (b) => `blob:${b.size}:${Math.random()}`,
+        revokeUrl: (u) => revoked.push(u),
+      }),
+    { pinia: createPinia(), queryClient: new QueryClient() },
+  );
+  unmount = s.unmount;
+  return { loader: s.result, pages, position };
+}
+
+/** The requests still running: neither answered nor aborted. */
+const open = () => calls.filter((c) => !c.settled && !c.signal.aborted);
+const settle = async (c: Call, size = 3) => {
+  c.resolve(new Blob(["x".repeat(size)]));
+  await flushPromises();
+};
+
+beforeEach(() => {
+  calls = [];
+  revoked = [];
+});
+
+afterEach(() => unmount());
+
+describe("usePageLoader", () => {
+  it("runs at most 4 requests, the current page first, then ahead, then behind", async () => {
+    const { loader } = setup(92, 5);
+
+    expect(calls.map(index)).toEqual([5, 6, 7, 8]);
+    expect(loader.inFlight).toBe(4);
+    expect(loader.state(5)).toEqual({ status: "loading" });
+    expect(loader.state(9)).toBeUndefined();
+
+    await settle(calls[0]!);
+    expect(loader.state(5)).toMatchObject({ status: "loaded" });
+    expect(calls.map(index)).toEqual([5, 6, 7, 8, 9]);
+    await settle(calls[1]!);
+    expect(calls.map(index)).toEqual([5, 6, 7, 8, 9, 4]);
+    expect(open().length).toBeLessThanOrEqual(4);
+  });
+
+  it("aborts the pages a jump leaves behind and revokes what was loaded", async () => {
+    const { loader, position } = setup(92, 0);
+    await settle(calls[0]!);
+    const url = (loader.state(0) as { url: string }).url;
+
+    position.value = 50;
+    await nextTick();
+    await flushPromises();
+
+    expect(calls.slice(0, 4).every((c) => c.signal.aborted || index(c) === 0)).toBe(true);
+    expect(revoked).toEqual([url]);
+    expect(loader.state(0)).toBeUndefined();
+    expect(open().map(index)).toEqual([50, 51, 52, 53]);
+  });
+
+  it("lets the page shown take the place of one further ahead when every request is taken", async () => {
+    const { loader } = setup(92, 0);
+    expect(open().map(index)).toEqual([0, 1, 2, 3]);
+    calls[0]!.reject(new Error("HTTP 503"));
+    await flushPromises();
+    // page 4 took the free request
+    expect(open().map(index)).toEqual([1, 2, 3, 4]);
+
+    loader.retry(0);
+    await flushPromises();
+    expect(open().map(index)).toEqual([1, 2, 3, 0]);
+    expect(calls.find((c) => index(c) === 4)!.signal.aborted).toBe(true);
+    expect(loader.state(4)).toBeUndefined();
+  });
+
+  it("keeps a failed page's error until a retry, which skips the cache", async () => {
+    const { loader } = setup(3, 0);
+    const failed = new ApiError({
+      kind: "http",
+      code: "SOURCE_FAILED",
+      message: "The source answered HTTP 403 for this page",
+      details: { httpCode: 403, retried: true },
+      status: 424,
+    });
+    calls[0]!.reject(failed);
+    await flushPromises();
+
+    expect(loader.state(0)).toEqual({ status: "error", error: failed });
+    expect(calls.filter((c) => index(c) === 0)).toHaveLength(1);
+
+    loader.retry(0);
+    const again = calls.filter((c) => index(c) === 0);
+    expect(again).toHaveLength(2);
+    expect(again[1]!.reload).toBe(true);
+    await settle(again[1]!);
+    expect(loader.state(0)).toMatchObject({ status: "loaded" });
+  });
+
+  it("fetches the pages that failed while the backend was away again, but not a source's failure", async () => {
+    const { loader } = setup(3, 0);
+    const away = () =>
+      new ApiError({ kind: "unavailable", code: "BACKEND_UNAVAILABLE", message: "not ready" });
+    calls[0]!.reject(away());
+    calls[1]!.reject(
+      new ApiError({ kind: "http", code: "SOURCE_FAILED", message: "HTTP 403", status: 424 }),
+    );
+    calls[2]!.reject(away());
+    await flushPromises();
+
+    loader.retryTransient();
+    expect(calls.slice(3).map(index)).toEqual([0, 2]);
+    expect(calls.slice(3).every((c) => c.reload)).toBe(true);
+    expect(loader.state(1)).toMatchObject({ status: "error" });
+
+    // a click on one page also takes the others that failed while the backend was away
+    calls[3]!.reject(away());
+    calls[4]!.reject(away());
+    await flushPromises();
+    loader.retry(1);
+    expect(calls.slice(5).map(index).sort()).toEqual([0, 1, 2]);
+  });
+
+  it("starts over for another chapter's pages, and keeps them for the same list fetched again", async () => {
+    const { loader, pages } = setup(5, 0);
+    await settle(calls[0]!);
+
+    pages.value = routes(5); // the same routes, a new array
+    await nextTick();
+    expect(loader.state(0)).toMatchObject({ status: "loaded" });
+
+    pages.value = routes(5).map((r) => r.replace("chapter/1", "chapter/2"));
+    await nextTick();
+    await flushPromises();
+    expect(revoked).toHaveLength(1);
+    expect(open().every((c) => c.route.includes("chapter/2"))).toBe(true);
+  });
+
+  it("revokes everything when the reader closes", async () => {
+    const { loader } = setup(5, 0);
+    await settle(calls[0]!);
+    await settle(calls[1]!);
+    expect(loader.state(1)).toMatchObject({ status: "loaded" });
+
+    unmount();
+    unmount = () => {};
+
+    expect(revoked).toHaveLength(2);
+    expect(calls.filter((c) => c.signal.aborted).length).toBeGreaterThan(0);
+  });
+});

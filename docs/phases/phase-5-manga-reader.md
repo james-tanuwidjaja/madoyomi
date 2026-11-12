@@ -54,30 +54,30 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 - [x] `ImageProxy` with source headers/cookies (Stage 1: upstream's page route, which fetches through the source's own client; its fetch through `PageImages`. `PageImagesApiTest` checks the source's Referer and a cookie from the cookie jar on a loopback image host, and the live API run read MangaPill, Webtoons and MangaDex pages through it, §10)
 - [x] Disk cache with size cap + LRU eviction (Stage 1: `PageCache`, 1 GB by default, Settings → Reader; tests for the order, the 90 % trim, the 5-minute window and the counted size; live, a 256 MB cap cut 303.5 MiB to 229.5 MiB, oldest first, and kept the chapter just read, §10)
 - [x] Prefetch endpoint (next pages + next chapter) (Stage 1: `prefetchChapterPages`, 2 requests at a time; live, 20 pages of a 103-page Webtoons chapter cached in 1.2 s and then read in at most 20 ms each, and the next chapter's first 5 with its page list fetched first, §10)
-- [x] Error + retry handling (Stage 1, the backend: one retry, an expired image URL got anew first, `SOURCE_FAILED` with `httpCode` and `retried`; tests for each case. The reader's "tap to retry" placeholder is Stage 2's)
+- [x] Error + retry handling (Stage 1, the backend: one retry, an expired image URL got anew first, `SOURCE_FAILED` with `httpCode` and `retried`; tests for each case. Stage 2, the reader: a failed page shows the error with the source's HTTP status and "Click to retry"; pages that failed while the backend was away come back by themselves once it is ready; live with the backend killed mid-chapter, §10)
 
 ### Reader modes
-- [ ] Paged LTR
-- [ ] Paged RTL
+- [x] Paged LTR (Stage 2: `PagedReader`, the toolbar's direction switch for the session; live on MangaPill, §10)
+- [x] Paged RTL (Stage 2: the default; the left side and ← go forward, the slider fills from the right; live, §10)
 - [ ] Vertical webtoon (virtualized)
 - [ ] Double page with spread detection + shift
 - [ ] Seamless next-chapter transition
 - [ ] Zoom/pan
 
 ### Controls & settings
-- [ ] Keyboard, mouse wheel, click zones
-- [ ] Toolbar (slider, mode switch, prev/next, fullscreen)
+- [x] Keyboard, mouse wheel, click zones (Stage 2: `utils/pagedNav.ts`, unit-tested for both directions; live: clicks, ←/→, Space, Page Down, Home/End, F, Esc, M and the wheel, §10)
+- [ ] Toolbar (slider, mode switch, prev/next, fullscreen) (Stage 2 has all but the mode switch, which comes with the other modes)
 - [ ] Reader settings (global + per manga)
 
 ### Progress
-- [ ] Page progress saved (debounced)
-- [ ] Chapter marked read at the end
-- [ ] Resume at last page
+- [x] Page progress saved (debounced) (Stage 2: `useReadingProgress`, 1 s, through `updateChapter`; written on leaving, on a chapter change and when the window goes; a failed save tried again every 5 s; live, the page closed at was in the database, §10)
+- [x] Chapter marked read at the end (Stage 2: on showing the last page; live, and again with the backend down while it was shown, §10)
+- [x] Resume at last page (Stage 2: `?page=`, else `lastPageRead` unless the chapter is read; live, after an app restart too, §10)
 
 ### Performance & tests
-- [ ] Concurrency limit for image requests
+- [x] Concurrency limit for image requests (Stage 2: `usePageLoader`, at most 4, the page shown first and taking the place of a less urgent one; unit and component tests, §10)
 - [ ] Performance measured on a 100+ page webtoon chapter
-- [ ] Navigation logic unit tests
+- [ ] Navigation logic unit tests (Stage 2: the paged part, `pagedNav.spec.ts` 34; double-page pairing and spread detection come in Stage 4)
 - [x] Proxy/cache backend tests (Stage 1: `PageCacheTest` 15, `ReaderSettingsTest` 4, `PageImagesApiTest` 7)
 
 ## 6. Exit criteria
@@ -108,6 +108,13 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - live through the API (§10): a 103-page Webtoons chapter (page 1 from the source in 166–355 ms, then from the cache in 12–18 ms), six requests at once for one page sharing one fetch, a prefetch of 20 pages done in 1.2 s, the next chapter's first pages with its page list, a 404 past the end, the 256 MB cap trimming 303.5 MiB to 229.5 MiB, Clear; a MangaDex page 16 minutes after its chapter opened (no retry was needed);
      - live in `pnpm tauri dev` (§10): Settings → Reader showed 1 GB and "4.9 MB in 52 pages" with the folder, 512 MB was saved into `reader-settings.json` and kept after an app restart, and Clear left "0 bytes in 0 pages" and an empty folder.
 2. **Reader core and paged LTR/RTL** (steps 5, 6, 11 in part, 12–14): the route `/manga/:id/read/:chapterId?page=` and `ReaderView`, `PagedReader` (click zones, keys, wheel), preloading ±N with at most 4 image requests at a time and the prefetch, a "tap to retry" placeholder, a first `ReaderToolbar` (title, page slider, previous/next chapter, fullscreen), progress saved (debounced) through `updateChapter(s)` and the chapter marked read on its last page, resume at the last page; chapter rows open the reader (Read/Continue), and the read filter and bulk read marks work. Verified by navigation unit tests (LTR/RTL), component tests and live in `pnpm tauri dev`.
+   - *Done* (2026-11-12):
+     - the route `/manga/:id/read/:chapterId?page=N` (`ReaderView`), outside the app shell, with `PagedReader` and `ReaderToolbar` (`components/reader/`): click zones, keys, the wheel, the two transition panels, the page slider, previous/next chapter, the direction for the session (`stores/reader.ts`) and fullscreen (Tauri's `setFullscreen`, one capability permission);
+     - `usePageLoader` (pages as blobs with the token in the header, at most 4 requests, −1/+4 around the reader, a retry past the cache), the backend prefetch of the next block and the next chapter, `useReadingProgress` (debounced saves, the read mark, flushes, retries), `useFullscreen`, and the pure `utils/pagedNav.ts`;
+     - the app's `updateChapter` / `updateChapters` (`UPDATE_CHAPTER(S)_MUTATION`, 50 documents), `api.fetchAsset`, `useUpdateChapters`, and `lastReadAt` in `ChapterFields`;
+     - the chapter list: rows open the reader (a click, or Read / Continue), "Page 13 of 92" with a bar, the read filter, Mark read / Mark unread / Mark previous as read; the details page's "Start reading" / "Continue: …";
+     - tests: 79 new (78 net), 425 passed + 10 skipped; the live spec 10/10 with 50 documents and an `updateChapter(s)` round trip; no server change;
+     - live in `pnpm tauri dev` on MangaPill (§10): both directions with clicks, keys and the wheel, resume after an app restart, the read marks, the next and previous chapter, the end of the last chapter, fullscreen, the read filter and bulk marks, and failed pages with the backend killed mid-chapter. Found and fixed on the way: MangaPill's chapter numbers (the next chapter), a failed read mark, the pages that failed during a restart, and "Continue reading".
 3. **Webtoon mode** (steps 7, 14, first numbers of 15): `WebtoonReader`, virtualized, pages sized by their intrinsic ratio, the page gap, off-screen images released, very tall images, progress from the scroll position. Verified by unit tests and a first measurement on a 100+ page chapter.
 4. **Double page, zoom and pan, the seamless next chapter** (steps 8–10): `DoublePageReader` with spread detection and "shift by one", zoom and pan in paged mode, and the "Next chapter: …" transition in every mode. Verified by pairing and spread unit tests and live.
 5. **Reader settings, global and per manga** (step 11): `ReaderSettings` (mode, direction, fit, background, page gap, preload count), global on this device and per manga in its meta, and the default mode per content type (§8). Verified by unit tests and a live change that a reopened manga keeps.
@@ -150,6 +157,40 @@ Decided in the stage (defaults, not asked):
 - **Where the reader's own preferences will live** (Stage 5): global ones on this device (`localStorage`, like the theme and auto-play), per-manga ones in the manga's meta (upstream's `setMangaMeta`, as Suwayomi-WebUI does): they are tied to the database's ids and go into backups.
 - **Settings → Reader** (between Player and Backend): the page cache's cap (256 MB, 512 MB, 1 GB, 2 GB, 5 GB, 10 GB; a hand-edited value is offered too), what the cache holds ("45.3 MB in 312 pages", with its folder), and Clear (off when the cache is empty).
 - **The app's reader operations come now** (`api/operations/reader.ts`: `fetchChapterPages`, `prefetchChapterPages`, the settings and the cache), so the live spec validates them before Stage 2 uses them.
+
+### Stage 2 (2026-11-12)
+
+Decided in the stage (defaults, not asked; the plan was sent to the user before the build):
+- **The route is `/manga/:id/read/:chapterId?page=N`, shown without the app shell** (`meta.bare`; App.vue renders such a route outside `AppShell`), so the reader has the whole window. `?page=` counts from 1 (and `last`); the reader keeps it up to date with `router.replace`, so a reload opens the same page. Moving to another chapter replaces the route too, so Back (the toolbar's "← <manga>", Esc) returns to the details page, not through every chapter read.
+- **Where a chapter opens:** `?page=`, else `lastPageRead` (upstream's, a page index from 0, clamped by upstream to the page count, so one past the last index is the last page), unless the chapter is read: a read chapter starts at page 1, as in Mihon. The next chapter opens the same way; the previous one at its last page.
+- **The page list is asked of the source on every open** (`fetchChapterPages` as a query with `staleTime` and `gcTime` 0): its image URLs may have expired, and the chapter's progress must be the stored one.
+- **Pages are fetched as blobs, not `<img src>`** (`api.fetchAsset`, `usePageLoader`):
+  - the token goes in the `Authorization` header (upstream's token filter takes it on every route), so no image URL in the reader carries `?token=`;
+  - the error body is readable (`SOURCE_FAILED` with `details.httpCode`), which an `<img>` can't see;
+  - a page that leaves the window is aborted, and its object URL revoked.
+- **At most 4 page requests at a time** (step 14), in the order current page, the 4 ahead, the 1 behind (`pagesToLoad`). When all 4 are taken, a more urgent page (the one shown after a jump, a retry) takes the place of the least urgent one, which is asked for again later (the backend keeps fetching it into its cache). `decode()` and `loading="lazy"` aren't used: a page is shown from a blob already in memory, and only one `<img>` is in the DOM. Stage 3's webtoon mode is where decoding off-screen pages matters.
+- **The backend prefetch** (Stage 1's `prefetchChapterPages`): the block of 10 pages after the reader's own window, once per block of 10 (pages 5–14 from page 0, 15–24 from page 10, …), and within 5 pages of the end the next chapter's first 5 from where it would open. The reader's own window and the backend's blocks join up.
+- **A failed page** shows "Couldn't load page N", the hint for its code, the code, the source's HTTP status and "Click to retry". A click fetches it again past the webview's cache (`cache: "reload"`), and with it every page that failed because the backend was away. Those (`NETWORK`, `BACKEND_UNAVAILABLE`) also come back by themselves when the backend is ready again; a source's failure waits for its click.
+- **The paged navigation** (`utils/pagedNav.ts`, pure):
+  - the click zones are thirds: the outer ones turn the page, the middle one toggles the toolbar. Reading right to left, the left side goes forward (Mihon's);
+  - keys: → forward left to right and back right to left (← the other way); ↓, Page Down and Space forward; ↑, Page Up and Shift+Space back; Home and End; [ and ] the previous and next chapter; M the toolbar; F fullscreen; Esc leaves fullscreen, else the reader. Nothing with Ctrl, Alt or the Windows key (the webview's shortcuts, and zoom in Stage 4). Keys typed into the slider, a select or a text field are left to them, and Space or Enter on a button;
+  - the wheel turns one page per gesture: deltas add up to 50 px, then 350 ms of nothing counts, and a 200 ms pause starts a new sum, so a trackpad or a free-spinning wheel doesn't race through the chapter;
+  - the chapter boundaries: past the last page is a panel, "Finished: <chapter>" and "Next: <chapter>" (or "There's no next chapter.", with Back to the manga); one more step opens the next chapter. Before the first page is "Previous: <chapter>", only when there is one; one more step opens it at its last page. The panels keep an accidental extra step from leaving the chapter. Stage 4's seamless transition will replace them.
+- **The toolbar** shows at the start and hides at the first page turn (Mihon keeps it hidden; showing it first says it exists); the middle zone or M brings it back. Reading right to left, the slider fills from the right and the chapter buttons swap sides. The mode switch and the settings come with the other modes (Stages 3–5).
+- **The direction** is right to left by default (the global default of §8) and the toolbar flips it for the app session (`stores/reader.ts`); Stage 5 keeps it on this device and per manga, and applies §8's default by the genres.
+- **Fullscreen is the window's** (Tauri's `setFullscreen`, `core:window:allow-set-fullscreen` added to the capability): WebView2's element fullscreen would only fill the webview. In a plain browser (`pnpm dev`) it is the document's. Leaving the reader leaves fullscreen.
+- **Progress** (steps 12–13, `useReadingProgress`): the page shown is saved through upstream's `updateChapter` (`lastPageRead`, which stamps `lastReadAt`) 1 s after paging stops, and at once when the reader moves to another chapter, closes, or the window goes (`pagehide`, `beforeunload`). Showing the last page marks the chapter read at once (Mihon's rule), once per reader. The panels aren't saved. A save that fails (the backend restarting) is shown ("Couldn't save your place in this chapter") and tried again every 5 s; a failed read mark is kept with the later pages of that chapter, so going back a page before the retry doesn't lose it. Each saved chapter replaces its row in the cached chapter list, so the details page has it without a refetch.
+- **The next chapter** (`adjacentChapter`): the nearest one in the source's order (`sourceOrder + 1` and on). Another group's copy of the current chapter (the same number, another scanlator) is skipped, and among the copies of the chapter that follows (a run of the same number), the current one's scanlator is preferred. A chapter of the same group is never skipped. That last rule came from the live run: MangaPill names Berserk's chapters "Group 2 Chapter 385", which upstream's chapter recognition reads as number 2 (390 of 405 chapters), so skipping every same-numbered chapter left no next chapter (§10). Mihon's default is the next one in the source's order; its "skip duplicates" option prefers the same scanlator. The list's scanlator filter doesn't apply to the reader.
+- **The chapter list** (ChapterList over `EntryItemList`'s new `openable` and `pages`):
+  - a click on a row (not on its checkbox or buttons) opens the reader, and so does its button: "Continue" for a chapter begun and not read, else "Read";
+  - a row begun and not read shows "Page 13 of 92" with a bar;
+  - the read filter works (Phase 3's placeholder note is gone);
+  - Mark read, Mark unread and, with one row, Mark previous as read (every earlier unread chapter in the source's order), through `updateChapters`. **Mark unread also sends the chapter back to page 1** (`lastPageRead: 0`), as Mihon does and as Phase 4's unwatched clears the position;
+  - the selection rules are Phase 4's.
+- **"Start reading" / "Continue: <chapter>"** on the details page (`resumeChapter`): the chapter read last (upstream's `lastReadAt`, now in `ChapterFields`) if it isn't finished, else the first unread one after it in the source's order, else the first unread from the oldest (Mihon's resume button). A chapter marked unread (page 0) isn't one to continue, though upstream stamps it. Mihon's rule alone, the first unread from the oldest, offered "Chapter 1" after reading Chapter 385 in the live run.
+- **`updateChapter` for the reader, `updateChapters` for the list** (both upstream's, no server change). Upstream returns `updateChapters`' chapters in the database's order, not the given one.
+- **The reader's background is #111 in both themes**, as readers are.
+- **Vite pre-bundles `@tauri-apps/api/window`** (`optimizeDeps.include`): the reader is a lazy route that imports it, and in `pnpm tauri dev` its first open made Vite optimize the dependency and reload the page mid-navigation (§10). The build was never affected.
 
 ## 10. Findings log
 
@@ -201,3 +242,45 @@ Decided in the stage (defaults, not asked):
   - cookies live: none of the sources read needs one for its images; `PageImagesApiTest` checks a cookie-jar cookie reaching the image host;
   - eviction during a download: upstream's downloader stages pages in this folder; the 5-minute window protects a running download's recent pages, but a download slower than that over a full cache could lose early pages before they are moved. Phase 6 should stage downloads elsewhere, or mark them in use;
   - the reader itself: Stage 2.
+
+### Stage 2 (2026-11-12)
+
+- **Baseline before the stage** (main at `cc07fb2`, Stage 1 merged as #33; rerun before any edit):
+  - server: `.\gradlew.bat build` green with 794 tests, 0 failures (core 694 with 8 skipped, AndroidCompat 7, ext-host 8, api 85), on the first build;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: 41 files (40 + 1 skipped), 347 passed + 10 skipped; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` clean;
+  - the live spec: 10/10 with 48 documents;
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - app: 46 files (45 + 1 skipped), **425 passed + 10 skipped**. 79 new tests (78 net: Phase 3's "doesn't make chapters selectable" is gone): `pagedNav.spec.ts` 34 (steps and panels, the click zones and keys in both directions, the wheel, loading and prefetch ranges, where a chapter opens, the next and previous chapter, `resumeChapter`), `ReaderView.spec.ts` 16, `usePageLoader.spec.ts` 7, `useReadingProgress.spec.ts` 8, `ChapterList.spec.ts` 6, `client.spec.ts` 4 (`fetchAsset`), `entries.spec.ts` 2, `MangaDetailsView.spec.ts` 1, `routes.spec.ts` 1. Lint, typecheck, format:check and build clean;
+  - the live spec: 10/10 with **50 documents** (`UPDATE_CHAPTER_MUTATION`, `UPDATE_CHAPTERS_MUTATION`); its reader test also reads page 1 through `fetchAsset` (the header, no `?token=`) and saves page 3, a page past the end (clamped to 92 of 92) and the read mark through `updateChapter(s)`, then puts the chapter back;
+  - `cargo test` 17; build, clippy and fmt clean (the capability file only);
+  - server: not changed, so not rebuilt (the baseline above stands; smoke and the live spec ran on Stage 1's jar).
+- **Live in `pnpm tauri dev`** (data dir `live-data`, MangaPill 'Berserk', computer use):
+
+  | Check | Result |
+  |---|---|
+  | open from a row (a click, the Read button) | Chapter 385 opened at 1 / 23; a click on the row opened Chapter 382, 383 and 384 later. The first row click of the session bounced back to the details page: Vite optimized `@tauri-apps/api/window` on the reader's first lazy import and reloaded the page mid-navigation (tauri-dev.log, 19:23:01). Pre-bundled since (`optimizeDeps`); the next runs didn't reload |
+  | right to left (the default) | the left third and ← forward, the right third and → back; Space and Page Down forward; one wheel notch down forward, up back; the slider fills from the right |
+  | left to right (the toolbar) | → and the right third forward, 3 → 5; the slider fills from the left, "Next chapter" moves to the right |
+  | toolbar | shown at the start, hidden at the first turn, back with the middle third or M; "3 / 23" |
+  | leave mid-chapter, restart the app | closed at page 5 of Chapter 385: the database had `lastPageRead` 4 with `lastReadAt`; after an app restart the row showed "Page 5 of 23" with a bar and Continue, the header "Continue: Group 2 Chapter 385", and the reader opened at 5 / 23 (direction back to right to left: the session's) |
+  | read to the end | End, then forward: "Finished: Group 2 Chapter 385 · Next: Group 2 Chapter 386"; forward again opened 386 at 1 / 24; its end said "There's no next chapter." with "Back to Berserk"; both rows Read in the list |
+  | the previous chapter | from 386 page 1, back: "Start of … · Previous: Group 2 Chapter 385", back again: 385 at 23 / 23 |
+  | fullscreen | F filled the screen (no title bar or taskbar), the toolbar said "Exit fullscreen"; Esc left fullscreen, a second Esc went back to the details page |
+  | read filter and bulk marks | Show Read: "405 chapters · 2 shown"; 386 selected, Mark unread: it left the filter, and the header moved to "Continue: Group 2 Chapter 386" |
+  | a failed page | the backend killed (its pid from sidecar.log) while Chapter 384 was open, then End: "Couldn't load page 25", "The backend isn't running right now…", `BACKEND_UNAVAILABLE`, "Click to retry"; after the restart (new port) the click loaded it |
+  | the read mark during a restart | in that run, the last page's read mark failed ("Couldn't save your place in this chapter") and was never tried again; fixed (a retry every 5 s, the mark kept with later pages). Again on Chapter 383 and 382: the note went away by itself once the backend was back, and the chapter showed Read |
+  | pages that failed during a restart | in 383, page 23 (behind the last) stayed failed after the retry of page 24; fixed (transient failures are fetched again when the backend is ready, and with any retry). On 382 the last page and the one behind it came back by themselves, without a click (`021.jpg`, `022.jpg` in the cache) |
+  | the backend prefetch | Chapter 384's cache folder: pages 1–5 (the reader's window), **6–15 (the prefetch's first block)**, 24–25 (the jump to the end); the same in 383, 385 and 386 |
+  | the token | no `token=` in sidecar.log, madoyomi.log or the dev output; the reader's page requests carry it in the header. The backend stopped with exit code 0 at each close |
+
+- **MangaPill's chapter numbers are wrong for Berserk:** 390 of its 405 chapters are number 2.0 ("Group 2 Chapter 386" read as 2 by the chapter recognition), the others 5, 6, 7, 8…, and none has a scanlator. The first rule (skip every chapter with the current one's number) found no next chapter; the rule now skips only another group's copy (§9). Numbers can't be trusted for order; `sourceOrder` is.
+- **A chapter whose pages are already in when the reader mounts** (a hot reload in the run; a reopen within the cache's lifetime) set its start position before the progress watcher existed, so opening it at its last page didn't mark it. The watcher runs at once now (a test for it).
+- **"Continue reading" by Mihon's rule alone** (the first unread chapter from the oldest) offered Chapter 1 after Chapter 385 was begun; it follows `lastReadAt` now (§9).
+- **Not checked, or not coverable yet:**
+  - a source's own failure live (`SOURCE_FAILED` with an HTTP status): no page failed at MangaPill; the component test shows the status, and the live spec reads the 404 body past the end. A backend restart stood in for a failure live;
+  - `[` and `]` (the chapter keys) live: unit-tested; the toolbar's and the panels' chapter steps were used live, and Home, End, F and Esc;
+  - the concurrency limit live: the webview's requests weren't counted; the loader and component tests check at most 4;
+  - a 100+ page chapter in the paged mode: the reader holds 6 pages whatever the length; the 100+ page measurement is Stage 3's (webtoon);
+  - Webtoons and MangaDex in the reader: the paged run was on MangaPill; Stage 3 reads the 103-page Webtoons chapter.

@@ -25,6 +25,11 @@ export interface ListItem {
   /** Anime only: where playback stopped (or is, while it plays), in milliseconds. */
   progress?: Progress;
   /**
+   * Manga only (Phase 5): where reading stopped, upstream's `lastPageRead` (a page index from 0) and the chapter's
+   * page count (0 or less: not known yet).
+   */
+  pages?: { lastPageRead: number; pageCount: number };
+  /**
    * Anime only: mpv is playing it now (or has it paused), or the backend is fetching its videos again after mpv
    * couldn't open the video (Stage 4).
    */
@@ -70,7 +75,21 @@ export function fromChapter(c: Chapter): ListItem {
     done: c.isRead,
     bookmarked: c.isBookmarked,
     filler: false,
+    pages: { lastPageRead: c.lastPageRead, pageCount: c.pageCount },
   };
+}
+
+/**
+ * A chapter row's reading progress: "Page 13 of 92" and the share read, once a page past the first was reached and
+ * the chapter isn't read. Null otherwise.
+ */
+export function chapterProgress(item: ListItem): { text: string; share: number | null } | null {
+  const p = item.pages;
+  if (!p || item.done || p.lastPageRead <= 0) return null;
+  const page = p.lastPageRead + 1;
+  if (p.pageCount <= 0) return { text: `Page ${page}`, share: null };
+  const shown = Math.min(page, p.pageCount);
+  return { text: `Page ${shown} of ${p.pageCount}`, share: shown / p.pageCount };
 }
 
 export type ItemSortKey = "source" | "number" | "date";

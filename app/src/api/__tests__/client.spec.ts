@@ -208,3 +208,56 @@ describe("assetUrl and subscriptionUrl", () => {
     expect(client.subscriptionUrl()).toBe(`ws://127.0.0.1:50266/api/graphql?token=${TOKEN}`);
   });
 });
+
+describe("fetchAsset (Phase 5: manga pages)", () => {
+  it("fetches the route with the token in the header, never in the URL", async () => {
+    fetchMock.mockResolvedValue(new Response("jpeg", { status: 200 }));
+
+    const blob = await client.fetchAsset("/api/v1/manga/34/chapter/1/page/0");
+
+    expect(await blob.text()).toBe("jpeg");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:50266/api/v1/manga/34/chapter/1/page/0");
+    expect(url).not.toContain("token");
+    expect(init.headers.Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(init.cache).toBe("default");
+  });
+
+  it("skips the webview's cache for a retry", async () => {
+    fetchMock.mockResolvedValue(new Response("x", { status: 200 }));
+
+    await client.fetchAsset("/api/v1/manga/34/chapter/1/page/0", { reload: true });
+
+    expect(fetchMock.mock.calls[0][1].cache).toBe("reload");
+  });
+
+  it("turns the page route's JSON error into an ApiError with the source's HTTP status", async () => {
+    fetchMock.mockResolvedValue(
+      json(
+        {
+          code: "SOURCE_FAILED",
+          message: "The source answered HTTP 403 for this page",
+          details: { httpCode: 403, retried: true },
+        },
+        424,
+      ),
+    );
+
+    const e = await caught(client.fetchAsset("/api/v1/manga/34/chapter/1/page/3"));
+
+    expect(e.code).toBe("SOURCE_FAILED");
+    expect(e.status).toBe(424);
+    expect(e.details).toEqual({ httpCode: 403, retried: true });
+  });
+
+  it("says when the answer isn't an image or an error body, the backend is down, or not ready", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("<html>", { status: 502 }));
+    expect((await caught(client.fetchAsset("/p"))).code).toBe("BAD_RESPONSE");
+
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    expect((await caught(client.fetchAsset("/p"))).code).toBe("NETWORK");
+
+    info = null;
+    expect((await caught(client.fetchAsset("/p"))).code).toBe("BACKEND_UNAVAILABLE");
+  });
+});

@@ -78,6 +78,18 @@ describe("routes", () => {
     expect(document.title).toBe(`${title} · Madoyomi`);
   });
 
+  it("shows the reader without the shell (Phase 5)", async () => {
+    await mountAt("/manga/34/read/5001?page=3");
+
+    expect(wrapper.find(".pane").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="reader"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="reader-loading"]').text()).toBe("Waiting for the backend…");
+    expect(useMediaKindStore().kind).toBe("manga");
+
+    await go("/library");
+    expect(wrapper.find(".pane").exists()).toBe(true);
+  });
+
   it("shows a not-found page for an unknown path", async () => {
     await mountAt("/nowhere");
 

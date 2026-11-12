@@ -16,6 +16,10 @@ import {
   MANGA_QUERY,
   refreshAnime,
   refreshManga,
+  UPDATE_CHAPTER_MUTATION,
+  UPDATE_CHAPTERS_MUTATION,
+  updateChapter,
+  updateChapters,
 } from "../operations/entries";
 import { makeAnime, makeChapters, makeManga } from "../../test/fixtures";
 
@@ -106,5 +110,29 @@ describe("fetchLibrary", () => {
     expect(await fetchLibrary("manga")).toEqual([
       { kind: "manga", id: 3, title: "A", thumbnailUrl: null, inLibrary: true, inLibraryAt: 1700 },
     ]);
+  });
+});
+
+describe("updateChapter(s) (Phase 5 Stage 2)", () => {
+  it("saves one chapter's page and returns it as stored", async () => {
+    const stored = { ...makeChapters(1)[0]!, lastPageRead: 12 };
+    client.gql.mockResolvedValue({ updateChapter: { chapter: stored } });
+
+    expect(await updateChapter(5001, { lastPageRead: 12 })).toEqual(stored);
+    expect(client.gql).toHaveBeenCalledWith(UPDATE_CHAPTER_MUTATION, {
+      id: 5001,
+      patch: { lastPageRead: 12 },
+    });
+  });
+
+  it("marks several chapters", async () => {
+    const stored = makeChapters(2).map((c) => ({ ...c, isRead: true }));
+    client.gql.mockResolvedValue({ updateChapters: { chapters: stored } });
+
+    expect(await updateChapters([5001, 5002], { isRead: true })).toEqual(stored);
+    expect(client.gql).toHaveBeenCalledWith(UPDATE_CHAPTERS_MUTATION, {
+      ids: [5001, 5002],
+      patch: { isRead: true },
+    });
   });
 });

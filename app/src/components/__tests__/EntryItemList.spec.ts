@@ -9,6 +9,7 @@ import EpisodeList from "../EpisodeList.vue";
 import { ITEM_SORT_KEY, useItemListStore } from "../../stores/itemList";
 import { usePlaybackStore } from "../../stores/playback";
 import { makeChapters, makeEpisodes } from "../../test/fixtures";
+import { createTestRouter } from "../../test/mountView";
 import type { Episode, PlaybackSession } from "../../api/types";
 
 /*
@@ -126,12 +127,15 @@ describe("EpisodeList / ChapterList", () => {
     }));
     wrapper = mount(ChapterList, {
       props: { mangaId: 34, chapters },
-      global: { plugins: [pinia] },
+      // ChapterList's marks are a vue-query mutation, and its rows open the reader route
+      global: {
+        plugins: [pinia, createTestRouter(), [VueQueryPlugin, { queryClient: new QueryClient() }]],
+      },
       attachTo: document.body,
     });
     await flushPromises();
     expect(names()).toEqual(["Chapter 4", "Chapter 3", "Chapter 2", "Chapter 1"]);
-    expect(wrapper.text()).toContain("Reading chapters comes in Phase 5");
+    expect(wrapper.text()).toContain("Open a chapter to read it");
 
     await wrapper.find('[data-testid="item-bookmarked"]').setValue(true);
     expect(names()).toEqual(["Chapter 3", "Chapter 1"]);
@@ -263,15 +267,5 @@ describe("EpisodeList / ChapterList", () => {
     expect(checked()).toEqual(["Episode 4"]);
     await wrapper.setProps({ animeId: 13, episodes: makeEpisodes(5, 13, 1) });
     expect(checked()).toEqual([]);
-  });
-
-  it("doesn't make chapters selectable", async () => {
-    wrapper = mount(ChapterList, {
-      props: { mangaId: 34, chapters: makeChapters(2) },
-      global: { plugins: [pinia] },
-      attachTo: document.body,
-    });
-    await flushPromises();
-    expect(wrapper.find('[data-testid="item-select"]').exists()).toBe(false);
   });
 });
