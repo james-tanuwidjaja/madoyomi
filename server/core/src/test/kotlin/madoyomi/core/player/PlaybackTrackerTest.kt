@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -208,6 +209,27 @@ class PlaybackTrackerTest {
         val killed = PlaybackTracker(hooks, clock = { now })
         assertEquals(PlaybackTracker.Outcome.Failed("mpv exited with code 1"), killed.finish(stopped = false, exitCode = 1))
         assertEquals(PlaybackTracker.Outcome.Closed, killed.finish(stopped = false, exitCode = 1), "finish runs once")
+    }
+
+    @Test
+    fun `a file that never played is told apart from one that failed while playing (Stage 6)`() {
+        assertTrue(tracker.neverPlayed, "no position yet")
+        // mpv reports the start position once the file is open, before any frame plays (an HLS stream whose
+        // segments all fail), then ends it with its own "no audio or video data played"
+        event("file-loaded")
+        prop("time-pos", 30.0)
+        assertFalse(tracker.neverPlayed)
+        event("end-file", ""","reason":"error","file_error":"no audio or video data played"""")
+        assertTrue(tracker.neverPlayed)
+        assertEquals(
+            PlaybackTracker.Outcome.Failed("mpv could not play the video: no audio or video data played"),
+            tracker.finish(stopped = false, exitCode = 2),
+        )
+        // a failure once it played is not
+        val played = PlaybackTracker(hooks, clock = { now })
+        played.onMessage(msg("""{"event":"property-change","id":1,"name":"time-pos","data":12.0}"""))
+        played.onMessage(msg("""{"event":"end-file","reason":"error","file_error":"loading failed"}"""))
+        assertFalse(played.neverPlayed)
     }
 
     @Test

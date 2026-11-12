@@ -4,7 +4,7 @@ Madoyomi plays episodes in **mpv, in its own window**, and the **backend owns th
 the backend to play (`playEpisode`) and the backend does the rest. This file is the contract between the backend
 (`server/core/src/main/kotlin/madoyomi/core/player/`) and mpv: the command line and include file (Stage 1), then the
 IPC pipe, what is observed and when progress is saved (Stage 2), what happens when mpv can't open the video
-(Stage 4), and which tracks it plays (Stage 5).
+(Stage 4, with Stage 6's "never played"), and which tracks it plays (Stage 5).
 
 ## Finding mpv and its config
 
@@ -157,8 +157,11 @@ Madoyomi's) is looked at once more before it is reported:
 - **The HTTP status** is read from mpv's log (`<data dir>/logs/mpv.log`, the session's own output): the last
   `HTTP error NNN` line, which FFmpeg's http protocol writes at warn level (`[ffmpeg] https: HTTP error 403
   Forbidden`). mpv's `end-file` only says `file_error: "loading failed"`, so the log is the only place with the status.
-- **Early** means mpv never reported a position (`time-pos`) in that session: it never got the video playing (a URL
-  refused at once, a crash at start, an exit before the pipe opened).
+- **Early** means mpv never got the video playing in that session: it never reported a position (`time-pos`; a URL
+  refused at once, a crash at start, an exit before the pipe opened), or it ended the file with `file_error` "no audio
+  or video data played". mpv reports `time-pos` (the start position) as soon as the file is open, before any frame
+  plays, so an HLS stream whose playlist opens but whose segments all fail has a position and still never played
+  (found live in the Stage 6 exit run).
 - **An `eof` that isn't the end.** When a URL stops answering while it plays (it expired, and the next range request
   gets 403), mpv logs the HTTP error and then ends the file as `eof`, with exit code 0 (measured live with AnimeGG's
   MP4). So an `eof` more than 10 s before a known duration, with an HTTP error in the log, counts as a failure ("mpv

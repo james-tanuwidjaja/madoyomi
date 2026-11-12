@@ -19,6 +19,11 @@
 // Each <token> answers like the upstream (status, body, ranges) until `after` seconds have passed since its first
 // request, or it has served `requests` requests; then 403 for good. `after=0` (or `requests=0`) is expired from the
 // start; without either it never expires. A new token starts fresh, as a refetched URL would.
+//
+// An HLS playlist (Phase 4 Stage 6) is rewritten so that every URI in it (variant playlists, segments, keys, media
+// renditions) goes through the same token, absolute: the stream's segments then expire with it, mid-play. The
+// rewritten URL keeps the upstream file name (/expire/<token>/<name>?u=...), and an `image/*` type is not passed on:
+// some hosts serve their TS segments as .jpg/.png, which FFmpeg then takes for images when it has no extension.
 import http from "node:http";
 
 const port = Number(process.argv[2] ?? 18080);
@@ -41,12 +46,47 @@ const stats = { ok: 0, rejected: 0 };
 const tokens = new Map();
 const HOP_BY_HOP = new Set(["host", "connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-connection", "accept-encoding"]);
 
-async function forward(req, res, upstream, headers) {
+/** An HLS playlist's URIs, each made absolute and sent through `proxied(url)`. */
+function rewritePlaylist(text, base, proxied) {
+  const abs = (u) => proxied(new URL(u, base).href);
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      if (line.startsWith("#")) return line.replace(/URI="([^"]+)"/g, (_, u) => `URI="${abs(u)}"`);
+      return line.trim() ? abs(line.trim()) : line;
+    })
+    .join("\n");
+}
+
+async function forward(req, res, upstream, headers, proxied) {
   const up = await fetch(upstream, { headers, redirect: "follow" });
   const out = {};
   for (const h of ["content-type", "content-length", "content-range", "accept-ranges"]) {
     const v = up.headers.get(h);
     if (v) out[h] = v;
+  }
+  const type = up.headers.get("content-type") ?? "";
+  if (proxied && /^image\//i.test(type)) delete out["content-type"];
+  // a playlist by its type, its name, or (a small text-like body) its first line
+  const small = Number(up.headers.get("content-length") ?? 0) < 4_000_000 && !/^(video|audio|image)\//i.test(type);
+  let text = null;
+  if (proxied && up.ok && (/mpegurl/i.test(type) || /\.m3u8($|\?)/i.test(new URL(up.url).pathname) || small)) {
+    const raw = Buffer.from(await up.arrayBuffer());
+    if (!raw.subarray(0, 16).toString("utf8").replace(/^\uFEFF/, "").startsWith("#EXTM3U")) {
+      res.writeHead(up.status, out);
+      res.end(req.method === "HEAD" ? undefined : raw);
+      return up.status;
+    }
+    text = raw.toString("utf8");
+  }
+  if (text !== null) {
+    const body = Buffer.from(rewritePlaylist(text, up.url, proxied), "utf8");
+    if (process.env.PROXY_DEBUG) console.log(`PLAYLIST ${up.url}\n${text.slice(0, 600)}\n-> ${body.toString("utf8").slice(0, 600)}`);
+    delete out["content-range"];
+    out["content-length"] = String(body.length);
+    res.writeHead(up.status, out);
+    res.end(req.method === "HEAD" ? undefined : body);
+    return up.status;
   }
   res.writeHead(up.status, out);
   if (req.method === "HEAD" || !up.body) return res.end();
@@ -63,11 +103,15 @@ async function forward(req, res, upstream, headers) {
 
 async function expiring(req, res) {
   const url = new URL(req.url, "http://127.0.0.1");
-  const token = url.pathname.slice("/expire/".length);
+  if (process.env.PROXY_DEBUG) console.log(`REQ ${req.method} ${url.pathname} range=${req.headers["range"] ?? "-"}`);
+  const token = url.pathname.slice("/expire/".length).split("/")[0];
   const upstream = url.searchParams.get("u");
   const after = url.searchParams.has("after") ? Number(url.searchParams.get("after")) : Infinity;
   const limit = url.searchParams.has("requests") ? Number(url.searchParams.get("requests")) : Infinity;
-  if (!token || !upstream) return res.writeHead(400).end("token and u= required");
+  if (!token || !upstream) {
+    console.log(`400 ${req.method} ${req.url.slice(0, 120)}`);
+    return res.writeHead(400).end("token and u= required");
+  }
   let t = tokens.get(token);
   if (!t) {
     t = { first: Date.now(), served: 0, expired: false };
@@ -91,7 +135,12 @@ async function expiring(req, res) {
   const headers = {};
   for (const [k, v] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(k)) headers[k] = v;
   try {
-    const status = await forward(req, res, upstream, headers);
+    const extra = ["after", "requests"].filter((k) => url.searchParams.has(k)).map((k) => `&${k}=${url.searchParams.get(k)}`).join("");
+    const proxied = (u) => {
+      const name = encodeURIComponent(new URL(u).pathname.split("/").pop() || "x");
+      return `http://127.0.0.1:${port}/expire/${token}/${name}?u=${encodeURIComponent(u)}${extra}`;
+    };
+    const status = await forward(req, res, upstream, headers, proxied);
     console.log(`${status} ${req.method} ${token} range=${req.headers["range"] ?? "-"} (#${t.served}, ${age.toFixed(1)} s)`);
   } catch (e) {
     console.log(`ERR ${token} ${e}`);

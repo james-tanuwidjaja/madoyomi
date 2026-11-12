@@ -755,6 +755,35 @@ class PlaybackApiTest : AnimeApiTest() {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
+    fun `a stream that never played a frame is fetched again once, though mpv reported its start position (Stage 6)`() {
+        fakeIpc(duration = 40.0, speed = 10.0)
+        // as mpv with an HLS stream whose playlist opens but whose segments all fail: time-pos at the start, then
+        // "no audio or video data played", exit 2, no HTTP error in its log
+        val source = RetrySource { n, _ -> if (n == 1) "?fakempv-nothing=1" else "" }
+        val episodeId = episode(source)
+
+        val (id, events) =
+            withEvents(episodeId, until = closedTwice) {
+                play(episodeId, start = 30.0).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+            }
+        val types = events.map { it.path("type") }
+        assertTrue(types.indexOf("RETRYING") in 1..2, types.toString())
+        assertFalse("ERROR" in types, types.toString())
+        val retrying = events.single { it.path("type") == "RETRYING" }
+        assertEquals("mpv could not play the video: no audio or video data played", retrying.path("message"))
+        assertNull(retrying.path("httpStatus"))
+        assertEquals(2, source.fetches, "fetched again once")
+        val retry = events.last { it.path("type") == "STARTED" }.path("session", "id") as String
+        assertNotEquals(id, retry)
+        val retryArgs = argsOf(retry)
+        assertEquals("https://cdn.example.org/2/Main-1080p.mp4", retryArgs.last(), "the same video, from the new fetch")
+        assertTrue("--start=30" in retryArgs, "where the failed one was to start. $retryArgs")
+        receivedBy(id)
+        receivedBy(retry)
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
     fun `a failure after playback started without an HTTP error is ERROR at once, with the next video`() {
         fakeIpc(duration = 40.0, speed = 10.0)
         val source = RetrySource { n, _ -> if (n == 1) "?fakempv-fail-at=5" else "" }

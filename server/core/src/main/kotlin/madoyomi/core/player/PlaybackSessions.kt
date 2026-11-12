@@ -382,8 +382,8 @@ object PlaybackSessions {
 
             is PlaybackTracker.Outcome.Failed -> {
                 val message = outcome.message + (status?.let { " (HTTP $it)" } ?: "")
-                // early: mpv never reported a position, so it never got the video playing
-                val early = entry.tracker.snapshot().positionSeconds == null
+                // early: mpv never got the video playing (no position, or "no audio or video data played")
+                val early = entry.tracker.neverPlayed
                 val ref = entry.ref
                 if (ref != null && entry.attempt == 0 && (early || status in MpvLog.EXPIRED_STATUSES)) {
                     logger.warn { "playback ${ended.id}: $message; fetching the videos again" }

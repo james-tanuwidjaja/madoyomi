@@ -1,6 +1,6 @@
 # Madoyomi app (Tauri 2 + Vue 3)
 
-Desktop shell and UI. See [../docs/PLAN.md](../docs/PLAN.md) for the architecture and [../docs/phases/phase-3-frontend-mvp.md](../docs/phases/phase-3-frontend-mvp.md) for the current phase.
+Desktop shell and UI. See [../docs/PLAN.md](../docs/PLAN.md) for the architecture and [../docs/phases/](../docs/phases/) for the phases: the screens are [Phase 3](../docs/phases/phase-3-frontend-mvp.md)'s, playback [Phase 4](../docs/phases/phase-4-playback.md)'s, and the manga reader is next ([Phase 5](../docs/phases/phase-5-manga-reader.md)).
 
 ```powershell
 pnpm install

@@ -50,7 +50,9 @@ public final class FakeMpvServer implements AutoCloseable {
         public double start = 0;
         /** Seconds of the file per second of wall time. */
         public double speed = 1;
-        /** {@code play}: plays; {@code error}: the file fails to load; {@code idle}: nothing happens until {@link #play()}. */
+        /** {@code play}: plays; {@code error}: the file fails to load; {@code nothing}: the file opens and reports its
+         * start position, then ends with mpv's "no audio or video data played" (an HLS stream whose segments all fail,
+         * Stage 6); {@code idle}: nothing happens until {@link #play()}. */
         public String mode = "play";
         /** Milliseconds from the start to {@code file-loaded}. */
         public long loadMillis = 300;
@@ -202,6 +204,19 @@ public final class FakeMpvServer implements AutoCloseable {
             sleep(options.loadMillis);
         }
         if (closed) return;
+        if (options.mode.equals("nothing")) {
+            // as mpv: the file opens, time-pos says where it was to start, and no frame ever plays
+            load();
+            property("time-pos", position);
+            sleep(100);
+            Map<String, Object> end = new LinkedHashMap<>();
+            end.put("event", "end-file");
+            end.put("reason", "error");
+            end.put("file_error", "no audio or video data played");
+            broadcast(end);
+            finish(2);
+            return;
+        }
         if (options.mode.equals("error")) {
             logHttpError();
             Map<String, Object> end = new LinkedHashMap<>();
@@ -546,7 +561,8 @@ public final class FakeMpvServer implements AutoCloseable {
      * fakempv-error=<status>} fails to load, and {@code fakempv-fail-at=<seconds>} fails once the position gets
      * there (with {@code fakempv-status=<status>}); {@code fakempv-eof-at=<seconds>} ends the file there as mpv
      * does when a URL stops answering mid-play. With a status other than 0, FFmpeg's {@code HTTP error <status>}
-     * line goes to stdout (mpv's log) when it fails. {@code fakempv-audio=jpn,eng} and {@code fakempv-subs=eng} give
+     * line goes to stdout (mpv's log) when it fails. {@code fakempv-nothing=1} opens the file and ends it with mpv's "no
+     * audio or video data played" (Stage 6). {@code fakempv-audio=jpn,eng} and {@code fakempv-subs=eng} give
      * the file tracks of its own (Stage 5).
      */
     public static void main(String[] args) throws Exception {
@@ -570,6 +586,7 @@ public final class FakeMpvServer implements AutoCloseable {
         String status = urlParam(url, "fakempv-error");
         String failAt = urlParam(url, "fakempv-fail-at");
         if (status != null) o.mode = "error";
+        if (urlParam(url, "fakempv-nothing") != null) o.mode = "nothing";
         if (failAt != null) o.failAt = Double.parseDouble(failAt);
         String eofAt = urlParam(url, "fakempv-eof-at");
         if (eofAt != null) o.eofAt = Double.parseDouble(eofAt);

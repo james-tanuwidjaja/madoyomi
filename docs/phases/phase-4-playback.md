@@ -73,7 +73,7 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 - [x] Preferred quality/server sorting (Stage 5: `VideoPreferences` after the source's sorts, stable, the server then the hoster's closest quality, with `sourceIndex` and `matchesPreference`; the picker's and auto-play's pick ranked remembered, preference, source; `VideoPreferencesTest`, `PlayerSettingsApiTest`, `videos.spec.ts`, `VideoPicker.spec.ts`, `AnimeDetailsView.spec.ts`, and live through the API and in `pnpm tauri dev` on AnimeGG and KickAssAnime, §10)
 - [x] Lazy `videoUrlParse` resolution (Stage 1: `playEpisode` resolves the video right before the launch, through Phase 2's `resolveVideo`; `PlaybackApiTest`)
 - [x] 403/expired retry + fallback to next video (Stage 4: `PlaybackSessions` fetches the videos again once and plays the same video from where it failed (RETRYING), else ERROR with the next video, which the app preselects in the reopened picker; `VideoChoicesTest`, `PlaybackApiTest`, `AnimeDetailsView.spec.ts`, and live through the API and in `pnpm tauri dev` with the header proxy's expiring mode, §10)
-- [ ] Proxy fallback for headers mpv can't send (**deferred**, Stage 4: measured live, every header of AnimeGG (2) and KickAssAnime (7) reaches mpv's requests verbatim, so there is no header mpv can't send; §9, §10)
+- [ ] Proxy fallback for headers mpv can't send (**deferred**, Stage 4: measured live, every header of AnimeGG (2) and KickAssAnime (7) reaches mpv's requests verbatim, so there is no header mpv can't send; Stage 6's matrix measured them again, on the MKV's and an HLS playlist's requests too; §9, §10)
 
 ### Frontend
 - [x] `VideoPicker` dialog with remembered choice (Stage 3: the hosters with Load/Retry, quality and track counts, "Source's pick" and "Last used", the last choice per source on this device; `VideoPicker.spec.ts`, `videoChoices.spec.ts`, `videos.spec.ts`, and live in `pnpm tauri dev`: a non-default video played, and was preselected as "Last used" after an app restart, §10)
@@ -85,16 +85,16 @@ Watch episodes reliably: pick a video/server/quality from `getVideoList`, launch
 ### Tests
 - [x] Launcher argument unit tests (Stage 1: `MpvCommandTest`, `MpvLocatorTest`)
 - [x] IPC client test with fake pipe (Stage 2: `MpvIpcClientTest` against `FakeMpvServer`, a fake mpv on a real Windows named pipe, which `PlaybackApiTest` also runs as mpv)
-- [ ] Manual format matrix passed
+- [x] Manual format matrix passed (Stage 6, live through the API on a fresh data dir: MP4 (AnimeGG), HLS (KickAssAnime), MKV with ASS subtitles and two audio tracks of its own (a generated file in place of a source's URL: none of the top 20 serves MKV), external subtitles (KickAssAnime's 8 WebVTT, AnimeOnsen's 9 ASS), external audio (KickAssAnime's 2), and expiring URLs at once and mid-play for MP4 and HLS; every row played, selected the expected tracks, saved its progress, and got its headers; §10)
 
 ### Stretch
 - [ ] Embedded mpv via `--wid` prototype
 
 ## 6. Exit criteria
 
-- [x] Watch an episode from the UI, close mpv halfway, reopen the app, and resume within ±5 s of where you stopped. (Stage 3, live in `pnpm tauri dev` on the seeded `live-data`: quit at 757.6 s, stored 757666 ms, the app closed and started again, and mpv resumed at 757.666 s, 0.00 s off, §10. The exit run repeats it from a fresh data dir.)
-- [x] An episode passing the watched threshold shows as watched in the UI without a refresh. (Stage 3, live in `pnpm tauri dev`: a seek to 1290 s of 1475 s (87 %) showed the Watched badge on the playing row at once, §10. The exit run repeats it from a fresh data dir.)
-- [x] The next episode starts from the end-of-episode prompt. (Stage 4, live in `pnpm tauri dev` on the seeded `live-data`: episode 3 played to its end showed "Next: Episode 4" with its countdown, and 11.8 s after the end episode 4 played with the remembered `[DUBBED] AnimeGG:360p`, without the picker; Cancel stopped it, and Play now started it at once, §10. The exit run repeats it from a fresh data dir.)
+- [x] Watch an episode from the UI, close mpv halfway, reopen the app, and resume within ±5 s of where you stopped. (Stage 3 on the seeded `live-data`; **Stage 6 from a fresh data dir, twice**, in `pnpm tauri dev`: mpv's window closed halfway, stored 752966 ms, the app closed and started again, "Resume from 12:32", and mpv's first `time-pos` 752.966, 0.00 s off; after the fix round, on a second fresh data dir, stored 716500 ms and mpv at 716.500, 0.00 s off, §10.)
+- [x] An episode passing the watched threshold shows as watched in the UI without a refresh. (Stage 3; **Stage 6 from both fresh data dirs**: a seek to 1290 s of 1475 s (87 %) showed the Watched badge on the playing row at once, and with the threshold changed to 70 % while episode 2 played, a seek to 72 % marked it in the same session, §10.)
+- [x] The next episode starts from the end-of-episode prompt. (Stage 4 on the seeded `live-data`; **Stage 6 from both fresh data dirs**: episode 1 played to its end showed "Next: Episode 2 …" with its countdown, and episode 2 played 10.8 s (then 14.2 s) after the end with the remembered `[DUBBED] AnimeGG:360p`, without the picker; Cancel on the next toast played nothing, §10.)
 
 ## 7. Risks & notes
 
@@ -144,6 +144,12 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - live through the API: the order for 720p and 2160p on AnimeGG and KickAssAnime, WATCHED at 62 % with 60 %, Spanish/English and off/Japanese on KickAssAnime's 8 subtitle and 2 audio tracks, and a wrong, a right and a cleared mpv path;
      - live in `pnpm tauri dev` (§10): 95 % made a 90 % episode offer "Resume from 22:07", 85 % didn't; 720p put `[SUBBED] AnimeGG:720p` first as Preferred while the remembered `[DUBBED] AnimeGG:360p` stayed preselected, and auto-play played it on the next episode; KickAssAnime preselected its 720p and mpv played Spanish subtitles and English audio; a wrong mpv path was `PLAYER_NOT_FOUND` naming the setting, the right one played, and clearing it went back to PATH. No fix was needed.
 6. **Exit run**: the step 20 format matrix (MP4, HLS, MKV with ASS, external subtitles, multiple audio tracks, expiring URLs), every §6 criterion from a fresh data dir, and a fix round. The embedded `--wid` prototype (step 17) stays a stretch goal after the exit, not part of it.
+   - *Done* (2026-11-12):
+     - the baseline rerun (§10): 766 server tests green on the second build (upstream's `CefTest` flaked once), smoke 24/24, the app's 338 + 9, the live spec 9/9 with 42 documents, `cargo test` 17;
+     - the format matrix, live through the API on a fresh data dir (§10's table): every row played, chose the expected tracks, saved its progress and got its headers. The MKV row is a generated MKV (H.264, two AAC tracks, two ASS tracks) in place of a source's URL, since none of the top 20 serves MKV; the mid-play HLS expiry is a generated HLS through the header proxy, since KickAssAnime's segment hosts refuse the proxy's client;
+     - every §6 criterion from a fresh data dir in `pnpm tauri dev`, through the UI, twice (before and after the fix round), with the repo added, the extensions installed, the trust prompt, and the player settings from their defaults (a threshold change taking effect in the episode that played);
+     - the fix round: an HLS stream that opens but never plays a frame (mpv reports its start position, then "no audio or video data played") is now fetched again once like any early failure (`PlaybackTracker.neverPlayed`; found live through the proxy). `ExtensionThreadsTest` counts the pool's threads by name. Tests: 2 new (768);
+     - the header proxy rewrites HLS playlists so their segments expire with the token (`spikes/mpv-play/header-proxy.mjs`). Phase 4 is done; the `--wid` prototype stays open as the stretch goal.
 
 ## 9. Decision record
 
@@ -293,6 +299,14 @@ Decided in the stage (defaults, not asked):
   This also runs for a file with tracks of its own and no external ones (an MKV) when a language is set. The choice is logged ("subtitles track 2, audio track 3").
 - **The mpv path** comes first in `MpvLocator` (then `MADOYOMI_MPV`, then PATH). Surrounding quotes are taken off (Explorer's "Copy as path" adds them). A path that isn't a file is `PLAYER_NOT_FOUND`, "mpv was not found at … (set in Settings → Player)", with `details.origin` `SETTINGS`. A wrong path can be saved, since the user may fix the file rather than the setting; the check shows it. `mpvCheck(path)` checks a typed path, and without one the mpv the backend would start now: the file is there, and `<it> --version` exits with 0 within 10 s and prints a line starting with "mpv ". Its first line is shown with where the mpv comes from.
 - **The Settings section:** "Playback" became **Player**. It holds auto-play, "Mark as watched at", the preferred quality, the preferred server, subtitles ("The source's first", "Off", a language), audio ("The source's choice", a language) and mpv (a path field with Check). A select saves as it changes; a text field saves when it loses focus or on Enter, trimmed. The value shows at once, and a refused change goes back with the error under the section. Check runs on what is typed without saving it, and after a save the mpv in use is checked again. The `PLAYER_NOT_FOUND` hint now points to Settings → Player.
+
+### Stage 6 (2026-11-12)
+
+Decided in the stage (defaults, not asked):
+- **A stream that never played a frame is an early failure** (Stage 4's retry), even when mpv reported a position. mpv reports `time-pos` (the start position) as soon as the file is open, so an HLS stream whose playlist opens but whose segments all fail had a position, ended with mpv's own `file_error` "no audio or video data played", and was ERROR at once without a refetch (found live, §10). `PlaybackTracker.neverPlayed` is now "no position, or that `file_error`", and `PlaybackSessions` retries on it. A failure after frames played still needs an HTTP status to be retried.
+- **`ExtensionThreadsTest` counts the source pool's threads by name** (`anime-source-<n>`, never reused), not by `poolSize`: idle threads that earlier tests left end after 60 s, so the size could drop while the extension's code still created its three threads (it failed in 3 of Stage 5's 7 builds). The leak check after it is unchanged. Upstream's `CefTest` (a live JBR download that picks up `SocksProxyTest`'s host) is left as it is: it is upstream's, and a rerun passes.
+- **The MKV row of the matrix uses a generated file.** None of the top 20 yuzono extensions serves MKV (their video hosts give HLS, MP4 or DASH; docs/research/anime-compat.md), so a scratch wrapper (`MADOYOMI_MPV`) replaced one AnimeGG video's URL with a 10-minute MKV made with FFmpeg (H.264, AAC Japanese and English, ASS English and Spanish) on a local server. The backend, the include file with AnimeGG's headers, the IPC, the track choice and the progress are the real ones.
+- **Phase 4 is closed** with the `--wid` prototype open (the stretch goal, after the exit) and the proxy fallback deferred (no header mpv can't send was found, MKV and HLS included).
 
 ## 10. Findings log
 
@@ -559,3 +573,78 @@ Decided in the stage (defaults, not asked):
   - a threshold change picked up by the session that plays, live: `PlaybackTrackerTest` covers it; live, the threshold was set before the play;
   - auto-play playing the preference's pick (no remembered choice) live: every source played in `pnpm tauri dev` has a remembered choice once played from the picker; `AnimeDetailsView.spec.ts` covers it;
   - a refused setting in the UI (`BAD_REQUEST`): the selects only offer valid values; `SettingsView.spec.ts` covers the rollback.
+
+### Stage 6 (2026-11-12): exit run
+
+- **Baseline before the stage** (feat/phase-4-settings merged as #31; rerun before any edit to the server or the app):
+  - server: `.\gradlew.bat build` green with 766 tests, 0 failures (core 674 with 9 skipped, AndroidCompat 7, ext-host 8, api 77), on the second run. The first failed upstream's `CefTest` only (`UnknownHostException` through a SOCKS proxy: `SocksProxyTest`'s host on the shared config, as in Stage 5), so api's tests didn't run; `build --continue` passed. Core's skip count is 9 here and 8 in the final build, as in Stage 1;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: 40 files (39 + 1 skipped), 338 passed + 9 skipped; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` clean;
+  - the live spec: 9/9 with 42 documents;
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - server: 768 tests, 0 failures (core 675 with 8 skipped, AndroidCompat 7, ext-host 8, api 78), green on the first build. The 2 new ones: `PlaybackTrackerTest` "a file that never played is told apart from one that failed while playing", and `PlaybackApiTest` "a stream that never played a frame is fetched again once, though mpv reported its start position" (`FakeMpvServer` got `fakempv-nothing`). `ExtensionThreadsTest` (now counting by name) passed;
+  - smoke: 24/24 on the new jar;
+  - the live spec: 9/9 on the new jar, with 42 documents;
+  - app: unchanged, rerun: 40 files, 338 passed + 9 skipped, and lint, typecheck, format:check and build clean;
+  - `cargo test`: 17, with build, clippy and fmt clean (no Rust change).
+- **The format matrix** (step 20), live through the API on the fresh data dir of the first §6 run (`liveplay6.ps1`, scratch), on the new jar for every row (MP4, MKV, AnimeOnsen and the MP4 expiry ran on both jars, with the same results). mpv was the real one behind the scratch wrapper (`MADOYOMI_MPV`), muted and read over its pipe. "Headers" compares the session's include file with what the server at the other end received (the header proxy, or the MKV's local server):
+
+  | Row | What played | Plays | Tracks (`sid`/`aid`, from `track-list`) | Progress | Headers |
+  |---|---|---|---|---|---|
+  | MP4 | AnimeGG, One Piece ep. 10, `[SUBBED] AnimeGG:1080p`, from 60 s, through the proxy | `time-pos` 60 → 63.06, height 1080, duration 1500.17 s | its own AAC (`aid` 1), no subtitles | a seek to halfway, `quit` at 751.502: stored 751501 / 1500170 ms | 2 of 2 verbatim (`user-agent`, `referer`) |
+  | HLS | KickAssAnime, Bungou Stray Dogs 5th Season ep. 1, "VidStreaming - 1080p (1920x1080) - 1.69 Mbps" | height 1080, duration 1420.05 s | 8 external WebVTT subtitles, 2 external AAC (no audio of its own) | a seek to 600 s, `quit` at 604.771: stored 604771 / 1420045 ms | 7 of 7 verbatim on the playlist request (`accept`, `accept-language`, `origin`, `sec-fetch-*`, `user-agent`) |
+  | External subtitles | KickAssAnime (above) | | no language: "English (eng)", the source's first; `es`: "Spanish (spa)"; off: `sid` no | | |
+  | | AnimeOnsen, "DARK MACHINE -The Animation-" ep. 1, "Default (720p)" (DASH) | height 720, duration 1370 s | 9 external **ASS** tracks ("English", "Español", "Русский", …); `en`: "English", codec `ass`, its `sub-text` shown | `quit` at 41.15: stored 41147 / 1370000 ms | |
+  | Multiple audio, external | KickAssAnime (above) | | no language: "Japanese", the source's first; `en`: "English"; `ja`: "Japanese" | | |
+  | MKV with ASS, audio of its own | a generated MKV (600 s; H.264; AAC "Japanese" `jpn` and "English dub" `eng`; ASS "English (ASS)" `eng` and "Espanol (ASS)" `spa`) in place of AnimeGG ep. 11's `[SUBBED] AnimeGG:1080p` | height 360, duration 600.02 s | 4 tracks of its own. No language: `aid` 1 Japanese, `sid` 1 English (ASS) (the file's defaults); `es`/`en`: "Espanol (ASS)" and "English dub"; off/`ja`: `sid` no, "Japanese" | a seek to 300 s, `quit`: stored 303023 / 600023 ms; a seek to 570 s: WATCHED, ENDED (eof, next episode 12), stored 599940 ms | 2 of 2 of AnimeGG's verbatim at the MKV's server |
+  | Expiring MP4, at once | AnimeGG ep. 12, the proxy answering 403 from the start | RETRYING (`loading failed (HTTP 403)`), then the same video from the asked 60 s: first position 60.00, `time-pos` 60.00 | | | |
+  | Expiring MP4, mid-play | the URL expires 10 s after its first request; from 120 s, a seek to 900 s after 11 s | RETRYING "mpv stopped reading the video at 15:00 of 25:00 (HTTP 403)", then the new session at 900.00 | | stored 900000 ms | |
+  | Expiring MP4, twice | refused, and refused again after the refetch | ERROR, `retried`, HTTP 403, `nextVideo` `[SUBBED] AnimeGG:720p` | | | |
+  | Expiring HLS, at once | KickAssAnime ep. 2, its playlist refused | RETRYING (HTTP 403), then the same video at 30.00 s | English and Japanese selected again | | |
+  | Expiring HLS, mid-play | a generated HLS (the MKV's video and first audio, 59 TS segments) through the proxy in place of ep. 2's URL; the token answers 6 requests, then 403 | played to 41.6 s, then RETRYING "mpv stopped reading the video at 0:41 of 9:59 (HTTP 403)", and the new session (a fresh token) started at 41.61. The proxy: 6 answered and 64 refused, then 59 answered | | | |
+
+  No `token=` in the data dirs' `madoyomi.log`, `sidecar.log`, `sidecar.1.log` and `mpv.log`, the proxy's or the MKV server's log, or the `pnpm tauri dev` output. No mpv was left after any run, and mpv wrote nothing into `player/`.
+- **Found in the matrix and fixed: a stream that never played a frame wasn't fetched again.** KickAssAnime's HLS through the header proxy opened its playlist, but no segment ever played (below). mpv reported `time-pos` 0 (its start position) once the file was open, then ended it with `file_error` "no audio or video data played" and exit code 2, with no HTTP status in its log. Stage 4's "early" meant "no position reported", so this was ERROR at once, with the next video. Now it is RETRYING, and the same run played the refetched video directly (STARTED → RETRYING → CLOSED → STARTED → PROGRESS). §9.
+- **KickAssAnime's segments can't go through the proxy.** Its playlist host answers the proxy, but the segment hosts (`st1.*.xyz`, behind Cloudflare, segments named `.jpg`) refuse Node's client and curl with a 403 challenge page, while mpv's own requests pass. So its HLS only goes through the proxy for the header measurement (the playlist), and the mid-play HLS expiry used a generated stream.
+- **The header proxy, for this stage** (`spikes/mpv-play/header-proxy.mjs`, tracked): in the expiring mode it rewrites an HLS playlist (found by its type, its name, or a small body starting with `#EXTM3U`) so that every URI goes through the same token, absolute, with the upstream file name kept in the path, and it doesn't pass on an `image/*` type (segments served as `.jpg`). `PROXY_DEBUG=1` logs each request and playlist.
+- **The §6 criteria from a fresh data dir**, live in `pnpm tauri dev`, through the UI (clicks, keys and pasted text with computer use; mpv muted and seeked over its pipe by a script; its window closed with its own close button). The webview's device preferences carried over (auto-play on, `[DUBBED] AnimeGG:360p` and "VidStreaming - 720p" remembered, KickAssAnime pinned), as decided in Phase 3. First run, `fresh-data`, before the fix:
+
+  | Step | Result |
+  |---|---|
+  | first start | healthy after 9.4 s; the Library empty; Extensions: "No anime repo yet. Madoyomi ships with none" |
+  | Settings → Player | the defaults: auto-play on, "Mark as watched at" 85 %, the source's choice, any server, the source's first subtitles, the source's audio, "mpv v0.41.0-244-gaf9c81fa1 … (from PATH)"; no `player-settings.json` yet |
+  | yuzono's `index.min.json` | "an anime repo (type detected), with 250 extensions", stored as `…/raw/repo/index.pb`, "Signing key trusted" |
+  | AnimeGG 14.3, KickAssAnime 14.64, AnimeOnsen 14.11 | each installed, with DOWNLOADING → VERIFYING → CONVERTING → INSTALLED under Live events |
+  | the trust prompt | removing yuzono (its confirmation) left the three "Untrusted"; Trust… on AnimeGG showed the package, 14.3, "No added repo lists it any more" with the stored URL, the hash `cbec121a…5905` and the warning; "Trust and load it" loaded all three (one certificate). yuzono was added again |
+  | One Piece (AnimeGG), Add to library, Play on ep. 1 | the picker: 5 videos, Source's pick `[SUBBED] AnimeGG:1080p`, Last used `[DUBBED] AnimeGG:360p` preselected, no resume footer; Play: mpv "One Piece - Episode 1 - …", height 360 |
+  | a seek to 740 s, then mpv's window closed (its ×) | mpv exit code 0; the row "12:02 left" |
+  | the app closed, the stored values read, the app started again | backend exit 0, no mpv left; stored 752966 / 1475001 ms; the picker: "You stopped at 12:32", **Resume from 12:32** |
+  | Resume | mpv's first `time-pos` **752.966**: 0.00 s off |
+  | a seek to 1290 s (87 %) | "episode 1 marked watched at 1290.0 s"; the **Watched** badge on the row while it said "Playing" |
+  | a seek to 1467 s | ENDED (eof, next episode 2) at 10:58:28.3; "Next: Episode 2 - The Great Swordsman Appears! …", "Plays in 6 s"; episode 2 at 10:58:39.1 with `[DUBBED] AnimeGG:360p`, no picker |
+  | "Mark as watched at" → 70 % while episode 2 played | `player-settings.json` had `0.7` at once; a seek to 1062 s (72 %): "marked watched at 1062.0 s" and the badge in the same session (Stage 5's "a threshold change picked up mid-session", now seen live) |
+  | `quit` at 1077 s (past 70 %) | "Next: Episode 3 …"; Cancel: nothing played |
+  | Bungou Stray Dogs 5th Season (KickAssAnime), Add to library | 11 episodes (for the matrix) |
+
+  Second run, `fresh-data2`, after the fix round, on the new jar:
+
+  | Step | Result |
+  |---|---|
+  | first start, Settings → Player | healthy after 9.0 s; the same defaults |
+  | yuzono added, AnimeGG and KickAssAnime installed | as above; trusted by the repo's key, so no prompt |
+  | One Piece, Play on ep. 1, **Enter** | the preselected `[DUBBED] AnimeGG:360p` played (Stage 3's "Enter on the preselected button", now seen live) |
+  | a seek to 700 s, mpv's window closed; the app closed and started again | stored 716500 ms; "Resume from 11:56"; mpv's first `time-pos` **716.500**: 0.00 s off |
+  | a seek to 1290 s | the Watched badge while playing |
+  | a seek to 1467 s | ENDED at 11:51:35.0; the toast; episode 2 at 11:51:49.3 (the countdown and a 4 s fetch), no picker |
+  | KickAssAnime BSD5 Ep. 1, Play | the picker: three videos, each "8 subtitles · 2 audio tracks", 1080p the Source's pick, 720p Last used; Play: height 720, 11 tracks, "subtitles track 1, audio track 1" (English, Japanese) |
+
+  Each time the window closed, the shell logged "backend stopped (exit code 0)" and no mpv was left.
+- **The tooling for this session.** The agent's shell was the Linux VM again, so builds, tests, the API checks and `pnpm tauri dev` ran through the job runner (`tools/dev-data/agent/`, gitignored): `liveplay6.ps1` (the matrix), `app-start6.ps1` (a data dir by name), `front.ps1` (brings the window forward: computer use can't click while the desktop is in front, and its "open application" would start a second app), `ipcdo.ps1`, `firstpos.ps1`, `stored6.ps1`, `media-serve.mjs` (the generated files, with ranges, logging each file's request headers), and `mpvwrap` with a new `url=<url>` plan line. The MKV and HLS were made with FFmpeg in the VM into `tools/dev-data/agent/media/`. Two script pitfalls: the backend's WebSocket closes after about 30 s without a message ("Connection Idle Timeout"; the app pings every 20 s), so the script pings too; and `Write-Output` inside a function whose output is discarded hides the message.
+- **Not checked, or not coverable:**
+  - an MKV from a real source: none of the top 20 serves one (above), so the row uses a generated file; a real one would differ only in its URL and headers;
+  - a mid-play expiry of KickAssAnime's own HLS: its segment hosts refuse the proxy (above); the generated HLS covered the backend's side;
+  - the trust prompt on an install itself: every yuzono extension is signed with the repo's key, which adding the repo trusts, so an install from it never prompts; the prompt was shown by removing the repo, as in Phase 3's exit run. `TrustDialog.spec.ts` and `ExtensionsView.spec.ts` cover the prompt after an install;
+  - a preferred server reordering hosters live: AnimeGG, KickAssAnime and AnimeOnsen each give a single `no_hoster_list` hoster (`VideoPreferencesTest`, `PlayerSettingsApiTest`);
+  - auto-play switched off, "Retrying…" on screen, and Cancel while a `playEpisode` is in flight: as in Stage 4, covered by `AnimeDetailsView.spec.ts`;
+  - the embedded `--wid` prototype: the stretch goal, not part of the exit.
