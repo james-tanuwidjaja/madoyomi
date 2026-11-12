@@ -78,7 +78,7 @@ const EPISODE_FIELDS = /* GraphQL */ `
   }
 `;
 
-const CHAPTER_FIELDS = /* GraphQL */ `
+export const CHAPTER_FIELDS = /* GraphQL */ `
   fragment ChapterFields on ChapterType {
     id
     mangaId

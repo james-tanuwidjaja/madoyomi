@@ -15,6 +15,15 @@ import {
   usePlayerSettings,
   useSetPlayerSettings,
 } from "../composables/usePlayerSettings";
+import {
+  PAGE_CACHE_LIMITS_MB,
+  formatBytes,
+  formatLimit,
+  useClearPageCache,
+  usePageCache,
+  useReaderSettings,
+  useSetReaderSettings,
+} from "../composables/useReaderSettings";
 import { useSources } from "../composables/useSources";
 import { useBackendStore } from "../stores/backend";
 import { useMediaKindStore } from "../stores/mediaKind";
@@ -33,6 +42,9 @@ import PageLayout from "../components/PageLayout.vue";
  * watched threshold also by the episode playing): when an episode counts as watched, the preferred quality and server
  * (the order of the picker's videos and what is preselected), the subtitle and audio language, and which mpv to run.
  * Auto-play the next episode (Stage 4) is in the same section but stays on this device.
+ *
+ * Reader (Phase 5 Stage 1): the chapter-page cache's cap (the backend's setting; a lower one trims the cache before
+ * the backend answers), what the cache holds now, and Clear.
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -135,6 +147,29 @@ watch(
   },
   { immediate: true },
 );
+
+const readerSettings = useReaderSettings();
+const setReader = useSetReaderSettings();
+const pageCache = usePageCache();
+const clearCache = useClearPageCache();
+const reader = computed(() => readerSettings.data.value ?? null);
+/** The offered caps, with the current one if a hand-edited file has another. */
+const cacheLimits = computed(() => {
+  const current = reader.value?.pageCacheLimitMb;
+  const limits: number[] = [...PAGE_CACHE_LIMITS_MB];
+  if (current !== undefined && !limits.includes(current)) limits.push(current);
+  return limits.sort((a, b) => a - b);
+});
+const cacheUsage = computed(() => {
+  const c = pageCache.data.value;
+  if (!c) return null;
+  const pages = `${c.files.toLocaleString()} ${c.files === 1 ? "page" : "pages"}`;
+  return `${formatBytes(c.bytes)} in ${pages}`;
+});
+
+function saveCacheLimit(e: Event) {
+  setReader.mutate({ pageCacheLimitMb: Number(selectValue(e)) });
+}
 
 const THEME_LABELS: Record<ThemeChoice, string> = {
   system: "System",
@@ -395,6 +430,85 @@ const unknown = computed(
         title="Couldn't save the player setting"
         :error="setPlayer.error.value"
         data-testid="player-save-error"
+      />
+    </section>
+
+    <section class="group" aria-labelledby="settings-reader">
+      <h2 id="settings-reader">Reader</h2>
+      <div class="card" data-testid="reader-settings">
+        <template v-if="reader">
+          <div class="row">
+            <label class="text" for="settings-cache-limit">
+              <span>Page cache</span>
+              <span class="summary">
+                Chapter pages stay on disk, so a chapter opens at once the next time. Past this
+                size, the pages read longest ago go first. Downloads and covers don't count.
+              </span>
+            </label>
+            <select
+              id="settings-cache-limit"
+              class="field"
+              data-testid="cache-limit-select"
+              :value="reader.pageCacheLimitMb"
+              @change="saveCacheLimit"
+            >
+              <option v-for="mb in cacheLimits" :key="mb" :value="mb">
+                {{ formatLimit(mb) }}
+              </option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="text">
+              <span>Cached pages</span>
+              <span class="summary" data-testid="cache-usage">
+                {{ cacheUsage ?? (pageCache.isError.value ? "Not known" : "Counting…") }}
+              </span>
+            </div>
+            <div class="path-actions">
+              <code v-if="pageCache.data.value" class="path" data-testid="cache-path">
+                {{ pageCache.data.value.path }}
+              </code>
+              <button
+                type="button"
+                class="btn"
+                data-action="clear-cache"
+                :disabled="clearCache.isPending.value || !pageCache.data.value?.files"
+                @click="clearCache.mutate()"
+              >
+                {{ clearCache.isPending.value ? "Clearing…" : "Clear" }}
+              </button>
+            </div>
+          </div>
+        </template>
+        <div v-else-if="readerSettings.isError.value" class="row">
+          <ErrorNotice
+            title="Couldn't read the reader settings"
+            :error="readerSettings.error.value"
+            @retry="readerSettings.refetch()"
+          />
+        </div>
+        <p v-else class="row muted" data-testid="reader-settings-pending">
+          {{ backend.ready ? "Loading the reader settings…" : "Waiting for the backend…" }}
+        </p>
+      </div>
+      <ErrorNotice
+        v-if="setReader.error.value"
+        title="Couldn't save the reader setting"
+        :error="setReader.error.value"
+        data-testid="reader-save-error"
+      />
+      <ErrorNotice
+        v-if="pageCache.isError.value"
+        title="Couldn't read the page cache"
+        :error="pageCache.error.value"
+        data-testid="cache-error"
+        @retry="pageCache.refetch()"
+      />
+      <ErrorNotice
+        v-if="clearCache.error.value"
+        title="Couldn't clear the page cache"
+        :error="clearCache.error.value"
+        data-testid="cache-clear-error"
       />
     </section>
 

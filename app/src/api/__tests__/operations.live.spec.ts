@@ -457,6 +457,103 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     if (kindsTried === 0) ctx.skip();
   }, 120_000);
 
+  // The reader's image pipeline (Phase 5 Stage 1): a manga chapter's page routes, the first page through the backend
+  // (the source's headers, then the cache), a prefetch of the next pages, and a page past the end as NOT_FOUND.
+  // MangaPill when installed, else the first usable manga source with a Popular entry and chapters.
+  it("reads a chapter's pages through the backend, prefetches the next ones and serves them from the cache", async (ctx) => {
+    const list = (
+      await client.gql<{ sources: { nodes: SourceBase[] } }>(operations.MANGA_SOURCES_QUERY)
+    ).sources.nodes;
+    const usable = list
+      .filter((s) => s.id !== "0" && s.extension.isTrusted && s.extension.isLoaded)
+      .sort((a, b) => Number(b.name === "MangaPill") - Number(a.name === "MangaPill"));
+    if (usable.length === 0) return ctx.skip();
+    const report: string[] = [];
+
+    let chapter: { id: number; name: string; sourceOrder: number } | undefined;
+    let sourceName = "";
+    for (const s of usable.slice(0, 5)) {
+      const input = { source: s.id, type: "POPULAR", page: 1, query: null, filters: null };
+      const mangas = (
+        await client.gql<{ fetchSourceManga: { mangas: { id: number }[] } }>(
+          operations.BROWSE_MANGA_MUTATION,
+          { input },
+        )
+      ).fetchSourceManga.mangas;
+      if (mangas.length === 0) continue;
+      const chapters = (
+        await client.gql<{
+          fetchChapters: { chapters: { id: number; name: string; sourceOrder: number }[] };
+        }>(operations.FETCH_CHAPTERS_MUTATION, { mangaId: mangas[0].id })
+      ).fetchChapters.chapters;
+      if (chapters.length === 0) continue;
+      chapter = [...chapters].sort((a, b) => a.sourceOrder - b.sourceOrder)[0];
+      sourceName = s.name;
+      break;
+    }
+    expect(chapter, "a chapter of a usable manga source").toBeTruthy();
+
+    const direct = await client.gql<{
+      fetchChapterPages: { pages: string[]; chapter: { pageCount: number } };
+    }>(operations.FETCH_CHAPTER_PAGES_MUTATION, { chapterId: chapter!.id });
+    const routes = direct.fetchChapterPages.pages;
+    expect(routes.length).toBeGreaterThan(1);
+    expect(direct.fetchChapterPages.chapter.pageCount).toBe(routes.length);
+
+    const image = async (route: string) => {
+      const t = performance.now();
+      const r = await fetch(client.assetUrl(route)!);
+      const bytes = (await r.arrayBuffer()).byteLength;
+      return { r, bytes, ms: Math.round(performance.now() - t) };
+    };
+    const first = await image(routes[0]);
+    expect(first.r.status).toBe(200);
+    expect(first.r.headers.get("content-type")).toMatch(/^image\//);
+    expect(first.r.headers.get("cache-control")).toBe("max-age=86400");
+    const again = await image(routes[0]);
+    expect(again.bytes).toBe(first.bytes);
+    report.push(
+      `${sourceName} '${chapter!.name}': ${routes.length} pages; page 1 ${first.bytes} bytes in ${first.ms} ms, cached in ${again.ms} ms`,
+    );
+
+    const count = Math.min(3, routes.length - 1);
+    const p = await client.gql<{
+      prefetchChapterPages: { queued: number[]; cached: number[]; pageCount: number };
+    }>(operations.PREFETCH_CHAPTER_PAGES_MUTATION, { chapterId: chapter!.id, from: 1, count });
+    expect(
+      [...p.prefetchChapterPages.queued, ...p.prefetchChapterPages.cached].sort((a, b) => a - b),
+    ).toEqual(Array.from({ length: count }, (_, i) => i + 1));
+    // the prefetch runs in the background: asked again, every page is cached once it is done
+    await expect
+      .poll(
+        async () =>
+          (
+            await client.gql<{ prefetchChapterPages: { cached: number[] } }>(
+              operations.PREFETCH_CHAPTER_PAGES_MUTATION,
+              { chapterId: chapter!.id, from: 1, count },
+            )
+          ).prefetchChapterPages.cached.length,
+        { timeout: 60_000, interval: 1_000 },
+      )
+      .toBe(count);
+    const prefetched = await image(routes[1]);
+    expect(prefetched.r.status).toBe(200);
+    report.push(`prefetched pages 2-${count + 1}; page 2 then in ${prefetched.ms} ms`);
+
+    const cache = (
+      await client.gql<{ pageCache: { files: number; bytes: string } }>(operations.PAGE_CACHE_QUERY)
+    ).pageCache;
+    expect(cache.files).toBeGreaterThanOrEqual(count + 1);
+
+    const past = await fetch(client.assetUrl(routes[0].replace(/\/page\/\d+$/, "/page/9999"))!);
+    expect(past.status).toBe(404);
+    expect(((await past.json()) as { code: string }).code).toBe("NOT_FOUND");
+    report.push(
+      `cache: ${cache.files} pages, ${cache.bytes} bytes; a page past the end: 404 NOT_FOUND`,
+    );
+    console.info(report.join("\n"));
+  }, 180_000);
+
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];
     let onConnected!: () => void;
