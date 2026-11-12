@@ -494,7 +494,10 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     expect(chapter, "a chapter of a usable manga source").toBeTruthy();
 
     const direct = await client.gql<{
-      fetchChapterPages: { pages: string[]; chapter: { pageCount: number } };
+      fetchChapterPages: {
+        pages: string[];
+        chapter: { pageCount: number; lastPageRead: number; isRead: boolean };
+      };
     }>(operations.FETCH_CHAPTER_PAGES_MUTATION, { chapterId: chapter!.id });
     const routes = direct.fetchChapterPages.pages;
     expect(routes.length).toBeGreaterThan(1);
@@ -512,6 +515,8 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     expect(first.r.headers.get("cache-control")).toBe("max-age=86400");
     const again = await image(routes[0]);
     expect(again.bytes).toBe(first.bytes);
+    // the reader's way (Phase 5 Stage 2): the token in the Authorization header, not in the URL
+    expect((await client.fetchAsset(routes[0])).size).toBe(first.bytes);
     report.push(
       `${sourceName} '${chapter!.name}': ${routes.length} pages; page 1 ${first.bytes} bytes in ${first.ms} ms, cached in ${again.ms} ms`,
     );
@@ -551,6 +556,47 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     report.push(
       `cache: ${cache.files} pages, ${cache.bytes} bytes; a page past the end: 404 NOT_FOUND`,
     );
+
+    // Reading progress (Phase 5 Stage 2): upstream's updateChapter(s), clamped to the page count, then put back.
+    const before = direct.fetchChapterPages.chapter;
+    type Saved = { id: number; lastPageRead: number; isRead: boolean };
+    try {
+      const saved = (
+        await client.gql<{ updateChapter: { chapter: Saved } }>(
+          operations.UPDATE_CHAPTER_MUTATION,
+          {
+            id: chapter!.id,
+            patch: { lastPageRead: 2 },
+          },
+        )
+      ).updateChapter.chapter;
+      expect(saved.lastPageRead).toBe(2);
+      const clamped = (
+        await client.gql<{ updateChapter: { chapter: Saved } }>(
+          operations.UPDATE_CHAPTER_MUTATION,
+          {
+            id: chapter!.id,
+            patch: { lastPageRead: 99_999 },
+          },
+        )
+      ).updateChapter.chapter;
+      expect(clamped.lastPageRead).toBe(routes.length);
+      const marked = (
+        await client.gql<{ updateChapters: { chapters: Saved[] } }>(
+          operations.UPDATE_CHAPTERS_MUTATION,
+          { ids: [chapter!.id], patch: { isRead: true } },
+        )
+      ).updateChapters.chapters;
+      expect(marked.map((c) => [c.id, c.isRead])).toEqual([[chapter!.id, true]]);
+      report.push(
+        `progress: page 3 saved, 99999 clamped to ${clamped.lastPageRead}, marked read; restored`,
+      );
+    } finally {
+      await client.gql(operations.UPDATE_CHAPTERS_MUTATION, {
+        ids: [chapter!.id],
+        patch: { isRead: before.isRead, lastPageRead: before.lastPageRead },
+      });
+    }
     console.info(report.join("\n"));
   }, 180_000);
 

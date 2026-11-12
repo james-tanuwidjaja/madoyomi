@@ -398,6 +398,17 @@ export interface EpisodePatch {
   lastSecondSeen?: LongString;
 }
 
+/**
+ * `UpdateChapterPatch` (upstream's `updateChapter(s)`, Phase 5 Stage 2): what to change; a field left out stays.
+ * Upstream stamps `lastReadAt` whenever `lastPageRead` is given.
+ */
+export interface ChapterPatch {
+  isRead?: boolean;
+  isBookmarked?: boolean;
+  /** The page index (0-based), clamped by the backend to [0, the chapter's page count]. */
+  lastPageRead?: number;
+}
+
 /** `MangaType`. */
 export interface Manga extends EntryBase {
   artist: string | null;
@@ -420,6 +431,8 @@ export interface Chapter {
   isRead: boolean;
   isBookmarked: boolean;
   lastPageRead: number;
+  /** When `lastPageRead` was last saved, epoch seconds ("0": never). Phase 5: "Continue reading" follows it. */
+  lastReadAt: LongString;
   pageCount: number;
 }
 

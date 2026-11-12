@@ -186,6 +186,7 @@ export function makeChapters(n: number, mangaId = 34): Chapter[] {
       isRead: false,
       isBookmarked: false,
       lastPageRead: 0,
+      lastReadAt: "0",
       pageCount: 0,
     };
   });

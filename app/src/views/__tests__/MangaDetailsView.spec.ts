@@ -145,6 +145,32 @@ describe("MangaDetailsView", () => {
     expect(names()).toEqual(["Chapter 2"]);
   });
 
+  it("starts reading at the first chapter, and continues at the first unread one (Phase 5)", async () => {
+    await mountDetails();
+    const resume = () => wrapper.find('[data-action="resume"]');
+    expect(resume().text()).toBe("Start reading");
+    expect(resume().attributes("href")).toBe("/manga/34/read/5001");
+    wrapper.unmount();
+
+    chapters = makeChapters(3).map((c) =>
+      c.sourceOrder === 1
+        ? { ...c, isRead: true }
+        : c.sourceOrder === 2
+          ? { ...c, lastPageRead: 6 }
+          : c,
+    );
+    queryClient.clear();
+    await mountDetails();
+    expect(resume().text()).toBe("Continue: Chapter 2");
+    expect(resume().attributes("href")).toBe("/manga/34/read/5002");
+    wrapper.unmount();
+
+    chapters = makeChapters(2).map((c) => ({ ...c, isRead: true }));
+    queryClient.clear();
+    await mountDetails();
+    expect(resume().exists()).toBe(false);
+  });
+
   it("says when the source isn't installed, and still shows what is stored", async () => {
     ops.fetchSources.mockResolvedValue([]);
     stored = makeManga({ initialized: false });

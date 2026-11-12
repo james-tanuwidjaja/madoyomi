@@ -4,6 +4,7 @@ import type {
   AnimeRefresh,
   AnimeSeason,
   Chapter,
+  ChapterPatch,
   Episode,
   EpisodePatch,
   LibraryEntry,
@@ -16,7 +17,8 @@ import type {
  * Stored entries and their children: Madoyomi's `anime`/`episodes` and upstream's `manga`/`chapters` (database reads),
  * the refreshes from the source (`fetchAnimeAndEpisodes`; upstream's `fetchManga` + `fetchChapters`), the library flag
  * (`updateAnime`, upstream's `updateManga`), the library lists, and the episodes' watched marks (`updateEpisodes`, upstream's
- * `updateChapters`; Phase 4 Stage 3).
+ * `updateChapters`; Phase 4 Stage 3), and the chapters' read marks and reading progress (upstream's `updateChapter(s)`; Phase 5
+ * Stage 2).
  */
 
 const ANIME_FIELDS = /* GraphQL */ `
@@ -91,6 +93,7 @@ export const CHAPTER_FIELDS = /* GraphQL */ `
     isRead
     isBookmarked
     lastPageRead
+    lastReadAt
     pageCount
   }
 `;
@@ -233,6 +236,28 @@ export const UPDATE_EPISODES_MUTATION = /* GraphQL */ `
   ${EPISODE_FIELDS}
 `;
 
+export const UPDATE_CHAPTER_MUTATION = /* GraphQL */ `
+  mutation UpdateChapter($id: Int!, $patch: UpdateChapterPatchInput!) {
+    updateChapter(input: { id: $id, patch: $patch }) {
+      chapter {
+        ...ChapterFields
+      }
+    }
+  }
+  ${CHAPTER_FIELDS}
+`;
+
+export const UPDATE_CHAPTERS_MUTATION = /* GraphQL */ `
+  mutation UpdateChapters($ids: [Int!]!, $patch: UpdateChapterPatchInput!) {
+    updateChapters(input: { ids: $ids, patch: $patch }) {
+      chapters {
+        ...ChapterFields
+      }
+    }
+  }
+  ${CHAPTER_FIELDS}
+`;
+
 const LIBRARY_FIELDS = `
   id
   title
@@ -361,6 +386,26 @@ export async function updateEpisodes(ids: number[], patch: EpisodePatch): Promis
       patch,
     })
   ).updateEpisodes.episodes;
+}
+
+/** One chapter's read mark or reading progress (the reader's saves); returns the chapter as stored. */
+export async function updateChapter(id: number, patch: ChapterPatch): Promise<Chapter> {
+  return (
+    await api.gql<{ updateChapter: { chapter: Chapter } }>(UPDATE_CHAPTER_MUTATION, { id, patch })
+  ).updateChapter.chapter;
+}
+
+/**
+ * Several chapters' read marks (the list's bulk marks). Upstream returns them in the database's order, not the
+ * given one.
+ */
+export async function updateChapters(ids: number[], patch: ChapterPatch): Promise<Chapter[]> {
+  return (
+    await api.gql<{ updateChapters: { chapters: Chapter[] } }>(UPDATE_CHAPTERS_MUTATION, {
+      ids,
+      patch,
+    })
+  ).updateChapters.chapters;
 }
 
 type LibraryNode = Omit<LibraryEntry, "kind" | "inLibraryAt"> & { inLibraryAt: string };

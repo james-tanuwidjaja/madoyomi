@@ -25,10 +25,15 @@ declare module "vue-router" {
     kind?: MediaKind;
     /** Where to go when the switch changes to another kind: the route only makes sense for one kind. */
     kindScopedTo?: string;
+    /** Shown without the app shell (the reader takes the whole window). */
+    bare?: boolean;
   }
 }
 
-/** Phase 3 step 10's routes, plus `/downloads` (the sidebar's placeholder) and a not-found page. */
+/**
+ * Phase 3 step 10's routes, plus `/downloads` (the sidebar's placeholder), a not-found page and, since Phase 5, the
+ * reader (`/manga/:id/read/:chapterId?page=N`, without the shell).
+ */
 export const routes: RouteRecordRaw[] = [
   { path: "/", redirect: "/library" },
   {
@@ -75,6 +80,13 @@ export const routes: RouteRecordRaw[] = [
       kind: "manga",
       kindScopedTo: "/library",
     },
+  },
+  {
+    path: "/manga/:id(\\d+)/read/:chapterId(\\d+)",
+    name: "reader",
+    component: () => import("../views/ReaderView.vue"),
+    props: (route) => ({ id: Number(route.params.id), chapterId: Number(route.params.chapterId) }),
+    meta: { title: "Reader", kind: "manga", bare: true },
   },
   {
     path: "/extensions",

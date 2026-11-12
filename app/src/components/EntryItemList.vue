@@ -4,6 +4,7 @@ import type { MediaKind } from "../api/types";
 import { useItemListStore } from "../stores/itemList";
 import {
   activeFilterCount,
+  chapterProgress,
   filterItems,
   scanlators,
   sortItems,
@@ -20,12 +21,15 @@ import VirtualList from "./VirtualList.vue";
  * the number or the upload date, either way) and filters (watched/read, bookmarked, scanlator), over a VirtualList,
  * so a list of 1000+ rows keeps only what is in view in the DOM. The sort is kept per kind, the filters per entry
  * for the session (stores/itemList.ts). A row's actions come from the `actions` slot (EpisodeList: Play), and a
- * notice above the rows (an action's error) from the `notice` slot. Reading chapters comes in Phase 5.
+ * notice above the rows (an action's error) from the `notice` slot.
  *
  * With `selectable` (EpisodeList, Phase 4 Stage 3) each row has a checkbox: Shift+click selects a range of the rows
  * as shown, and a bar above the rows shows the count, the `bulk-actions` slot (with the selected ids), "Select all
  * shown" and Clear. The selection (`v-model:selected`, ids) is cleared when the entry changes. A row with
  * `progress` shows how far it was watched (a bar and "mm:ss left"), and `playing` marks the one mpv plays.
+ *
+ * Phase 5 Stage 2: a chapter row with `pages` shows how far it was read ("Page 13 of 92" and a bar). With `openable`
+ * (ChapterList), a click on a row (not on its checkbox or buttons) emits `open` with its id: it opens the reader.
  */
 const props = defineProps<{
   kind: MediaKind;
@@ -39,7 +43,17 @@ const props = defineProps<{
   note: string;
   /** Rows can be selected (a checkbox each) for the `bulk-actions` slot. */
   selectable?: boolean;
+  /** A click on a row emits `open` (ChapterList: read it). */
+  openable?: boolean;
 }>();
+const emit = defineEmits<{ open: [id: number] }>();
+
+function onRowClick(event: MouseEvent, id: number) {
+  if (!props.openable) return;
+  const target = event.target as Element | null;
+  if (target?.closest("button, input, a, select, label")) return;
+  emit("open", id);
+}
 const selected = defineModel<number[]>("selected", { default: () => [] });
 
 defineSlots<{
@@ -157,8 +171,19 @@ const PLAYING_LABELS: Record<NonNullable<ListItem["playing"]>, string> = {
   retrying: "Retrying…",
 };
 
-/** A row's progress to show: it has a position, and it isn't watched (unless it is playing again). */
+/**
+ * A row's progress to show: an episode with a position that isn't watched (unless it is playing again), or a chapter
+ * read partway.
+ */
 function progressOf(item: ListItem) {
+  const pages = chapterProgress(item);
+  if (pages) {
+    return {
+      text: pages.text,
+      percent: pages.share === null ? 0 : Math.round(pages.share * 1000) / 10,
+      known: pages.share !== null,
+    };
+  }
   const p = item.progress;
   if (!p || p.positionMs <= 0 || (item.done && !item.playing)) return null;
   return {
@@ -266,9 +291,10 @@ const countLine = computed(() => {
       <template #default="{ item }">
         <div
           class="row"
-          :class="{ done: item.done, selected: selectedSet.has(item.id) }"
+          :class="{ done: item.done, selected: selectedSet.has(item.id), openable }"
           data-testid="item-row"
           :data-id="item.id"
+          @click="onRowClick($event, item.id)"
         >
           <input
             v-if="selectable"
@@ -295,7 +321,7 @@ const countLine = computed(() => {
               v-if="progressOf(item)?.known"
               class="bar"
               role="progressbar"
-              aria-label="Watched"
+              aria-label="Progress"
               aria-valuemin="0"
               aria-valuemax="100"
               :aria-valuenow="progressOf(item)!.percent"
@@ -378,6 +404,14 @@ const countLine = computed(() => {
 
 .row.selected {
   border-color: var(--color-accent);
+}
+
+.row.openable {
+  cursor: pointer;
+}
+
+.row.openable:hover {
+  background-image: linear-gradient(var(--color-surface-hover), var(--color-surface-hover));
 }
 
 .select {

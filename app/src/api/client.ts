@@ -72,6 +72,12 @@ export interface ApiClient {
    * absolute URL (a source's own image) is returned unchanged and never gets the token. Null while not ready.
    */
   assetUrl(path: string | null | undefined): string | null;
+  /**
+   * Fetches a server-relative binary route (a manga page, Phase 5) with the token in the `Authorization` header, so
+   * it never appears in a URL. A JSON error body (`SOURCE_FAILED` with `details.httpCode`, `NOT_FOUND`) becomes an
+   * {@link ApiError}. `reload` skips the webview's HTTP cache (a retry after a failure).
+   */
+  fetchAsset(path: string, options?: RequestOptions & { reload?: boolean }): Promise<Blob>;
   /** `ws://…/api/graphql?token=…` for subscriptions, null while not ready. */
   subscriptionUrl(): string | null;
 }
@@ -196,13 +202,65 @@ export function createApiClient(getInfo: () => BackendInfo | null): ApiClient {
     return `${info.baseUrl}${rel}${sep}token=${encodeURIComponent(info.token)}`;
   }
 
+  async function fetchAsset(
+    path: string,
+    options?: RequestOptions & { reload?: boolean },
+  ): Promise<Blob> {
+    const info = getInfo();
+    if (!info) {
+      throw new ApiError({
+        kind: "unavailable",
+        code: "BACKEND_UNAVAILABLE",
+        message: "The backend isn't ready",
+      });
+    }
+    const rel = path.startsWith("/") ? path : `/${path}`;
+    let res: Response;
+    try {
+      res = await fetch(`${info.baseUrl}${rel}`, {
+        headers: { Authorization: `Bearer ${info.token}` },
+        signal: options?.signal,
+        cache: options?.reload ? "reload" : "default",
+      });
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") throw e;
+      throw new ApiError({
+        kind: "network",
+        code: "NETWORK",
+        message: `The backend didn't answer: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+    if (res.ok) return res.blob();
+    let body: unknown = null;
+    try {
+      body = JSON.parse(await res.text());
+    } catch {
+      body = null;
+    }
+    if (isRestErrorBody(body)) {
+      throw new ApiError({
+        kind: "http",
+        code: body.code,
+        message: body.message,
+        details: body.details,
+        status: res.status,
+      });
+    }
+    throw new ApiError({
+      kind: "http",
+      code: "BAD_RESPONSE",
+      message: `Unexpected response from the backend (HTTP ${res.status})`,
+      status: res.status,
+    });
+  }
+
   function subscriptionUrl(): string | null {
     const info = getInfo();
     if (!info) return null;
     return `${info.baseUrl.replace(/^http/, "ws")}/api/graphql?token=${encodeURIComponent(info.token)}`;
   }
 
-  return { gql, gqlResult, assetUrl, subscriptionUrl };
+  return { gql, gqlResult, assetUrl, fetchAsset, subscriptionUrl };
 }
 
 /** The app's client: base URL and token from {@link useBackendStore}, only while it is ready. */

@@ -449,6 +449,8 @@ GraphQL (`madoyomi.api.graphql.ReaderGraphQL`): `readerSettings` → `ReaderSett
 
 Tests: `core/src/test/kotlin/madoyomi/core/reader/{PageCacheTest,ReaderSettingsTest}.kt` (19), `api/src/test/kotlin/madoyomi/api/PageImagesApiTest.kt` (7: upstream's route on a bare Javalin against a loopback image host, with a fake `HttpSource`).
 
+**Stage 2 changed nothing in `server/`.** The reader uses upstream as it is: the page route with the token in the `Authorization` header (the token filter takes it on every route; only `<img>`-style requests need `?token=`), `fetchChapterPages` on every open, and `updateChapter(s)` for the progress and the read marks (`lastPageRead` clamped to the page count, `lastReadAt` stamped with it, and the deprecated top-level `isRead`/`lastPageRead`/`lastReadAt` fields of `ChapterType` read, as the app already did). Upstream's chapter recognition reads MangaPill's "Group 2 Chapter 385" as chapter 2; the app doesn't trust the numbers for order (phase-5 §10).
+
 ### New Madoyomi code
 
 | Path | What |

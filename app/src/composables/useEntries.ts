@@ -11,9 +11,19 @@ import {
   refreshAnime,
   refreshManga,
   setInLibrary,
+  updateChapter,
+  updateChapters,
   updateEpisodes,
 } from "../api/operations";
-import type { Anime, Episode, EpisodePatch, MediaKind, SourcePage } from "../api/types";
+import type {
+  Anime,
+  Chapter,
+  ChapterPatch,
+  Episode,
+  EpisodePatch,
+  MediaKind,
+  SourcePage,
+} from "../api/types";
 import { queryKeys, type BrowseKey } from "./queryKeys";
 
 /*
@@ -217,5 +227,44 @@ export function useUpdateEpisodes(animeId: MaybeRefOrGetter<number>) {
         (list) => list && list.map((e) => byId.get(e.id) ?? e),
       );
     },
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Read marks and reading progress (Phase 5 Stage 2)
+
+/** The chapters as stored replace their rows in the manga's cached chapter list (no refetch). */
+export function writeChapters(
+  queryClient: ReturnType<typeof useQueryClient>,
+  mangaId: number,
+  updated: readonly Chapter[],
+) {
+  const byId = new Map(updated.map((c) => [c.id, c]));
+  queryClient.setQueryData<Chapter[]>(
+    queryKeys.chapters(mangaId),
+    (list) => list && list.map((c) => byId.get(c.id) ?? c),
+  );
+}
+
+export interface UpdateChaptersRequest {
+  ids: number[];
+  patch: ChapterPatch;
+}
+
+/** Marks chapters read or unread (`updateChapters`), written into the manga's cached chapter list. */
+export function useUpdateChapters(mangaId: MaybeRefOrGetter<number>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (r: UpdateChaptersRequest) => updateChapters(r.ids, r.patch),
+    onSuccess: (updated) => writeChapters(queryClient, toValue(mangaId), updated),
+  });
+}
+
+/** One chapter's progress or read mark (`updateChapter`; the reader's saves), written into the cached list. */
+export function useUpdateChapter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (r: { id: number; patch: ChapterPatch }) => updateChapter(r.id, r.patch),
+    onSuccess: (chapter) => writeChapters(queryClient, chapter.mangaId, [chapter]),
   });
 }

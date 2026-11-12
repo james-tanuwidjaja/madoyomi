@@ -1,6 +1,6 @@
 import { defineComponent, h, type Component } from "vue";
 import { mount } from "@vue/test-utils";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { VueQueryPlugin, type QueryClient } from "@tanstack/vue-query";
 import type { Pinia } from "pinia";
 import { useBackendStore } from "../stores/backend";
@@ -15,19 +15,28 @@ export function setBackendReady() {
   backend.status = healthyStatus(2);
 }
 
+/** The memory router of {@link mountView}: every path renders nothing; the named routes the views link to resolve. */
+export function createTestRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: "/manga/:id/read/:chapterId", name: "reader", component: Empty },
+      { path: "/manga/:id", name: "manga", component: Empty },
+      { path: "/:any(.*)*", component: Empty },
+    ],
+  });
+}
+
 /**
  * Mounts a view or component with Pinia, vue-query and a memory router (every path renders nothing, so `RouterLink`
- * works), attached to <body> because Reka's dialogs and popovers portal there.
+ * works), attached to <body> because Reka's dialogs and popovers portal there. Pass `router` to start elsewhere.
  */
 export function mountView(
   component: Component,
-  plugins: { pinia: Pinia; queryClient: QueryClient },
+  plugins: { pinia: Pinia; queryClient: QueryClient; router?: Router },
   props: Record<string, unknown> = {},
 ) {
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [{ path: "/:any(.*)*", component: Empty }],
-  });
+  const router = plugins.router ?? createTestRouter();
   return mount(component, {
     props,
     attachTo: document.body,
