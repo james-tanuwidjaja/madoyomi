@@ -638,3 +638,42 @@ export interface MpvCheck {
   errorCode: ServerErrorCode | null;
   message: string | null;
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Manga reader (Phase 5)
+
+/**
+ * `fetchChapterPages` (upstream's): a chapter's page routes and the chapter (with its `pageCount`, `lastPageRead`
+ * and `isRead`). Each route is `/api/v1/manga/{mangaId}/chapter/{sourceOrder}/page/{index}`: the backend fetches the
+ * image through the source and caches it, so `assetUrl` adds only the token.
+ */
+export interface ChapterPages {
+  pages: string[];
+  chapter: Chapter;
+}
+
+/** `PrefetchChapterPagesPayload`: the pages being fetched in the background, and those cached already. */
+export interface PrefetchResult {
+  chapterId: number;
+  pageCount: number;
+  queued: number[];
+  cached: number[];
+}
+
+/** `ReaderSettingsType`: the reader settings the backend applies (Settings → Reader), kept in its data dir. */
+export interface ReaderSettings {
+  /** The chapter-page cache's cap in MiB: 256 to 10240 (default 1024). */
+  pageCacheLimitMb: number;
+}
+
+/** `ReaderSettingsPatch`: only the fields given change. */
+export type ReaderSettingsPatch = Partial<ReaderSettings>;
+
+/** `PageCacheType`: what the chapter-page cache holds. */
+export interface PageCache {
+  bytes: LongString;
+  files: number;
+  limitBytes: LongString;
+  /** `<data dir>/cache/manga`. */
+  path: string;
+}

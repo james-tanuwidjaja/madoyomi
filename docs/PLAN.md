@@ -244,10 +244,24 @@ Details: [phase-5-manga-reader.md](phases/phase-5-manga-reader.md)
 - Exit: smooth reading of long webtoon chapters.
 
 Milestones:
-- [ ] Image proxy + disk cache + prefetch
+- [x] Image proxy + disk cache + prefetch (Stage 1: upstream's page route is the proxy, with the source's headers and cookie jar; Madoyomi's `PageImages`/`PageCache` add one fetch per page at a time, one retry with an expired image URL got anew, `SOURCE_FAILED` with the HTTP status, the 1 GB cap with LRU eviction, and `prefetchChapterPages`; tested on a loopback image host, and live through the API on MangaPill, a 103-page Webtoons chapter and MangaDex, and Settings → Reader in `pnpm tauri dev`; phase-5 §10)
 - [ ] Paged LTR/RTL, webtoon, double-page modes
 - [ ] Reading progress + resume
 - [ ] 100+ page webtoon chapter scrolls smoothly
+
+**Phase 5 in progress: Stage 1 of 6 done (2026-11-12).** The stage plan and both of the phase's decisions are in phase-5 §8–§9:
+- **the default reader mode:** a manga's own mode, else webtoon when its genres say Long Strip, Webtoon, Manhwa or Manhua, else paged right-to-left (the global default, Mihon's);
+- **the page cache:** 1 GB by default (256 MB to 10 GB in Settings → Reader), in `<data dir>/cache/manga`, the least recently used pages going first.
+
+Stage 1 added the image pipeline. Chapters still don't open: the reader is Stage 2.
+- Upstream's page route already fetched a page through the source and cached it, so it is the proxy; there is no `/api/image`. Its fetch now goes through `madoyomi.core.reader` (one upstream edit in `Page.getPageImage`). That adds:
+  - one fetch per page at a time;
+  - one retry, which first gets an expired image URL anew;
+  - `SOURCE_FAILED` with the HTTP status;
+  - the size cap with LRU eviction (files used in the last 5 minutes stay);
+  - `prefetchChapterPages`, the next pages and the next chapter's first ones, 2 requests at a time.
+- Progress needs no new table: upstream's `CHAPTER_USER` has the last page, the read flag and the time, through `updateChapter(s)` (Stage 2).
+- Settings → **Reader** has the cache cap, what the cache holds and Clear (`readerSettings`, `setReaderSettings`, `pageCache`, `clearPageCache`; `<data dir>/reader-settings.json`).
 
 ### Phase 6 — Library features
 Details: [phase-6-library-features.md](phases/phase-6-library-features.md)
@@ -327,6 +341,7 @@ WS     /ws                                downloads, updates, playback progress 
 | `extensions-lib` version changes (anime lib differs from manga lib) | Breakage across all extensions | Pin versions; support multiple lib versions side by side if needed |
 | Cloudflare / WebView-dependent extensions | Some sources unusable | Headless browser shim; FlareSolverr as fallback. Measured in Phase 2: 1 of the top 20 is blocked (AnimePahe), so the solver is deferred. A real WebView is a separate need: 1 of the 10-extension manga sample (comix) renders its site in one, and the sidecar runs with KCEF off |
 | Video URLs require headers/cookies | 403s in the player | Always pass `Video.headers` to mpv; proxy fallback. Since Phase 4 Stage 1 every header reaches mpv verbatim through a per-session include file (S4's forms, one `http-header-fields-append` each), checked live with AnimeGG (Referer required) and KickAssAnime (7 headers), and in Stage 2 for the subtitle and audio tracks added over IPC too; Stage 4 measured it through the header proxy: all 2 of AnimeGG's and 7 of KickAssAnime's headers arrived verbatim (commas and semicolons included), so the proxy fallback is deferred until a source needs a header mpv can't send (phase-4 §9). The Stage 6 format matrix measured them again on every row: AnimeGG's 2 on its MP4 and on an MKV's requests, KickAssAnime's 7 on its HLS playlist, all verbatim. Expired URLs are fetched again once (Stage 4), at once and mid-play, for MP4 and HLS (Stage 6), and so is a stream that never plays a frame |
+| Manga page images need the source's headers and cookies, and their URLs can expire | Blank pages in the reader | Every page goes through upstream's page route, which fetches it with the source's own client (headers, cookie jar, rate limits); a loopback test checks the Referer and a cookie (Phase 5 Stage 1). A page that fails with HTTP 401/403/404/410 gets its image URL anew once (its own URL resolved again, else the chapter's page list fetched again) before `SOURCE_FAILED` reaches the reader; a transient failure is retried once. Live through the backend on MangaPill, Webtoons (a 103-page chapter) and MangaDex; a MangaDex page read 16 minutes after its chapter opened still answered without a retry, so the expired-URL path is covered by tests only so far (phase-5 §10) |
 | Extensions are arbitrary JVM code | Security | Trust prompt by signing cert; only user-added repos; consider a separate JVM process per extension type. Since Phase 3 Stage 3 the UI's trust prompt shows the certificate hash and warns that a trusted extension runs with the user's rights, and removing a repo asks first and says which extensions stop loading |
 | R8-optimised APKs that dex2jar mistranslates (e.g. Keiyoushi's removed constructors and merged classes) | Extensions fail to load (`VerifyError`) | A bytecode repair pass after dex2jar (`Dex2jarRepair`: constructors restored, frames recomputed with the APK's class hierarchy); the Phase 2 compat scan covers a 10-extension manga sample. It found two more patterns there (a super call that skips a removed constructor; a `new T` dex2jar leaves unfolded), fixed in Stage 6: all 30 APKs verify. Rerun `tools/compat-test/scan.ps1` when the lists are refreshed |
 | Protobuf index schema undocumented | Can't list manga extensions | Reverse-engineer from Mihon's client source; JSON fallback if one exists |
@@ -350,7 +365,9 @@ WS     /ws                                downloads, updates, playback progress 
 
 These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) for the detailed steps. **All done as of 2026-11-03.** [Phase 1](phases/phase-1-backend-foundation.md) and [Phase 2](phases/phase-2-anime-sources.md) are done too (2026-11-06), and so is [Phase 3](phases/phase-3-frontend-mvp.md) (2026-11-07, seven stages: the shell and sidecar, the API layer, Repos and Extensions, Browse and Source, Details and Library, Settings, and the exit run).
 
-[Phase 4](phases/phase-4-playback.md) (playback in mpv) is done too (2026-11-12, six stages). Stage 1 settled mpv in its own window, owned by the backend (§7), and added the launcher and Play. Stage 2 added the IPC client, progress saving, the watched mark and the playback events. Stage 3 added the video picker, the resume prompt, live progress and the Watched badge in the episode list, and bulk marks (`updateEpisodes`). Stage 4 added the next-episode toast with auto-play and the retry on expired URLs with the next video as the fallback (the header proxy deferred by measurement). Stage 5 added the player settings (the watched threshold, the preferred quality and server with the sorting, the subtitle and audio language, the mpv path), kept by the backend. Stage 6, the exit run, passed the format matrix and every exit criterion from a fresh data dir. [Phase 5](phases/phase-5-manga-reader.md) (the manga reader) is next: its first stage agrees the stage plan.
+[Phase 4](phases/phase-4-playback.md) (playback in mpv) is done too (2026-11-12, six stages). Stage 1 settled mpv in its own window, owned by the backend (§7), and added the launcher and Play. Stage 2 added the IPC client, progress saving, the watched mark and the playback events. Stage 3 added the video picker, the resume prompt, live progress and the Watched badge in the episode list, and bulk marks (`updateEpisodes`). Stage 4 added the next-episode toast with auto-play and the retry on expired URLs with the next video as the fallback (the header proxy deferred by measurement). Stage 5 added the player settings (the watched threshold, the preferred quality and server with the sorting, the subtitle and audio language, the mpv path), kept by the backend. Stage 6, the exit run, passed the format matrix and every exit criterion from a fresh data dir.
+
+[Phase 5](phases/phase-5-manga-reader.md) (the manga reader) is in progress: **Stage 1 of 6 done** (2026-11-12). It agreed the stage plan and the two decisions (the default reader mode: the manga's own, else webtoon by its genres, else paged RTL; the page cache: 1 GB, in the data dir). It added the image pipeline around upstream's page route: one fetch per page, the retry with expired URLs got anew, `SOURCE_FAILED`, the cache's cap with LRU eviction, `prefetchChapterPages`, and Settings → Reader. **Stage 2 is next:** the reader itself, with the paged LTR/RTL mode, progress and resume (phase-5 §8).
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

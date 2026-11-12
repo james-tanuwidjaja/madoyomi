@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.flow.StateFlow
 import libcore.net.MimeUtils
+import madoyomi.core.reader.PageImages
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -22,7 +23,6 @@ import org.jetbrains.exposed.v1.jdbc.update
 import suwayomi.tachidesk.graphql.types.DownloadConversion
 import suwayomi.tachidesk.manga.impl.util.getChapterCachePath
 import suwayomi.tachidesk.manga.impl.util.source.GetSource.getSourceOrNull
-import suwayomi.tachidesk.manga.impl.util.storage.ImageResponse.getImageResponse
 import suwayomi.tachidesk.manga.impl.util.storage.ImageUtil
 import suwayomi.tachidesk.manga.model.table.ChapterTable
 import suwayomi.tachidesk.manga.model.table.MangaTable
@@ -136,10 +136,10 @@ object Page {
 
         val cacheSaveDir = getChapterCachePath(mangaId, chapterId)
 
-        // Note: don't care about invalidating cache because OS cache is not permanent
-        return getImageResponse(cacheSaveDir, fileName) {
-            source.getImage(tachiyomiPage)
-        }
+        // Madoyomi: through PageImages/PageCache (Phase 5): one fetch per page at a time, a retry (an expired image URL
+        // got anew), SOURCE_FAILED errors, and the cache's size cap with LRU eviction. Upstream:
+        // getImageResponse(cacheSaveDir, fileName) { source.getImage(tachiyomiPage) }
+        return PageImages.get(mangaId, chapterId, index, cacheSaveDir, fileName, source, tachiyomiPage)
     }
 
     suspend fun getPageImageServe(

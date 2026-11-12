@@ -5,7 +5,7 @@ import type { QueryClient } from "@tanstack/vue-query";
 
 import { createQueryClient } from "../../api/realtime";
 import { ApiError } from "../../api/client";
-import type { MpvCheck, PlayerSettings, Source } from "../../api/types";
+import type { MpvCheck, PageCache, PlayerSettings, ReaderSettings, Source } from "../../api/types";
 import { DEFAULT_PLAYER_SETTINGS } from "../../composables/usePlayerSettings";
 import { useBackendStore } from "../../stores/backend";
 import { AUTO_PLAY_NEXT_KEY } from "../../stores/playerPrefs";
@@ -22,6 +22,10 @@ const ops = vi.hoisted(() => ({
   fetchPlayerLanguages: vi.fn(),
   setPlayerSettings: vi.fn(),
   checkMpv: vi.fn(),
+  fetchReaderSettings: vi.fn(),
+  setReaderSettings: vi.fn(),
+  fetchPageCache: vi.fn(),
+  clearPageCache: vi.fn(),
 }));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -44,6 +48,8 @@ const untrusted = makeSource({
 
 let sources: Source[];
 let player: PlayerSettings;
+let reader: ReaderSettings;
+let cache: PageCache;
 
 function mpvFound(path: string | null): MpvCheck {
   return {
@@ -86,6 +92,23 @@ beforeEach(() => {
     return player;
   });
   ops.checkMpv.mockImplementation(async (path: string | null) => mpvFound(path));
+  reader = { pageCacheLimitMb: 1024 };
+  cache = {
+    bytes: String(45.25 * 1024 * 1024),
+    files: 312,
+    limitBytes: String(1024 * 1024 * 1024),
+    path: "D:\\data\\cache\\manga",
+  };
+  ops.fetchReaderSettings.mockImplementation(async () => reader);
+  ops.setReaderSettings.mockImplementation(async (patch: Partial<ReaderSettings>) => {
+    reader = { ...reader, ...patch };
+    return reader;
+  });
+  ops.fetchPageCache.mockImplementation(async () => cache);
+  ops.clearPageCache.mockImplementation(async () => {
+    cache = { ...cache, bytes: "0", files: 0 };
+    return cache;
+  });
   setBackendReady();
   useBackendStore().mode = "tauri";
 });
@@ -290,5 +313,69 @@ describe("SettingsView: Player (Phase 4 Stage 5)", () => {
     await choose("threshold-select", "60");
     expect(wrapper.find('[data-testid="player-save-error"]').text()).toContain("BAD_REQUEST");
     expect(el<HTMLSelectElement>("threshold-select").value).toBe("85");
+  });
+});
+
+describe("SettingsView: Reader (Phase 5 Stage 1)", () => {
+  const el = <T extends HTMLElement>(id: string) =>
+    wrapper.find(`[data-testid="${id}"]`).element as T;
+
+  it("shows the cache cap and what the cache holds, and saves a new cap", async () => {
+    await mountSettings();
+    expect(el<HTMLSelectElement>("cache-limit-select").value).toBe("1024");
+    expect(
+      wrapper.findAll('[data-testid="cache-limit-select"] option').map((o) => o.text()),
+    ).toEqual(["256 MB", "512 MB", "1 GB", "2 GB", "5 GB", "10 GB"]);
+    expect(wrapper.find('[data-testid="cache-usage"]').text()).toBe("45.3 MB in 312 pages");
+    expect(wrapper.find('[data-testid="cache-path"]').text()).toBe("D:\\data\\cache\\manga");
+
+    // a lower cap: saved, and the cache read again (the backend trimmed it before it answered)
+    cache = { ...cache, bytes: String(20 * 1024 * 1024), files: 140 };
+    await wrapper.find('[data-testid="cache-limit-select"]').setValue("256");
+    await flushPromises();
+    expect(ops.setReaderSettings).toHaveBeenCalledWith({ pageCacheLimitMb: 256 });
+    expect(el<HTMLSelectElement>("cache-limit-select").value).toBe("256");
+    expect(wrapper.find('[data-testid="cache-usage"]').text()).toBe("20.0 MB in 140 pages");
+  });
+
+  it("clears the cache, and Clear is off when there is nothing to clear", async () => {
+    await mountSettings();
+    const clear = wrapper.find('[data-action="clear-cache"]');
+    expect(clear.attributes("disabled")).toBeUndefined();
+    await clear.trigger("click");
+    await flushPromises();
+    expect(ops.clearPageCache).toHaveBeenCalledOnce();
+    expect(wrapper.find('[data-testid="cache-usage"]').text()).toBe("0 bytes in 0 pages");
+    expect(wrapper.find('[data-action="clear-cache"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("offers a cap a hand-edited file has, and puts the cap back when the backend refuses it", async () => {
+    reader = { pageCacheLimitMb: 3000 };
+    await mountSettings();
+    expect(el<HTMLSelectElement>("cache-limit-select").value).toBe("3000");
+    expect(wrapper.findAll('[data-testid="cache-limit-select"] option')).toHaveLength(7);
+
+    ops.setReaderSettings.mockRejectedValueOnce(
+      new ApiError({
+        kind: "graphql",
+        code: "BAD_REQUEST",
+        message: "pageCacheLimitMb: must be 256 to 10240",
+      }),
+    );
+    await wrapper.find('[data-testid="cache-limit-select"]').setValue("512");
+    await flushPromises();
+    expect(wrapper.find('[data-testid="reader-save-error"]').text()).toContain("BAD_REQUEST");
+    expect(el<HTMLSelectElement>("cache-limit-select").value).toBe("3000");
+  });
+
+  it("says when the cache can't be read", async () => {
+    ops.fetchPageCache.mockRejectedValue(
+      new ApiError({ kind: "graphql", code: "INTERNAL", message: "disk gone" }),
+    );
+    await mountSettings();
+    expect(wrapper.find('[data-testid="cache-usage"]').text()).toBe("Not known");
+    expect(wrapper.find('[data-testid="cache-error"]').text()).toContain(
+      "Couldn't read the page cache",
+    );
   });
 });
