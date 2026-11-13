@@ -23,12 +23,16 @@ import {
   startPosition,
   step,
   wheelPixels,
+  type KeyAction,
   type NavResult,
   type ZoneAction,
 } from "../utils/pagedNav";
+import { PAGE_GAP, webtoonKeyAction, type WebtoonKeyAction } from "../utils/webtoonNav";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import PagedReader from "../components/reader/PagedReader.vue";
+import ReaderStats from "../components/reader/ReaderStats.vue";
 import ReaderToolbar from "../components/reader/ReaderToolbar.vue";
+import WebtoonReader from "../components/reader/WebtoonReader.vue";
 
 /*
  * The manga reader (Phase 5 Stage 2, steps 5, 6, 11–14): `/manga/:id/read/:chapterId?page=N`, outside the app shell.
@@ -38,6 +42,11 @@ import ReaderToolbar from "../components/reader/ReaderToolbar.vue";
  * shown is saved as the chapter's progress (useReadingProgress), and kept in the URL. The page loader fetches the
  * pages around the reader, at most 4 at a time, and the backend prefetches the next block and, near the end, the
  * next chapter's first pages.
+ *
+ * Stage 3: the webtoon mode (`WebtoonReader`), switched from the toolbar for the session. The strip reports the page
+ * at its top as the position, and the pages to load around its viewport, which replace the paged ±N; the wheel
+ * scrolls it natively, the keys scroll it by a line or a screen, and past its ends they open the next or previous
+ * chapter. Switching modes keeps the page.
  */
 const props = defineProps<{ id: number; chapterId: number }>();
 
@@ -105,7 +114,20 @@ watch(
   { immediate: true },
 );
 
-const loader = usePageLoader({ pages, position: () => position.value ?? 0 });
+/** The webtoon strip's pages around its viewport, most urgent first (null in the paged mode, or before it reports). */
+const webtoonWindow = ref<number[] | null>(null);
+watch(
+  () => reader.mode,
+  () => {
+    webtoonWindow.value = null;
+  },
+);
+const loader = usePageLoader({
+  pages,
+  position: () => position.value ?? 0,
+  wanted: () => (reader.mode === "webtoon" ? webtoonWindow.value : null),
+});
+const strip = ref<InstanceType<typeof WebtoonReader> | null>(null);
 // Back after a restart: the pages that failed while it was away are fetched again by themselves.
 watch(
   () => backend.ready,
@@ -116,6 +138,29 @@ watch(
 const progress = useReadingProgress({ chapter, pageCount, position });
 
 const toolbar = ref(true);
+
+// Time to the first page shown (the dev stats; phase-5 step 15).
+const stats = ref(false);
+let openedAt = performance.now();
+const firstPageMs = ref<number | null>(null);
+watch(
+  () => props.chapterId,
+  () => {
+    openedAt = performance.now();
+    firstPageMs.value = null;
+  },
+);
+watch(
+  () => {
+    const p = position.value;
+    return p !== null && isPage(p, pageCount.value) && loader.state(p)?.status === "loaded";
+  },
+  (shown) => {
+    if (shown && firstPageMs.value === null) {
+      firstPageMs.value = Math.round(performance.now() - openedAt);
+    }
+  },
+);
 
 // The page in the URL, so a reload or a copied link opens it.
 watch(position, (p) => {
@@ -164,6 +209,12 @@ function onZone(action: ZoneAction) {
   else turn(action === "next" ? 1 : -1);
 }
 
+/** In the strip: a line or a screen down or up, and past its end the next (or previous) chapter. */
+function scrollStrip(kind: "line" | "screen", dir: 1 | -1) {
+  if (strip.value?.scrollStep(kind, dir)) toolbar.value = false;
+  else if (strip.value) openChapter(dir > 0 ? "next" : "previous");
+}
+
 function onKey(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null;
   const tag = target?.tagName;
@@ -171,7 +222,12 @@ function onKey(event: KeyboardEvent) {
     return;
   }
   if (tag === "BUTTON" && (event.key === " " || event.key === "Enter")) return;
-  const action = keyAction(event, reader.direction);
+  if (import.meta.env.DEV && event.key === "`") {
+    stats.value = !stats.value;
+    return;
+  }
+  const action: KeyAction | WebtoonKeyAction | null =
+    reader.mode === "webtoon" ? webtoonKeyAction(event) : keyAction(event, reader.direction);
   if (!action) return;
   event.preventDefault();
   switch (action) {
@@ -179,6 +235,14 @@ function onKey(event: KeyboardEvent) {
       return turn(1);
     case "previous":
       return turn(-1);
+    case "lineDown":
+      return scrollStrip("line", 1);
+    case "lineUp":
+      return scrollStrip("line", -1);
+    case "screenDown":
+      return scrollStrip("screen", 1);
+    case "screenUp":
+      return scrollStrip("screen", -1);
     case "first":
       return seek(0);
     case "last":
@@ -200,7 +264,8 @@ function onKey(event: KeyboardEvent) {
 
 const wheel = createWheelGate();
 function onWheel(event: WheelEvent) {
-  if (event.ctrlKey) return;
+  // The strip scrolls natively; Ctrl+wheel is left to zoom (Stage 4).
+  if (event.ctrlKey || reader.mode === "webtoon") return;
   event.preventDefault();
   const dir = wheel.push(
     wheelPixels(event.deltaY, event.deltaMode, window.innerHeight),
@@ -281,6 +346,27 @@ watch(
     <p v-else-if="position === null" class="state muted" data-testid="reader-loading">
       {{ backend.ready ? `Loading ${chapterName}…` : "Waiting for the backend…" }}
     </p>
+    <WebtoonReader
+      v-else-if="reader.mode === 'webtoon'"
+      ref="strip"
+      :position="position"
+      :page-count="pageCount"
+      :page-state="loader.state"
+      :page-size="loader.size"
+      :gap="reader.pageGap ? PAGE_GAP : 0"
+      :chapter-name="chapterName"
+      :manga-title="mangaTitle"
+      :previous-name="previousChapter?.name ?? null"
+      :next-name="nextChapter?.name ?? null"
+      @position="position = $event"
+      @window="webtoonWindow = $event"
+      @menu="toolbar = !toolbar"
+      @scrolled="toolbar = false"
+      @retry="loader.retry"
+      @next-chapter="openChapter('next')"
+      @previous-chapter="openChapter('previous')"
+      @back="back"
+    />
     <PagedReader
       v-else
       :position="position"
@@ -305,6 +391,8 @@ watch(
       :position="position ?? 0"
       :page-count="pageCount"
       :direction="reader.direction"
+      :mode="reader.mode"
+      :page-gap="reader.pageGap"
       :has-previous="neighbours.hasPrevious"
       :has-next="neighbours.hasNext"
       :fullscreen="fullscreen.active.value"
@@ -313,8 +401,12 @@ watch(
       @previous-chapter="openChapter('previous')"
       @next-chapter="openChapter('next')"
       @toggle-direction="reader.toggleDirection()"
+      @toggle-mode="reader.toggleMode()"
+      @toggle-page-gap="reader.togglePageGap()"
       @toggle-fullscreen="fullscreen.toggle()"
     />
+
+    <ReaderStats v-if="stats" :first-page-ms="firstPageMs" @close="stats = false" />
 
     <p v-if="progress.error.value" class="save-error" role="status" data-testid="save-error">
       Couldn't save your place in this chapter.

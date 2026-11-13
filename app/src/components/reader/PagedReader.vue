@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { describeError } from "../../api/errorText";
-import { isApiError } from "../../api/client";
 import type { PageState } from "../../composables/usePageLoader";
 import { BEFORE, zoneAt, type ReadingDirection, type ZoneAction } from "../../utils/pagedNav";
+import ChapterPanel from "./ChapterPanel.vue";
+import PageFailure from "./PageFailure.vue";
 
 /**
  * The paged reader (Phase 5 Stage 2, step 6): one page at a time, fitted to the window, with the click zones (the
@@ -37,14 +37,6 @@ const state = computed(() =>
     : undefined,
 );
 
-const failure = computed(() => {
-  const s = state.value;
-  if (s?.status !== "error") return null;
-  const d = describeError(s.error);
-  const details = isApiError(s.error) ? (s.error.details as { httpCode?: number } | null) : null;
-  return { ...d, httpCode: details?.httpCode ?? null };
-});
-
 function onClick(event: MouseEvent) {
   const el = event.currentTarget as HTMLElement;
   const rect = el.getBoundingClientRect();
@@ -63,69 +55,27 @@ function onClick(event: MouseEvent) {
         draggable="false"
         data-testid="page-image"
       />
-      <button
-        v-else-if="failure"
-        type="button"
-        class="placeholder failed"
-        data-testid="page-failed"
-        @click.stop="emit('retry', position)"
-      >
-        <span class="title">Couldn't load page {{ position + 1 }}</span>
-        <span v-if="failure.hint" class="hint">{{ failure.hint }}</span>
-        <span class="message">
-          <code v-if="failure.code">{{ failure.code }}</code>
-          <template v-if="failure.httpCode"> HTTP {{ failure.httpCode }}:</template>
-          {{ failure.message }}
-        </span>
-        <span class="retry">Click to retry</span>
-      </button>
+      <PageFailure
+        v-else-if="state?.status === 'error'"
+        :index="position"
+        :error="state.error"
+        @retry="emit('retry', $event)"
+      />
       <p v-else class="placeholder" data-testid="page-loading">Loading page {{ position + 1 }}…</p>
     </template>
 
-    <div v-else-if="position === BEFORE" class="panel" data-testid="panel-previous">
-      <p class="muted">Start of {{ chapterName }}</p>
-      <p class="title">Previous: {{ previousName }}</p>
-      <div class="actions">
-        <button type="button" class="btn btn-accent" @click.stop="emit('previousChapter')">
-          Read {{ previousName }}
-        </button>
-      </div>
-    </div>
-
-    <div v-else class="panel" data-testid="panel-end">
-      <p class="muted">
-        {{ pageCount === 0 ? `${chapterName} has no pages.` : `Finished: ${chapterName}` }}
-      </p>
-      <template v-if="nextName">
-        <p class="title">Next: {{ nextName }}</p>
-        <div class="actions">
-          <button
-            type="button"
-            class="btn btn-accent"
-            data-action="panel-next"
-            @click.stop="emit('nextChapter')"
-          >
-            Read {{ nextName }}
-          </button>
-          <button type="button" class="btn" @click.stop="emit('back')">
-            Back to {{ mangaTitle }}
-          </button>
-        </div>
-      </template>
-      <template v-else>
-        <p class="title">There's no next chapter.</p>
-        <div class="actions">
-          <button
-            type="button"
-            class="btn btn-accent"
-            data-action="panel-back"
-            @click.stop="emit('back')"
-          >
-            Back to {{ mangaTitle }}
-          </button>
-        </div>
-      </template>
-    </div>
+    <ChapterPanel
+      v-else
+      :kind="position === BEFORE ? 'previous' : 'end'"
+      :chapter-name="chapterName"
+      :manga-title="mangaTitle"
+      :page-count="pageCount"
+      :previous-name="previousName"
+      :next-name="nextName"
+      @next-chapter="emit('nextChapter')"
+      @previous-chapter="emit('previousChapter')"
+      @back="emit('back')"
+    />
   </div>
 </template>
 
@@ -148,58 +98,9 @@ function onClick(event: MouseEvent) {
 }
 
 .placeholder {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-2);
-  max-width: 480px;
   margin: 0;
   padding: var(--space-5);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
   color: rgb(255 255 255 / 70%);
-  font: inherit;
   text-align: center;
-}
-
-.placeholder.failed {
-  border: 1px solid rgb(255 255 255 / 16%);
-  background: rgb(255 255 255 / 6%);
-  cursor: pointer;
-}
-
-.placeholder .title,
-.panel .title {
-  color: #fff;
-  font-size: var(--font-size-body-large);
-  font-weight: var(--font-weight-semibold);
-}
-
-.placeholder .retry {
-  color: var(--color-accent);
-}
-
-.panel {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-3);
-  padding: var(--space-5);
-  color: #fff;
-  text-align: center;
-}
-
-.panel p {
-  margin: 0;
-}
-
-.muted {
-  color: rgb(255 255 255 / 60%);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2);
 }
 </style>

@@ -59,14 +59,14 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 ### Reader modes
 - [x] Paged LTR (Stage 2: `PagedReader`, the toolbar's direction switch for the session; live on MangaPill, §10)
 - [x] Paged RTL (Stage 2: the default; the left side and ← go forward, the slider fills from the right; live, §10)
-- [ ] Vertical webtoon (virtualized)
+- [x] Vertical webtoon (virtualized) (Stage 3: `WebtoonReader` over the pure `utils/webtoonNav.ts`: heights computed from each page's ratio, only the items near the viewport in the DOM, the anchor kept when sizes, the width or the gap change, a load window in pixels; live on a 103-page and a 95-page Webtoons chapter, 800×30000 pages and an empty chapter, §10)
 - [ ] Double page with spread detection + shift
 - [ ] Seamless next-chapter transition
 - [ ] Zoom/pan
 
 ### Controls & settings
 - [x] Keyboard, mouse wheel, click zones (Stage 2: `utils/pagedNav.ts`, unit-tested for both directions; live: clicks, ←/→, Space, Page Down, Home/End, F, Esc, M and the wheel, §10)
-- [ ] Toolbar (slider, mode switch, prev/next, fullscreen) (Stage 2 has all but the mode switch, which comes with the other modes)
+- [x] Toolbar (slider, mode switch, prev/next, fullscreen) (Stage 2: all but the mode switch; Stage 3: "Paged"/"Webtoon" for the session, keeping the page, and "Page gap" in the webtoon mode; live, §10)
 - [ ] Reader settings (global + per manga)
 
 ### Progress
@@ -76,8 +76,8 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 
 ### Performance & tests
 - [x] Concurrency limit for image requests (Stage 2: `usePageLoader`, at most 4, the page shown first and taking the place of a less urgent one; unit and component tests, §10)
-- [ ] Performance measured on a 100+ page webtoon chapter
-- [ ] Navigation logic unit tests (Stage 2: the paged part, `pagedNav.spec.ts` 34; double-page pairing and spread detection come in Stage 4)
+- [x] Performance measured on a 100+ page webtoon chapter (Stage 3, the first numbers, on the dev desktop: the 103-page Webtoons chapter top to bottom at a normal speed with no frame over 50 ms (the longest 8 ms) and no blank frame, at most 5 `<img>` and 5 items in the DOM, 552–642 ms to the first page, the WebView2 processes' memory flat after the chapter. Stage 6 measures again, with the memory after 5 chapters, §10)
+- [ ] Navigation logic unit tests (Stage 2: the paged part, `pagedNav.spec.ts` 34; Stage 3: the strip's layout, page shown, anchor, load window and keys, `webtoonNav.spec.ts` 19; double-page pairing and spread detection come in Stage 4)
 - [x] Proxy/cache backend tests (Stage 1: `PageCacheTest` 15, `ReaderSettingsTest` 4, `PageImagesApiTest` 7)
 
 ## 6. Exit criteria
@@ -89,8 +89,8 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 ## 7. Risks & notes
 
 - Sources that need cookies from Cloudflare: the proxy must use the same cookie jar as the source (PLAN.md §6, Cloudflare).
-- Very tall images (some webtoons put a whole chapter in a few huge images) may need tiling or downscaling.
-- Watch memory: release off-screen images in webtoon mode.
+- Very tall images (some webtoons put a whole chapter in a few huge images) may need tiling or downscaling. **Stage 3: shown whole.** Live, 800×30000 pages scrolled with no frame over 50 ms and no blank frame. Each decodes to about 96 MB, so with two around the viewport the renderer held 373 MB private, back to the baseline once the chapter was left (§10). Revisit if a source's pages are wider or taller than that.
+- Watch memory: release off-screen images in webtoon mode. **Stage 3:** pages outside the load window (a screen behind, two ahead) are aborted and their object URLs revoked; live, the WebView2 processes' memory after the 103-page chapter was where it started (§10).
 
 ## 8. Decisions closed here
 
@@ -116,6 +116,12 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - tests: 79 new (78 net), 425 passed + 10 skipped; the live spec 10/10 with 50 documents and an `updateChapter(s)` round trip; no server change;
      - live in `pnpm tauri dev` on MangaPill (§10): both directions with clicks, keys and the wheel, resume after an app restart, the read marks, the next and previous chapter, the end of the last chapter, fullscreen, the read filter and bulk marks, and failed pages with the backend killed mid-chapter. Found and fixed on the way: MangaPill's chapter numbers (the next chapter), a failed read mark, the pages that failed during a restart, and "Continue reading".
 3. **Webtoon mode** (steps 7, 14, first numbers of 15): `WebtoonReader`, virtualized, pages sized by their intrinsic ratio, the page gap, off-screen images released, very tall images, progress from the scroll position. Verified by unit tests and a first measurement on a 100+ page chapter.
+   - *Done* (2026-11-13):
+     - `components/reader/WebtoonReader.vue` over the pure `utils/webtoonNav.ts` (the layout, the page shown, the anchor, the load window in pixels, the keys): an 800 px strip at most, scrolled natively, only the items near the viewport in the DOM, each page as tall as its ratio makes it (the median of the known ones before it loads), the anchor kept when sizes, the width or the gap change, the end panel a viewport tall, and past the strip's ends the next or previous chapter;
+     - `usePageLoader`: a window given by the strip (`wanted`), each page `decode()`d before it counts as loaded, and the natural sizes kept for the chapter (`size(i)`); `useReadingProgress` marks the chapter read on reaching the end panel too; `stores/reader.ts` has `mode` and `pageGap` for the session; the toolbar's mode switch and page gap; `ReaderView` routes the keys and the wheel by mode;
+     - `PageFailure.vue` and `ChapterPanel.vue` out of `PagedReader`, and the dev-only stats overlay `ReaderStats.vue` (the ` key);
+     - tests: 44 new, 469 passed + 10 skipped; no server, shell or operation change;
+     - live in `pnpm tauri dev` (§10): the 103-page Webtoons chapter top to bottom with the wheel and the keys, the slider, the gap, fullscreen as a resize, a mode switch mid-chapter, leaving and reopening (after an app restart too), the read mark, the chapter boundaries, 800×30000 pages from the Local source and an empty chapter. The first step-15 numbers: no frame over 50 ms and no blank frame while scrolling, 552–642 ms to the first page, the memory flat.
 4. **Double page, zoom and pan, the seamless next chapter** (steps 8–10): `DoublePageReader` with spread detection and "shift by one", zoom and pan in paged mode, and the "Next chapter: …" transition in every mode. Verified by pairing and spread unit tests and live.
 5. **Reader settings, global and per manga** (step 11): `ReaderSettings` (mode, direction, fit, background, page gap, preload count), global on this device and per manga in its meta, and the default mode per content type (§8). Verified by unit tests and a live change that a reopened manga keeps.
 6. **Exit run**: every §6 criterion from a fresh data dir, the step 15 measurements (time to first page, scroll FPS on a 100+ page webtoon chapter, memory after 5 chapters), and a fix round.
@@ -191,6 +197,23 @@ Decided in the stage (defaults, not asked; the plan was sent to the user before 
 - **`updateChapter` for the reader, `updateChapters` for the list** (both upstream's, no server change). Upstream returns `updateChapters`' chapters in the database's order, not the given one.
 - **The reader's background is #111 in both themes**, as readers are.
 - **Vite pre-bundles `@tauri-apps/api/window`** (`optimizeDeps.include`): the reader is a lazy route that imports it, and in `pnpm tauri dev` its first open made Vite optimize the dependency and reload the page mid-navigation (§10). The build was never affected.
+
+### Stage 3 (2026-11-13)
+
+Decided in the stage (defaults, not asked; the plan was sent to the user before the build and they didn't object):
+- **Our own pure layout, not TanStack Virtual** (`utils/webtoonNav.ts`): a page's height is computed (the strip's width × its image's ratio), not measured, so prefix sums and a binary search give scroll ↔ page exactly, and it is unit-tested without a browser. Only the items near the viewport are in the DOM, placed absolutely in a sizer as tall as the whole strip. Phase 3's `VirtualList` measures its rows; the strip knows its heights.
+- **Page heights:** the loader `decode()`s each blob before the page counts as loaded (no blank frame when its `<img>` is put in, and the natural size is known), and keeps the sizes for the chapter after a page is released, so a page scrolled back to keeps its height. A page not loaded yet gets the median ratio of the known ones (1.5 before any).
+- **The anchor:** when sizes, the width or the gap change, the strip keeps a point still: after a seek or an open, the page's top at the viewport's top; after a user scroll, the point at the viewport's centre. The strip's own scrollTop moves at once (a `flush: "sync"` watcher), the element's after the DOM update (`flush: "post"`), so the page shown is never read from the old offset in the new layout. A seek to a position the strip didn't report waits for the DOM update too. The element is only moved when it isn't there already, and the strip records the value the browser took (it rounds to device pixels and clamps), so its own scroll event isn't taken for the user's and a smooth key scroll isn't cut short (§10).
+- **Width:** fit to the window, at most 800 px (Webtoons' own images are 800 px wide). The fit modes are Stage 5's.
+- **Gap:** none by default; the toolbar's "Page gap: on/off" (16 px), for the session.
+- **The load window is in pixels:** one screen behind, two ahead, at least 2 pages ahead, at most 16; the visible pages first, then the ones ahead, then the ones behind. Still at most 4 requests (`usePageLoader`'s new `wanted`); pages that leave it are aborted and revoked. The backend's block prefetch is unchanged.
+- **Very tall images are shown whole** (no downscaling, no tiling): Chromium rasterizes only the tiles in view, and the pixel window keeps one or two such pages loaded. Checked live with generated 800×30000 pages (§10).
+- **The page "shown"** (saved, in the slider and the URL) is the one at the viewport's top edge, so a chapter reopened where it was saved shows the same page again, without drift. The end panel is a viewport tall so that every page can reach the top; at the strip's bottom the end panel is shown. **Reaching the end panel also marks the chapter read** (`useReadingProgress`, both modes), because a fling or End can pass the last page between two scroll events.
+- **Input in the strip:** the native wheel (ReaderView's wheel gate is skipped in the webtoon mode); ↓/↑ 15 % of a screen (at least 60 px), Space/Page Down/Page Up 90 %, smooth; Home/End; [ and ] the chapters; ← and → nothing. At the very bottom a further step down opens the next chapter, at the very top a step up the previous one at its last page. A click toggles the toolbar; a user scroll hides it, a seek (the slider, Home/End) doesn't.
+- **The toolbar:** the mode switch "Paged"/"Webtoon" (`stores/reader.ts` `mode`, for the session, paged by default; Stage 5 applies §8's default by genre), the gap toggle in the webtoon mode only, the direction in the paged mode only. In the webtoon mode the slider fills from the left and seeks to the page's top. Switching mid-chapter keeps the page.
+- **A dev-only stats overlay** (`ReaderStats.vue`, the ` key, only with `import.meta.env.DEV`): fps, frames over 50 ms and the longest, "blank" frames (a page in the viewport not loaded yet: the strip's `data-blank`), the `<img>` and strip items in the DOM (now and the most), the JS heap and the time to the first page, with Reset and Close (which don't take the focus, §10). The process memory for step 15 comes from the WebView2 process tree under madoyomi.exe (`Win32_Process` by `ParentProcessId`), not from the overlay.
+- **Shared parts out of `PagedReader`:** `reader/PageFailure.vue` (a failed page and "Click to retry") and `reader/ChapterPanel.vue` (the previous and end panels, "<chapter> has no pages." for an empty one), with the same test ids.
+- **No server change, no shell change, no new operation** (so no new live-spec test).
 
 ## 10. Findings log
 
@@ -284,3 +307,53 @@ Decided in the stage (defaults, not asked; the plan was sent to the user before 
   - the concurrency limit live: the webview's requests weren't counted; the loader and component tests check at most 4;
   - a 100+ page chapter in the paged mode: the reader holds 6 pages whatever the length; the 100+ page measurement is Stage 3's (webtoon);
   - Webtoons and MangaDex in the reader: the paged run was on MangaPill; Stage 3 reads the 103-page Webtoons chapter.
+
+### Stage 3 (2026-11-13)
+
+- **Baseline before the stage** (main at `3d8a34b`, Stage 2 merged as #34; rerun before any edit):
+  - server: `.\gradlew.bat build` green with 794 tests, 0 failures (core 694 with 8 skipped, AndroidCompat 7, ext-host 8, api 85), BUILD SUCCESSFUL in 6m 37s;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: 46 files (45 + 1 skipped), 425 passed + 10 skipped; `pnpm lint`, `pnpm typecheck` and `pnpm build` clean. `pnpm format:check` flagged only `src/utils/webtoonNav.ts`, a file of this stage already on disk when the baseline's app checks ran (the rest was clean);
+  - the live spec: 10/10 with 50 documents;
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - app: 48 files (47 + 1 skipped), **469 passed + 10 skipped**. 44 new: `webtoonNav.spec.ts` 19 (heights, the layout, the page shown, the anchor, the load window, the keys), `WebtoonReader.spec.ts` 13 (the items in the DOM, sizes, where it opens, the page reported, the anchor after a seek, a scroll and a resize, a position it didn't report, the gap, the keys' steps, clicks, the blank count, an empty chapter), `ReaderView.spec.ts` 7 (the mode switch, progress and the read mark from the strip, the keys, the slider and Home/End, the toolbar kept during a seek, the previous chapter, the load window, the wheel), `usePageLoader.spec.ts` 4 (`wanted`, `decode` and the sizes), `useReadingProgress.spec.ts` 1 (the end panel's read mark). Lint, typecheck, format:check and build clean;
+  - server and shell: not changed, so not rebuilt (the baseline above stands); no operation changed, so the live spec wasn't rerun.
+- **Found and fixed while writing and reviewing the strip:**
+  - the page shown was read from the old scroll offset in the new layout when a page above got its size: it emitted a wrong position, which then seeked. The strip's own scrollTop now moves with the layout at once, the element's after the DOM update;
+  - a seek's own scroll could be taken for the user's: the strip compared the browser's scroll event with the value it had asked for, not the one the browser took (rounded to device pixels, or clamped while the sizer still had its old height), and a user scroll hides the toolbar. It now records what the browser took, seeks after the DOM update, and leaves the element alone when it is already there (which also keeps a layout change from cutting a smooth key scroll short). Tests: the toolbar stays up while the slider seeks, a resize keeps the point at the centre, an empty chapter;
+  - `Array.prototype.at` isn't in the app's TS lib (the previous session's typecheck); a plain last-element helper.
+- **Live in `pnpm tauri dev`** (data dir `live-data`, computer use, the dev desktop with an NVIDIA GPU and a 145 Hz screen):
+
+  | Check | Result |
+  |---|---|
+  | open and switch | Webtoons.com [en] "Osora" (S2) Chapter 126, 103 pages: opened in the paged mode at 1 / 103; "Paged" → "Webtoon": an 800 px strip, the slider filling from the left, "Page gap: off", no direction button |
+  | the wheel | 5 to 10 notches every 0.4–0.6 s: 1 → 13 → 44 / 103, and 89 → the end panel. Smooth, no blank page (numbers below) |
+  | the keys | Page Down, Space, ↓, Shift+Space, ↑, Page Up: 13 → 15 → 20 / 103 (smooth steps); ← and → nothing; End on Chapter 125 put 95 / 95 at the top |
+  | the slider | a click jumped 44 → 66, a drag 66 → 89; **the toolbar stayed up through both**; the pages came in from the source within half a second |
+  | the page gap | on at 8 / 95 of Chapter 125: 16 px between pages, the point at the viewport's centre stayed put |
+  | a resize | F (fullscreen) and F again at 8 / 95: the point at the centre kept both ways, back at 8 / 95 |
+  | a mode switch mid-chapter | at 8 / 95: the paged mode showed page 8; back to webtoon, page 8's top at the viewport's top |
+  | leave and reopen | Esc at 17 / 95: the row "Page 17 of 95" with Continue; reopened at 17 / 95 with page 17's top at the viewport's top |
+  | after an app restart | the backend stopped with exit code 0; "Continue: (S2) Chapter 125", the row "Page 17 of 95"; it opened at 17 / 95 (paged, the session's default again), and in webtoon the same view as before |
+  | read to the end | Chapter 126 to its end panel ("Finished: … · There's no next chapter."): Read in the list. Chapter 125: End, Page Down twice → "Next: (S2) Chapter 126"; Page Down again opened 126; Page Up at its top → "Previous: (S2) Chapter 125"; again → 125 at 95 / 95 |
+  | very tall pages | the Local source, "Tall Strip Test" Chapter 1 (generated: 800×1200, three 800×30000 with a marker every 500 px, 800×1200): every page whole at its own size (the markers line up); the slider put page 4's top at the top; scrolling up showed page 3's bottom at once (loaded behind); End and Page Down to the end panel marked it Read |
+  | an empty chapter | an empty folder "Chapter 2" in the Local manga: "Chapter 2 has no pages.", 0 / 0 with the slider off, the "Previous" panel above it |
+  | the token | no `token=` in sidecar.log (both runs), madoyomi.log or the dev output; no warning in the dev output |
+
+- **The first step-15 numbers** (the dev stats overlay; memory from the WebView2 process tree under madoyomi.exe, the JVM left out):
+  - **time to the first page:** 552 ms (Chapter 126, opened in the paged mode: the page list from the source, then page 1; some of its pages may have been in the cache since Stage 1), **642 ms** (Chapter 125 in the webtoon mode, nothing cached), 36 ms (the Local source);
+  - **scrolling the 103-page chapter at a normal speed:** pages 1–13 in 5,102 frames, 15–44 in 12,505, 89 to the end in 3,670: **no frame over 50 ms (the longest 8 ms), 145 fps (the screen's rate) throughout, 0 blank frames**. The two slider jumps to uncached pages gave 59 blank frames (410 ms in all) until those pages arrived;
+  - **the DOM:** at most 5 `<img>` and 5 strip items (3 to 4 most of the time); the JS heap 26–27 MB throughout;
+  - **memory:** before the chapter 484 MB working set and 333 MB private; at the end of the 103 pages (the reader still open) 503 MB and 273 MB; the tall chapter with pages 3 and 4 around the viewport 922 MB and 520 MB (the renderer 373 MB private: an 800×30000 page decodes to about 96 MB); after leaving it 465 MB and 276 MB;
+  - **the tall pages:** the longest frame 42 ms, none over 50 ms, 0 blank frames.
+- **Space on a focused button presses it** (Stage 2's rule, so the toolbar works by keyboard): after a click on the stats overlay's Reset, four Space presses reset the stats instead of scrolling. The overlay's buttons don't take the focus now. **The toolbar's buttons still do:** after a click on "Webtoon" or "Page gap", Space presses that button again until the strip is clicked. Left for Stages 4–5 (the toolbar and its settings), noted in the next stage's prompt.
+- **The §6 criterion names a mid-range laptop;** these numbers are from the dev desktop, so PLAN.md's milestone stays open for the exit run (Stage 6), which measures again on the same chapter.
+- **Not checked, and why:**
+  - a mid-range laptop (§6): only the dev desktop was at hand;
+  - memory after 5 chapters (step 15's third number): Stage 6's;
+  - a failed page in the strip live: no page failed; `WebtoonReader.spec.ts` covers the failed page and its retry, and Stage 2 checked the same `PageFailure` live;
+  - dragging the window's edge: fullscreen on and off stood in (both resize the webview); the `ResizeObserver` path is in `WebtoonReader.spec.ts`;
+  - Home, `[` and `]` live in the strip: in `ReaderView.spec.ts`, and Stage 2 used the chapter steps live; End and the panels' chapter steps were used live;
+  - a trackpad or a free-spinning wheel: only a notched wheel (the tool's notches);
+  - the generated tall chapter and the empty "Chapter 2" folder are in `live-data/local` (gitignored scratch data), not in the repo.

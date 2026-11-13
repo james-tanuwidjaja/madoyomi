@@ -370,3 +370,161 @@ describe("ReaderView", () => {
     expect(router.currentRoute.value.path).toBe("/manga/34");
   });
 });
+
+describe("ReaderView in the webtoon mode (Stage 3)", () => {
+  // jsdom has no layout: the strip is 1000 × 900 px (so 800 px wide, pages of 1200 px before their size is known).
+  beforeEach(() => {
+    for (const [prop, value] of [
+      ["clientWidth", 1000],
+      ["clientHeight", 900],
+    ] as const) {
+      const before = Object.getOwnPropertyDescriptor(HTMLElement.prototype, prop);
+      Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => value });
+      restore.push(() => {
+        if (before) Object.defineProperty(HTMLElement.prototype, prop, before);
+      });
+    }
+  });
+
+  const strip = () => wrapper.find('[data-testid="webtoon-reader"]');
+  const stripEl = () => strip().element as HTMLElement;
+  async function scrollTo(y: number) {
+    stripEl().scrollTop = y;
+    stripEl().dispatchEvent(new Event("scroll"));
+    await flushPromises();
+  }
+
+  it("switches modes from the toolbar for the session, and keeps the page", async () => {
+    chapters[0] = { ...chapters[0]!, lastPageRead: 4 };
+    await mountReader();
+    expect(wrapper.find('[data-action="mode"]').text()).toBe("Paged");
+
+    await wrapper.find('[data-action="mode"]').trigger("click");
+    await flushPromises();
+    expect(useReaderStore().mode).toBe("webtoon");
+    expect(paged().exists()).toBe(false);
+    expect(stripEl().scrollTop).toBe(4 * 1200);
+    expect(position()).toBe("4");
+    expect(wrapper.find('[data-action="mode"]').text()).toBe("Webtoon");
+    expect(wrapper.find('[data-action="direction"]').exists()).toBe(false);
+
+    await scrollTo(6 * 1200 + 100);
+    expect(position()).toBe("6");
+    expect(pageQuery()).toBe("7");
+    // scrolling hid the toolbar; M brings it back
+    expect(wrapper.find('[data-testid="reader-bottom"]').exists()).toBe(false);
+    await key("m");
+    await wrapper.find('[data-action="mode"]').trigger("click");
+    await flushPromises();
+    expect(paged().exists()).toBe(true);
+    expect(wrapper.find('[data-testid="page-image"]').attributes("alt")).toBe("Page 7");
+  });
+
+  it("saves the page at the top of the strip, marks the chapter read on the last one, and goes on past the end", async () => {
+    useReaderStore().mode = "webtoon";
+    await mountReader();
+    expect(position()).toBe("0");
+
+    await scrollTo(3 * 1200);
+    expect(position()).toBe("3");
+    await scrollTo(9 * 1200 + 10);
+    expect(ops.updateChapter).toHaveBeenCalledWith(5001, { lastPageRead: 9, isRead: true });
+
+    await scrollTo(10 * 1200); // the bottom: the end panel fills the viewport
+    expect(position()).toBe("10");
+    expect(strip().find('[data-testid="panel-end"]').text()).toContain("Next: Chapter 2");
+    await key("PageDown");
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5002");
+  });
+
+  it("scrolls with the keys and jumps with the slider and Home/End", async () => {
+    useReaderStore().mode = "webtoon";
+    await mountReader();
+
+    await key("PageDown");
+    expect(stripEl().scrollTop).toBe(810);
+    await key("ArrowDown");
+    expect(stripEl().scrollTop).toBe(945);
+    await key("ArrowLeft"); // nothing in the strip
+    expect(stripEl().scrollTop).toBe(945);
+
+    // scrolling hid the toolbar
+    await key("m");
+    const slider = wrapper.find('[data-testid="page-slider"]');
+    await slider.setValue("8");
+    await slider.trigger("input");
+    await flushPromises();
+    expect(stripEl().scrollTop).toBe(7 * 1200);
+    expect(position()).toBe("7");
+
+    await key("End");
+    expect(stripEl().scrollTop).toBe(9 * 1200);
+    await key("Home");
+    expect(stripEl().scrollTop).toBe(0);
+    // at the top of the first chapter, a step back goes nowhere
+    await key("PageUp");
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
+  });
+
+  it("keeps the toolbar up while the slider seeks, and hides it on a user scroll", async () => {
+    useReaderStore().mode = "webtoon";
+    await mountReader();
+    const bottom = () => wrapper.find('[data-testid="reader-bottom"]');
+    expect(bottom().exists()).toBe(true);
+
+    const slider = wrapper.find('[data-testid="page-slider"]');
+    for (const value of ["3", "5", "8"]) {
+      await slider.setValue(value);
+      // the browser's scroll event for the strip's own scroll
+      stripEl().dispatchEvent(new Event("scroll"));
+      await flushPromises();
+    }
+    expect(stripEl().scrollTop).toBe(7 * 1200);
+    expect(position()).toBe("7");
+    expect(bottom().exists()).toBe(true);
+
+    await scrollTo(7 * 1200 + 300);
+    expect(bottom().exists()).toBe(false);
+  });
+
+  it("opens the previous chapter at its last page from the top of the strip", async () => {
+    useReaderStore().mode = "webtoon";
+    await mountReader(5002);
+    expect(stripEl().scrollTop).toBe(240); // page 1 below the "Previous" panel
+
+    await scrollTo(0);
+    expect(position()).toBe("-1");
+    await key("PageUp");
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
+    expect(pageQuery()).toBe("last");
+  });
+
+  it("loads the pages around the viewport and releases the ones it leaves", async () => {
+    chapters[0] = { ...chapters[0]!, pageCount: 40 };
+    useReaderStore().mode = "webtoon";
+    await mountReader();
+    expect(wrapper.findAll('[data-testid="page-image"]').map((i) => i.attributes("alt"))).toEqual([
+      "Page 1",
+      "Page 2",
+      "Page 3",
+    ]);
+
+    await scrollTo(30 * 1200);
+    await flushPromises();
+    const loaded = wrapper.findAll('[data-testid="page-image"]').map((i) => i.attributes("alt"));
+    expect(loaded).toEqual(["Page 30", "Page 31", "Page 32", "Page 33"]);
+    expect(assetCalls.some((c) => c.path.endsWith("/page/32"))).toBe(true);
+    // every page loaded before was released
+    expect(vi.mocked(URL.revokeObjectURL).mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("leaves the wheel to the strip", async () => {
+    useReaderStore().mode = "webtoon";
+    await mountReader();
+    const wheel = new WheelEvent("wheel", { deltaY: 120, cancelable: true, bubbles: true });
+    stripEl().dispatchEvent(wheel);
+    await flushPromises();
+    expect(wheel.defaultPrevented).toBe(false);
+    expect(position()).toBe("0");
+  });
+});
