@@ -99,6 +99,21 @@ describe("useReadingProgress", () => {
     expect(save).toHaveBeenCalledWith(5001, { lastPageRead: 9 });
   });
 
+  it("marks the chapter read on reaching the end panel past its last page (a webtoon fling)", async () => {
+    const { position } = setup(list[0]!, 10, 6);
+    await go(position, 10);
+    await flushPromises();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(5001, { lastPageRead: 9, isRead: true });
+    await go(position, 9);
+    await go(position, 10);
+    vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS);
+    // the last page again is saved as a page; the mark isn't sent twice
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenLastCalledWith(5001, { lastPageRead: 9 });
+  });
+
   it("writes what is pending when the chapter changes or the reader closes", async () => {
     const { position, current } = setup(list[0]!);
     await go(position, 4);

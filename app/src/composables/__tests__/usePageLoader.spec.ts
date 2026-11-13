@@ -5,12 +5,13 @@ import { QueryClient } from "@tanstack/vue-query";
 import { flushPromises } from "@vue/test-utils";
 
 import { ApiError } from "../../api/client";
-import { usePageLoader, type PageFetcher } from "../usePageLoader";
+import { usePageLoader, type PageFetcher, type PageSize } from "../usePageLoader";
 import { withSetup } from "../../test/withSetup";
 
 /*
  * The reader's page loader (Phase 5 Stage 2) over a scripted fetcher: at most 4 requests at a time, the current page
- * first, pages leaving the window aborted and their object URLs revoked, and a retry past the cache.
+ * first, pages leaving the window aborted and their object URLs revoked, and a retry past the cache. Stage 3: a
+ * window given by the webtoon strip, decoding before a page counts as loaded, and the sizes kept for the chapter.
  */
 interface Call {
   route: string;
@@ -201,5 +202,96 @@ describe("usePageLoader", () => {
 
     expect(revoked).toHaveLength(2);
     expect(calls.filter((c) => c.signal.aborted).length).toBeGreaterThan(0);
+  });
+});
+
+describe("usePageLoader with the webtoon strip's window (Stage 3)", () => {
+  let decodes: { url: string; resolve: (s: PageSize | null) => void }[];
+
+  function setupStrip(pageCount: number, wanted: number[] | null) {
+    decodes = [];
+    const pages = ref(routes(pageCount));
+    const position = ref(0);
+    const window = ref<number[] | null>(wanted);
+    const s = withSetup(
+      () =>
+        usePageLoader({
+          pages,
+          position,
+          wanted: window,
+          fetcher,
+          createUrl: (b) => `blob:${b.size}:${Math.random()}`,
+          revokeUrl: (u) => revoked.push(u),
+          decode: (url) =>
+            new Promise<PageSize | null>((resolve) => decodes.push({ url, resolve })),
+        }),
+      { pinia: createPinia(), queryClient: new QueryClient() },
+    );
+    unmount = s.unmount;
+    return { loader: s.result, window, position, pages };
+  }
+
+  it("loads the window it is given, in its order, still 4 at a time", async () => {
+    const { window, position } = setupStrip(20, [7, 8, 9, 10, 11, 6]);
+    expect(calls.map(index)).toEqual([7, 8, 9, 10]);
+
+    position.value = 15; // the paged position doesn't count while a window is given
+    await nextTick();
+    expect(open().map(index)).toEqual([7, 8, 9, 10]);
+
+    window.value = null; // back to ±N of the position
+    await nextTick();
+    await flushPromises();
+    expect(open().map(index)).toEqual([15, 16, 17, 18]);
+  });
+
+  it("counts a page as loaded once it is decoded, and keeps its size after it is released", async () => {
+    const { loader, window } = setupStrip(10, [0, 1]);
+    await settle(calls[0]!);
+    expect(loader.state(0)).toEqual({ status: "loading" });
+    expect(decodes).toHaveLength(1);
+
+    decodes[0]!.resolve({ width: 800, height: 1280 });
+    await flushPromises();
+    expect(loader.state(0)).toMatchObject({ status: "loaded", url: decodes[0]!.url });
+    expect(loader.size(0)).toEqual({ width: 800, height: 1280 });
+
+    window.value = [5];
+    await nextTick();
+    await flushPromises();
+    expect(loader.state(0)).toBeUndefined();
+    expect(revoked).toContain(decodes[0]!.url);
+    expect(loader.size(0)).toEqual({ width: 800, height: 1280 });
+  });
+
+  it("revokes a page that leaves the window while it decodes, and forgets sizes for another chapter", async () => {
+    const { loader, window, pages } = setupStrip(10, [0, 1]);
+    await settle(calls[0]!);
+    window.value = [6];
+    await nextTick();
+    decodes[0]!.resolve({ width: 800, height: 900 });
+    await flushPromises();
+    expect(revoked).toEqual([decodes[0]!.url]);
+    expect(loader.state(0)).toBeUndefined();
+    expect(loader.size(0)).toBeUndefined();
+
+    const six = calls.find((c) => index(c) === 6)!;
+    await settle(six);
+    decodes[1]!.resolve({ width: 800, height: 2400 });
+    await flushPromises();
+    expect(loader.size(6)).toEqual({ width: 800, height: 2400 });
+
+    pages.value = routes(10).map((r) => r.replace("chapter/1", "chapter/2"));
+    await nextTick();
+    expect(loader.size(6)).toBeUndefined();
+  });
+
+  it("shows a page that can't be measured anyway", async () => {
+    const { loader } = setupStrip(3, [0]);
+    await settle(calls[0]!);
+    decodes[0]!.resolve(null);
+    await flushPromises();
+    expect(loader.state(0)).toMatchObject({ status: "loaded" });
+    expect(loader.size(0)).toBeUndefined();
   });
 });

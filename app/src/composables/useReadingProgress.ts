@@ -11,6 +11,9 @@ import { writeChapters } from "./useEntries";
  * the reader moves to another chapter, when it closes, and when the window goes away. Each saved chapter replaces
  * its row in the manga's cached chapter list, so the details page shows it without a refetch. A save that fails (the
  * backend restarting) is tried again after `RETRY_MS`, a read mark included, until one works.
+ *
+ * Stage 3: reaching the end panel marks the chapter read too, with its last page, if showing the last page didn't
+ * (a fling down the webtoon strip, or End, can pass the last page between two scroll events).
  */
 
 export const PROGRESS_DEBOUNCE_MS = 1000;
@@ -84,16 +87,18 @@ export function useReadingProgress(opts: ReadingProgressOptions) {
     (position) => {
       const chapter = toValue(opts.chapter);
       const count = toValue(opts.pageCount);
-      if (!chapter || position === null || position < 0 || position >= count) return;
+      if (!chapter || position === null || position < 0 || count <= 0 || position > count) return;
       if (pending && pending.id !== chapter.id) flush();
-      if (position === count - 1 && !chapter.isRead && !markedRead.has(chapter.id)) {
+      if (position >= count - 1 && !chapter.isRead && !markedRead.has(chapter.id)) {
         markedRead.add(chapter.id);
         if (timer) clearTimeout(timer);
         timer = null;
         pending = null;
-        send(chapter.id, { lastPageRead: position, isRead: true });
+        send(chapter.id, { lastPageRead: count - 1, isRead: true });
         return;
       }
+      // The end panel itself isn't a page to save.
+      if (position === count) return;
       const keepRead = pending?.id === chapter.id && pending.isRead;
       pending = { id: chapter.id, page: position, ...(keepRead ? { isRead: true } : {}) };
       schedule(delay);
