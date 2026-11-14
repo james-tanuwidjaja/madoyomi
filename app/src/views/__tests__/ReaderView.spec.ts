@@ -669,13 +669,28 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
     expect(ops.updateChapter).toHaveBeenCalledWith(5001, { lastPageRead: 8, isRead: true });
   });
 
-  it("writes the spread's last page as the place to resume", async () => {
+  it("writes the spread's last page as the place to resume once the reader has moved", async () => {
     useReaderStore().prefs.mode = "double";
     await mountReader(5001, "?page=4");
     expect(shown()).toBe("3,4");
+    await key("ArrowLeft");
+    await key("ArrowRight");
+    expect(shown()).toBe("3,4");
     wrapper.unmount();
-    expect(ops.updateChapter).toHaveBeenCalledWith(5001, { lastPageRead: 4 });
+    expect(ops.updateChapter).toHaveBeenLastCalledWith(5001, { lastPageRead: 4 });
     wrapper = undefined as unknown as VueWrapper;
+  });
+
+  it("saves the page it opened on until the reader moves, so a reopen doesn't move the place (Stage 6)", async () => {
+    // left at page 4 (index 3) when page 1 was paired with 2 (Shift): now 3 opens as the first of the spread 3-4
+    chapters[0] = { ...chapters[0]!, lastPageRead: 3 };
+    useReaderStore().prefs.mode = "double";
+    await mountReader();
+    expect(shown()).toBe("3,4");
+    wrapper.unmount();
+    wrapper = undefined as unknown as VueWrapper;
+    expect(ops.updateChapter).not.toHaveBeenCalledWith(5001, { lastPageRead: 4 });
+    expect(ops.updateChapter).toHaveBeenCalledWith(5001, { lastPageRead: 3 });
   });
 
   it("keeps the page when switching to and from the single-page mode", async () => {
@@ -918,6 +933,22 @@ describe("ReaderView, the webtoon strip's wheel past its ends (Stage 4)", () => 
     expect(stripEl().scrollTop).toBe(240);
   });
 
+  it("shows the next chapter's first page held ahead in the new strip, without fetching it again (Stage 6)", async () => {
+    useReaderStore().prefs.mode = "webtoon";
+    await mountReader();
+    await wheelAt(1000, 100);
+    await scrollTo(12000);
+    const first = "/api/v1/manga/34/chapter/2/page/0";
+    expect(assetCalls.filter((c) => c.path === first)).toHaveLength(1);
+
+    await wheelAt(1600, 100);
+    await follow();
+    await flushPromises();
+    expect(position()).toBe("0");
+    expect(wrapper.find('[data-testid="page-image"]').attributes("alt")).toBe("Page 1");
+    expect(assetCalls.filter((c) => c.path === first)).toHaveLength(1);
+  });
+
   it("goes back into the previous chapter on a wheel gesture up at the top", async () => {
     useReaderStore().prefs.mode = "webtoon";
     await mountReader(5002);
@@ -1155,6 +1186,19 @@ describe("ReaderView page fit (Stage 5)", () => {
     expect(position()).toBe("1");
   });
 
+  it("goes back to the start view when the fit changes after a pan (Stage 6)", async () => {
+    useReaderStore().set({ fit: "width" });
+    await mountReader();
+    await key(" ");
+    expect(layer()).toContain("translate(0px, -280px)");
+
+    useReaderStore().set({ fit: "screen" });
+    await flushPromises();
+    expect(paged().attributes("data-fit")).toBe("screen");
+    // the whole page again: no transform (the start view of a page that fits is the fit itself)
+    expect(layer()).not.toContain("translate");
+  });
+
   it("keeps Stage 2's whole page with fit screen", async () => {
     await mountReader();
     expect(paged().attributes("data-fit")).toBe("screen");
@@ -1196,5 +1240,56 @@ describe("ReaderView strip width (Stage 5)", () => {
     expect((wrapper.find('[data-testid="webtoon-reader"]').element as HTMLElement).scrollTop).toBe(
       4 * 1500,
     );
+  });
+});
+
+describe("ReaderView, the neighbours' opening pages held ahead (Stage 6)", () => {
+  const callsFor = (path: string) => assetCalls.filter((c) => c.path === path).length;
+
+  it("loads the next chapter's first pages once its list is in, and shows its first page in the first render", async () => {
+    await mountReader(5001, "?page=5");
+    await key("ArrowLeft"); // page 6: near the end, the next chapter's list is fetched ahead
+    await flushPromises();
+    expect(callsFor("/api/v1/manga/34/chapter/2/page/0")).toBe(1);
+    expect(callsFor("/api/v1/manga/34/chapter/2/page/1")).toBe(1);
+
+    await key("End");
+    await key("ArrowLeft");
+    await key("ArrowLeft");
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5002");
+    await follow();
+    // no flush: the page held ahead is the new chapter's loaded page at once
+    expect(wrapper.find('[data-testid="page-image"]').attributes("alt")).toBe("Page 1");
+    await flushPromises();
+    expect(callsFor("/api/v1/manga/34/chapter/2/page/0")).toBe(1);
+  });
+
+  it("loads the previous chapter's last pages on its panel, and shows its last page in the first render", async () => {
+    await mountReader(5002);
+    await key("ArrowRight"); // the "Previous chapter" panel
+    await flushPromises();
+    expect(callsFor("/api/v1/manga/34/chapter/1/page/9")).toBe(1);
+    expect(callsFor("/api/v1/manga/34/chapter/1/page/8")).toBe(1);
+
+    await key("ArrowRight");
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
+    await follow();
+    expect(position()).toBe("9");
+    expect(wrapper.find('[data-testid="page-image"]').attributes("alt")).toBe("Page 10");
+    await flushPromises();
+    expect(callsFor("/api/v1/manga/34/chapter/1/page/9")).toBe(1);
+  });
+
+  it("holds nothing before the end, and the next chapter's opening page where reading stopped in it", async () => {
+    chapters = chapters.map((c) => (c.id === 5002 ? { ...c, isRead: false, lastPageRead: 4 } : c));
+    await mountReader(5001);
+    await flushPromises();
+    expect(assetCalls.some((c) => c.path.includes("/chapter/2/"))).toBe(false);
+
+    await key("End");
+    await flushPromises();
+    expect(callsFor("/api/v1/manga/34/chapter/2/page/4")).toBe(1);
+    expect(callsFor("/api/v1/manga/34/chapter/2/page/5")).toBe(1);
+    expect(callsFor("/api/v1/manga/34/chapter/2/page/0")).toBe(0);
   });
 });

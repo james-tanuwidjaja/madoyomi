@@ -331,3 +331,110 @@ describe("usePageLoader: the preload count (Stage 5)", () => {
     expect(s.result.state(2)).toMatchObject({ status: "loaded" });
   });
 });
+
+describe("usePageLoader: the neighbours' opening pages held ahead (Stage 6)", () => {
+  const next = (i: number) => `/api/v1/manga/34/chapter/2/page/${i}`;
+
+  function setupHeld(pageCount: number, wanted: number[], heldRoutes: string[]) {
+    const pages = ref(routes(pageCount));
+    const window = ref<number[] | null>(wanted);
+    const heldList = ref(heldRoutes);
+    const s = withSetup(
+      () =>
+        usePageLoader({
+          pages,
+          position: 0,
+          wanted: window,
+          held: heldList,
+          fetcher,
+          createUrl: (b) => `blob:${b.size}:${Math.random()}`,
+          revokeUrl: (u) => revoked.push(u),
+          decode: async () => ({ width: 800, height: 1500 }),
+        }),
+      { pinia: createPinia(), queryClient: new QueryClient() },
+    );
+    unmount = s.unmount;
+    return { loader: s.result, pages, window, heldList };
+  }
+
+  it("waits until every page of the window has its request, and uses only free requests", async () => {
+    setupHeld(10, [5, 6, 7, 8, 9], [next(0), next(1)]);
+    expect(calls.map((c) => c.route)).toEqual(routes(10).slice(5, 9));
+
+    await settle(calls[0]!); // page 9 gets the free request first
+    expect(calls.map((c) => c.route).slice(4)).toEqual([routes(10)[9]]);
+
+    await settle(calls[1]!); // the window has its requests: the next chapter's first page
+    expect(calls.map((c) => c.route).slice(5)).toEqual([next(0)]);
+    await settle(calls[2]!);
+    expect(calls.map((c) => c.route).slice(5)).toEqual([next(0), next(1)]);
+    expect(open().length).toBeLessThanOrEqual(4);
+  });
+
+  it("gives a held page's request to a page of the window that needs one", async () => {
+    const { window } = setupHeld(10, [0], [next(0), next(1), next(2), next(3)]);
+    await settle(calls[0]!);
+    expect(open().map((c) => c.route)).toEqual([next(0), next(1), next(2), next(3)]);
+
+    window.value = [1];
+    await nextTick();
+    await flushPromises();
+    expect(open().map((c) => c.route)).toContain(routes(10)[1]);
+    expect(open()).toHaveLength(4);
+  });
+
+  it("takes a held page over, with its size, when the next chapter's list holds it", async () => {
+    const { loader, pages, window } = setupHeld(3, [0], [next(0)]);
+    await settle(calls[0]!);
+    const held = calls.find((c) => c.route === next(0))!;
+    await settle(held, 7);
+    const fetched = calls.length;
+
+    window.value = [0, 1];
+    pages.value = [next(0), next(1), next(2)];
+    await nextTick();
+    await flushPromises();
+    expect(loader.state(0)).toMatchObject({
+      status: "loaded",
+      url: expect.stringMatching(/^blob:7:/),
+    });
+    expect(loader.size(0)).toEqual({ width: 800, height: 1500 });
+    expect(calls.slice(fetched).map((c) => c.route)).toEqual([next(1)]);
+    expect(revoked.some((u) => u.startsWith("blob:7:"))).toBe(false);
+  });
+
+  it("drops and revokes a held page that isn't held any more, and every held page on close", async () => {
+    const { heldList } = setupHeld(2, [0], [next(0), next(1)]);
+    await settle(calls[0]!);
+    await settle(
+      calls.find((c) => c.route === next(0))!,
+      5,
+    );
+    await settle(
+      calls.find((c) => c.route === next(1))!,
+      6,
+    );
+
+    heldList.value = [next(1)];
+    await nextTick();
+    await flushPromises();
+    expect(revoked.filter((u) => u.startsWith("blob:5:"))).toHaveLength(1);
+
+    unmount();
+    unmount = () => {};
+    expect(revoked.filter((u) => u.startsWith("blob:6:"))).toHaveLength(1);
+  });
+
+  it("forgets a held page that failed: the chapter's own loader asks for it", async () => {
+    const { loader, pages } = setupHeld(1, [0], [next(0)]);
+    await settle(calls[0]!);
+    calls.find((c) => c.route === next(0))!.reject(new Error("offline"));
+    await flushPromises();
+
+    pages.value = [next(0)];
+    await nextTick();
+    await flushPromises();
+    expect(loader.state(0)).toEqual({ status: "loading" });
+    expect(calls.filter((c) => c.route === next(0))).toHaveLength(2);
+  });
+});

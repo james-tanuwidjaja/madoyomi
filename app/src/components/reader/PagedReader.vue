@@ -42,6 +42,8 @@ import PageFailure from "./PageFailure.vue";
  * of it), the window's height, or the page's own size. A page bigger than the window starts at its top, on the
  * reading direction's side, and pans at 1× (`scrollable`): a drag, and the reader's wheel and keys through
  * `scrollPage` and `pan`, before they turn the page. Zoom scales the fitted page; "back to fit" is that start view.
+ *
+ * Stage 6: a new fit or direction goes back to the start view, even after a pan or a zoom.
  */
 const props = defineProps<{
   position: number;
@@ -270,6 +272,14 @@ watch(
     cancelMenu();
     fresh = true;
     zoom.value = FIT;
+  },
+);
+// A new page fit or direction is a new view (Stage 6): back to its start even after a pan or a zoom (live, a pan
+// kept from the original size left a fitted spread off-centre and cut off).
+watch(
+  () => `${props.fit}:${props.direction}`,
+  () => {
+    fresh = true;
   },
 );
 // Once the DOM has the new view, a page loaded or the fit changed: a view not touched since goes to its start.
