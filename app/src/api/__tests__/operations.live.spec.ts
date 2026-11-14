@@ -460,6 +460,73 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
   // The reader's image pipeline (Phase 5 Stage 1): a manga chapter's page routes, the first page through the backend
   // (the source's headers, then the cache), a prefetch of the next pages, and a page past the end as NOT_FOUND.
   // MangaPill when installed, else the first usable manga source with a Popular entry and chapters.
+  // Phase 5 Stage 5: a manga's own reader settings live in its meta (upstream's setMangaMeta, strings only).
+  it("keeps a manga's reader settings in its meta, gives them back with its source's name, and removes them", async (ctx) => {
+    const list = (
+      await client.gql<{ sources: { nodes: SourceBase[] } }>(operations.MANGA_SOURCES_QUERY)
+    ).sources.nodes;
+    const usable = list
+      .filter((s) => s.id !== "0" && s.extension.isTrusted && s.extension.isLoaded)
+      .sort((a, b) => Number(b.name === "MangaPill") - Number(a.name === "MangaPill"));
+    if (usable.length === 0) return ctx.skip();
+    const s = usable[0];
+    const input = { source: s.id, type: "POPULAR", page: 1, query: null, filters: null };
+    const mangas = (
+      await client.gql<{ fetchSourceManga: { mangas: { id: number }[] } }>(
+        operations.BROWSE_MANGA_MUTATION,
+        { input },
+      )
+    ).fetchSourceManga.mangas;
+    expect(mangas.length).toBeGreaterThan(0);
+    const mangaId = mangas[0].id;
+    type Meta = {
+      manga: {
+        id: number;
+        meta: { key: string; value: string }[];
+        source: { name: string } | null;
+      };
+    };
+    const read = async () =>
+      (await client.gql<Meta>(operations.MANGA_READER_META_QUERY, { id: mangaId })).manga;
+    const ours = (m: Meta["manga"]) =>
+      m.meta
+        .filter((x) => x.key.startsWith("madoyomi.reader."))
+        .sort((a, b) => (a.key < b.key ? -1 : 1));
+
+    const before = await read();
+    expect(before.id).toBe(mangaId);
+    expect(before.source?.name).toBe(s.name);
+    for (const [key, value] of [
+      ["madoyomi.reader.mode", "webtoon"],
+      ["madoyomi.reader.direction", "ltr"],
+      ["madoyomi.reader.mode", "double"],
+    ]) {
+      const r = await client.gql<{ setMangaMeta: { meta: { key: string; value: string } } }>(
+        operations.SET_MANGA_META_MUTATION,
+        { mangaId, key, value },
+      );
+      expect(r.setMangaMeta.meta).toEqual({ key, value });
+    }
+    // one value per key: the second mode replaced the first
+    expect(ours(await read())).toEqual([
+      { key: "madoyomi.reader.direction", value: "ltr" },
+      { key: "madoyomi.reader.mode", value: "double" },
+    ]);
+
+    for (const key of ["madoyomi.reader.mode", "madoyomi.reader.direction"]) {
+      await client.gql(operations.DELETE_MANGA_META_MUTATION, { mangaId, key });
+    }
+    // removing a key it hasn't got is no error
+    await client.gql(operations.DELETE_MANGA_META_MUTATION, {
+      mangaId,
+      key: "madoyomi.reader.mode",
+    });
+    expect(ours(await read())).toEqual([]);
+    console.info(
+      `[live] manga meta round trip on ${s.name} manga ${mangaId}: set, replaced, read and removed`,
+    );
+  });
+
   it("reads a chapter's pages through the backend, prefetches the next ones and serves them from the cache", async (ctx) => {
     const list = (
       await client.gql<{ sources: { nodes: SourceBase[] } }>(operations.MANGA_SOURCES_QUERY)

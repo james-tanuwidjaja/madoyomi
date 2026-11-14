@@ -17,6 +17,7 @@ import {
   stripLayout,
   stripPagesToLoad,
   stripWidth,
+  stripWindow,
   topAnchor,
   webtoonKeyAction,
   type PageSize,
@@ -245,5 +246,15 @@ describe("createEdgeWheel (the wheel past the strip's ends, Stage 4)", () => {
     expect(w.push(-20, 0, 0)).toBe(0);
     expect(w.push(30, 10, 1)).toBe(0);
     expect(w.push(30, 20, 1)).toBe(0);
+  });
+});
+
+describe("stripWindow and the preload count (Stage 5)", () => {
+  it("keeps Stage 3's window at the default 4, and more pages past the viewport for a higher count", () => {
+    expect(stripWindow(900)).toEqual({ behind: 900, ahead: 1800, minAhead: 2, max: 16 });
+    expect(stripWindow(900, 4)).toEqual(stripWindow(900));
+    expect(stripWindow(900, 2).minAhead).toBe(2);
+    expect(stripWindow(900, 8)).toEqual({ behind: 900, ahead: 1800, minAhead: 6, max: 16 });
+    expect(stripWindow(900, 12)).toEqual({ behind: 900, ahead: 1800, minAhead: 10, max: 16 });
   });
 });

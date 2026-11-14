@@ -1,48 +1,70 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
-import type { ReadingDirection } from "../utils/pagedNav";
+import { reactive, ref, watch } from "vue";
+import {
+  DEFAULT_READER_PREFS,
+  parseReaderPrefs,
+  type ReaderMode,
+  type ReaderPrefs,
+} from "../utils/readerSettings";
 
-/** The reader's modes: one page at a time, two side by side (Stage 4), or the vertical strip (Stage 3). */
-export type ReaderMode = "paged" | "double" | "webtoon";
+export { READER_MODES, type ReaderMode } from "../utils/readerSettings";
 
-export const READER_MODES: readonly ReaderMode[] = ["paged", "double", "webtoon"];
+/** `localStorage` key of the reader's global settings (one JSON object, read field by field). */
+export const READER_PREFS_KEY = "madoyomi.reader";
+
+function stored(): ReaderPrefs {
+  try {
+    return parseReaderPrefs(JSON.parse(localStorage.getItem(READER_PREFS_KEY) ?? "null"));
+  } catch {
+    return { ...DEFAULT_READER_PREFS };
+  }
+}
 
 /**
- * The reader's choices for this app session (Phase 5 Stages 2–4), from the toolbar: the mode (paged by default;
- * Stage 5 applies the default by genre, phase-5 §8), the reading direction of the paged and double-page modes (right
- * to left by default, Mihon's), the double-page "shift by one" (off: the first page alone) and the webtoon page gap
- * (off by default). Stage 5 keeps them on this device and per manga.
+ * The reader's global settings (Phase 5 Stage 5), kept on this device like the theme: the default mode and direction
+ * (a manga's own, in its meta, come first: `useMangaReaderSettings`), the page fit of the paged modes, the strip's
+ * width, the page gap, the background and the preload count. A value that isn't known reads as its default
+ * (utils/readerSettings.ts). The double-page "shift by one" (Stage 4) stays a switch for the app session: it is about
+ * how a chapter's spreads fall, not a preference.
  */
 export const useReaderStore = defineStore("reader", () => {
-  const mode = ref<ReaderMode>("paged");
-  const direction = ref<ReadingDirection>("rtl");
-  const pageGap = ref(false);
+  const prefs = reactive<ReaderPrefs>(stored());
   const shift = ref(false);
 
-  function setMode(m: ReaderMode) {
-    mode.value = m;
+  watch(
+    prefs,
+    (p) => {
+      try {
+        localStorage.setItem(READER_PREFS_KEY, JSON.stringify(p));
+      } catch {
+        // storage full or disabled: kept for this session
+      }
+    },
+    { deep: true, flush: "sync" },
+  );
+
+  /** Changes the given settings; values that aren't known are ignored. */
+  function set(patch: Partial<ReaderPrefs>) {
+    const next = parseReaderPrefs({ ...prefs, ...patch });
+    Object.assign(prefs, next);
   }
 
-  function toggleDirection() {
-    direction.value = direction.value === "rtl" ? "ltr" : "rtl";
+  function setMode(m: ReaderMode) {
+    set({ mode: m });
   }
 
   function togglePageGap() {
-    pageGap.value = !pageGap.value;
+    prefs.pageGap = !prefs.pageGap;
   }
 
   function toggleShift() {
     shift.value = !shift.value;
   }
 
-  return {
-    mode,
-    direction,
-    pageGap,
-    shift,
-    setMode,
-    toggleDirection,
-    togglePageGap,
-    toggleShift,
-  };
+  /** Every global setting back to its default. */
+  function reset() {
+    Object.assign(prefs, DEFAULT_READER_PREFS);
+  }
+
+  return { prefs, shift, set, setMode, togglePageGap, toggleShift, reset };
 });

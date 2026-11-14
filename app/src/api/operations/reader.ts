@@ -1,6 +1,7 @@
 import { api } from "../client";
 import type {
   ChapterPages,
+  MangaReaderMeta,
   PageCache,
   PrefetchResult,
   ReaderSettings,
@@ -11,7 +12,9 @@ import { CHAPTER_FIELDS } from "./entries";
 /*
  * The manga reader's backend (Phase 5): a chapter's pages (upstream's `fetchChapterPages`, which fetches the page list
  * from the source each time), the prefetch that warms the page cache, and the reader settings the backend applies
- * (the page cache's cap, Settings → Reader), with what the cache holds and Clear.
+ * (the page cache's cap, Settings → Reader), with what the cache holds and Clear. Stage 5: a manga's own reader settings
+ * in its meta (upstream's `manga { meta }`, `setMangaMeta` and `deleteMangaMeta`; strings only), with its source's
+ * name for the default mode by content.
  */
 
 export const FETCH_CHAPTER_PAGES_MUTATION = /* GraphQL */ `
@@ -138,4 +141,69 @@ export async function fetchPageCache(signal?: AbortSignal): Promise<PageCache> {
 export async function clearPageCache(): Promise<PageCache> {
   return (await api.gql<{ clearPageCache: { cache: PageCache } }>(CLEAR_PAGE_CACHE_MUTATION))
     .clearPageCache.cache;
+}
+
+export const MANGA_READER_META_QUERY = /* GraphQL */ `
+  query MangaReaderMeta($id: Int!) {
+    manga(id: $id) {
+      id
+      meta {
+        key
+        value
+      }
+      source {
+        id
+        name
+      }
+    }
+  }
+`;
+
+export const SET_MANGA_META_MUTATION = /* GraphQL */ `
+  mutation SetMangaMeta($mangaId: Int!, $key: String!, $value: String!) {
+    setMangaMeta(input: { meta: { mangaId: $mangaId, key: $key, value: $value } }) {
+      meta {
+        key
+        value
+      }
+    }
+  }
+`;
+
+export const DELETE_MANGA_META_MUTATION = /* GraphQL */ `
+  mutation DeleteMangaMeta($mangaId: Int!, $key: String!) {
+    deleteMangaMeta(input: { mangaId: $mangaId, key: $key }) {
+      meta {
+        key
+        value
+      }
+    }
+  }
+`;
+
+/** A manga's meta (every key, the reader picks its own) and its source's name (null when it isn't installed). */
+export async function fetchMangaReaderMeta(
+  mangaId: number,
+  signal?: AbortSignal,
+): Promise<MangaReaderMeta> {
+  const m = (
+    await api.gql<{
+      manga: {
+        id: number;
+        meta: { key: string; value: string }[];
+        source: { id: string; name: string } | null;
+      };
+    }>(MANGA_READER_META_QUERY, { id: mangaId }, { signal })
+  ).manga;
+  return { mangaId: m.id, meta: m.meta, sourceName: m.source?.name ?? null };
+}
+
+/** Sets one meta value of a manga (a string; upstream keeps one value per key). */
+export async function setMangaMeta(mangaId: number, key: string, value: string): Promise<void> {
+  await api.gql(SET_MANGA_META_MUTATION, { mangaId, key, value });
+}
+
+/** Removes one meta value of a manga (nothing happens when it has none). */
+export async function deleteMangaMeta(mangaId: number, key: string): Promise<void> {
+  await api.gql(DELETE_MANGA_META_MUTATION, { mangaId, key });
 }

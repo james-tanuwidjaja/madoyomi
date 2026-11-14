@@ -679,6 +679,13 @@ export interface ReaderSettings {
   pageCacheLimitMb: number;
 }
 
+/** A manga's meta and its source's name (`MANGA_READER_META_QUERY`), for its own reader settings (Phase 5 Stage 5). */
+export interface MangaReaderMeta {
+  mangaId: number;
+  meta: { key: string; value: string }[];
+  sourceName: string | null;
+}
+
 /** `ReaderSettingsPatch`: only the fields given change. */
 export type ReaderSettingsPatch = Partial<ReaderSettings>;
 

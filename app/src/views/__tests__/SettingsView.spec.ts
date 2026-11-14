@@ -379,3 +379,36 @@ describe("SettingsView: Reader (Phase 5 Stage 1)", () => {
     );
   });
 });
+
+describe("SettingsView: Reader settings on this device (Phase 5 Stage 5)", () => {
+  it("shows the reader's global settings with their defaults, and keeps a change", async () => {
+    await mountSettings();
+    const prefs = wrapper.find('[data-testid="reader-prefs-card"]');
+    expect(prefs.exists()).toBe(true);
+    const value = (p: string) => prefs.find<HTMLSelectElement>(`[data-pref="${p}"]`).element.value;
+    expect(["mode", "direction", "fit", "stripWidth", "background", "preload"].map(value)).toEqual([
+      "paged",
+      "rtl",
+      "screen",
+      "800",
+      "dark",
+      "4",
+    ]);
+    expect(
+      prefs
+        .find('[data-pref="fit"]')
+        .findAll("option")
+        .map((o) => o.text()),
+    ).toEqual(["Fit screen", "Fit width", "Fit height", "Original size"]);
+
+    await prefs.find('[data-pref="mode"]').setValue("webtoon");
+    await prefs.find('[data-pref="stripWidth"]').setValue("0");
+    expect(JSON.parse(localStorage.getItem("madoyomi.reader")!)).toMatchObject({
+      mode: "webtoon",
+      stripWidth: 0,
+    });
+    expect(prefs.find('[data-pref="stripWidth"] option:checked').text()).toBe("Window width");
+    // the backend's cache settings are still beside them
+    expect(wrapper.find('[data-testid="cache-limit-select"]').exists()).toBe(true);
+  });
+});

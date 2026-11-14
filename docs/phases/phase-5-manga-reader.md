@@ -17,7 +17,7 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 - DB: `chapter_progress` (last page, read flag, updated at). **Settled in Stage 1:** upstream's `CHAPTER_USER` already has `last_page_read`, `is_read` and `last_read_at`, so there is no new table.
 - API: `PUT /api/chapters/{id}/progress`, `POST /api/chapters/{id}/prefetch`. **Settled in Stage 1:** progress goes through upstream's `updateChapter(s)` (Stage 2), and the prefetch is the GraphQL mutation `prefetchChapterPages`, with `readerSettings`, `setReaderSettings`, `pageCache` and `clearPageCache`.
 - UI `app/src/views/ReaderView.vue` + `app/src/components/reader/`: `PagedReader`, `WebtoonReader`, `DoublePageReader`, `ReaderToolbar`, `ReaderSettings`. **Settled in Stage 4:** there is no `DoublePageReader`. `PagedReader` shows a view of one page or two (the pairing is in `utils/doublePage.ts`), so the zoom, the click zones, the failed page and the panels stay in one place (§9).
-- Reader settings: default mode (global and per manga), reading direction, fit (width/height/original), background color, page gap (webtoon), preload count.
+- Reader settings: default mode (global and per manga), reading direction, fit (width/height/original), background color, page gap (webtoon), preload count. **Settled in Stage 5:** the mode and the direction per manga, in the manga's meta (upstream's `setMangaMeta`); the rest, and the defaults of those two, on this device (`stores/reader.ts`). The fits are fit screen (the default), fit width, fit height and original size; in the strip, its width. `ReaderSettings` is the toolbar's settings sheet, and the global fields are in Settings → Reader too (§9).
 
 ## 4. Detailed steps
 
@@ -67,7 +67,7 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 ### Controls & settings
 - [x] Keyboard, mouse wheel, click zones (Stage 2: `utils/pagedNav.ts`, unit-tested for both directions; live: clicks, ←/→, Space, Page Down, Home/End, F, Esc, M and the wheel, §10)
 - [x] Toolbar (slider, mode switch, prev/next, fullscreen) (Stage 2: all but the mode switch; Stage 3: "Paged"/"Webtoon" for the session, keeping the page, and "Page gap" in the webtoon mode; Stage 4: the three modes as a segmented control (Single, Double, Webtoon), "Shift" in the double mode, a spread's label ("4–5 / 92"), and buttons that leave the focus on the reader after a mouse click; live, §10)
-- [ ] Reader settings (global + per manga)
+- [x] Reader settings (global + per manga) (Stage 5: the mode and the direction per manga in its meta, which the toolbar's switches set; the default mode by genre or a webtoon source's name; on this device the defaults, the page fit, the strip width, the page gap, the background and the preload count. Set in the `ReaderSettings` sheet and Settings → Reader. Unit tests for the resolution and the parsing, the store, the meta through the composable and the live spec, and the sheet; live: a global change reaching a manga with none, a manga's mode and direction kept after a reopen and an app restart, webtoon by a Long Strip tag and by Webtoons.com, every fit, the backgrounds, the preload count in the cache folder, and both resets, §10)
 
 ### Progress
 - [x] Page progress saved (debounced) (Stage 2: `useReadingProgress`, 1 s, through `updateChapter`; written on leaving, on a chapter change and when the window goes; a failed save tried again every 5 s; live, the page closed at was in the database, §10)
@@ -83,7 +83,7 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 ## 6. Exit criteria
 
 - [ ] A 100+ page webtoon chapter scrolls smoothly (no visible stutter, no blank pages while scrolling at normal speed) on a mid-range laptop.
-- [ ] All four modes work and remember per-manga settings.
+- [ ] All four modes work and remember per-manga settings. (Stage 5 checked the per-manga mode and direction live in Double with left to right, after a reopen and an app restart; the exit run checks every mode again from a fresh data dir.)
 - [ ] Reopening a chapter resumes at the last page.
 
 ## 7. Risks & notes
@@ -94,7 +94,7 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 
 ## 8. Decisions closed here
 
-- Default reader mode per content type (e.g. webtoon for manhwa sources, if the source provides a hint). **Decided in Stage 1 (the user's): a manga's own mode first; else webtoon when its genres or tags say Long Strip, Webtoon, Manhwa or Manhua; else the global default, paged right-to-left** (Mihon's default). Mihon sources give no reading-mode hint, so the genres are the only signal. Applied in Stage 5 (§9).
+- Default reader mode per content type (e.g. webtoon for manhwa sources, if the source provides a hint). **Decided in Stage 1 (the user's): a manga's own mode first; else webtoon when its genres or tags say Long Strip, Webtoon, Manhwa or Manhua; else the global default, paged right-to-left** (Mihon's default). Mihon sources give no reading-mode hint, so the genres are the only signal. Applied in Stage 5 (§9). **Extended in Stage 5 (the user's):** with no matching genre, webtoon when the manga's source's name says Webtoon (Webtoons.com's titles carry only genres like Fantasy), then the global default.
 - Cache size default and location. **Decided in Stage 1 (the user's): 1 GB by default, 256 MB to 10 GB in Settings → Reader, in `<data dir>/cache/manga`** (where upstream's page cache already is since the Phase 3 exit run), with LRU eviction. Covers and downloads don't count (§9).
 
 ### Stage plan (2026-11-12)
@@ -131,6 +131,14 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - tests: 54 new, 523 passed + 10 skipped; no server, shell or operation change;
      - live in `pnpm tauri dev` (§10): a generated Local chapter with spreads at an odd and an even index, both directions, Shift, the slider and resume; zoom by Ctrl+wheel, the keys and a double-click, with pans by drag, wheel and arrows; the seamless transition forward and back in all three modes, on Webtoons (network) and the Local source; the read marks and "Page 5 of 8"; the stats overlay on the 103-page chapter again.
 5. **Reader settings, global and per manga** (step 11): `ReaderSettings` (mode, direction, fit, background, page gap, preload count), global on this device and per manga in its meta, and the default mode per content type (§8). Verified by unit tests and a live change that a reopened manga keeps.
+   - *Done* (2026-11-14):
+     - per manga, in its meta (upstream's `manga { meta }`, `setMangaMeta`, `deleteMangaMeta`; no server change): `madoyomi.reader.mode` and `madoyomi.reader.direction`. The toolbar's mode and direction switches save this manga's own;
+     - on this device (`stores/reader.ts`, `madoyomi.reader`, read field by field): the default mode and direction, the page fit (fit screen, width, height, original), the strip width (600, 800, 1000, 1200 px or the window's), the page gap, the background (dark, black, gray, white) and the preload count (2–12). Shift stays for the session;
+     - the pure `utils/readerSettings.ts`: the manga's own mode, else webtoon by genre (Long Strip, Webtoon(s), Manhwa, Manhua, case, spaces, hyphens and parentheses ignored), else by the source's name (the user's addition), else the global default; `useMangaReaderSettings` reads the meta (with the source's name), and the reader waits for it;
+     - `ReaderSettings.vue` (the toolbar's Settings: "This manga" with where the mode comes from, Default and Reset; "All manga") and `ReaderPrefsFields.vue`, also in Settings → Reader with Reset to defaults;
+     - a page bigger than the window (any fit but fit screen) opens at its top and scrolls with the wheel, the keys and a drag before the page turns (`utils/zoom.ts` at 1×); the strip's width as a prop, the anchor holding; the background through CSS variables, the text dark on white; the preload count in the paged and double windows, the strip's (`preload − 2`, at least 2) and the backend's block;
+     - tests: 44 new, 567 passed + 11 skipped (the new live-spec test); the live spec 11/11 with **53 documents**; no server or shell change;
+     - live in `pnpm tauri dev` (§10): Settings → Reader and the sheet, MangaPill's Kingdom with no settings and then Double and left to right (kept after a reopen and an app restart, then reset), MangaDex's "First Love Trap" in webtoon by its Long Strip tag, Webtoons.com's "Funtime Phobia" by its source, every fit, white, gray and dark, the strip at 1200 px, the page gap, preload 8 in the cache folder, and both resets.
 6. **Exit run**: every §6 criterion from a fresh data dir, the step 15 measurements (time to first page, scroll FPS on a 100+ page webtoon chapter, memory after 5 chapters), and a fix round.
 
 ## 9. Decision record
@@ -253,6 +261,42 @@ Decided in the stage (defaults, in the plan sent to the user):
 - **The mode switch** is a segmented control, Single / Double / Webtoon (`aria-pressed`, `data-action="mode-<mode>"`), for the session. The direction applies to both paged modes, and "Shift: on/off" shows in the double mode.
 - **The toolbar's focus** (Stage 3's open point): a mouse click on a toolbar button doesn't take the focus (`mousedown` prevented on buttons), so Space then turns the page instead of pressing the button again. Tab still reaches every button, and Space or Enter presses the focused one. The slider is blurred on pointer-up, so the keys are the reader's again after a drag. Tab still focuses it, and its arrows then move it.
 - **No server, shell or operation change** (so no new live-spec test).
+
+### Stage 5 (2026-11-14)
+
+Decided by the user (asked with the plan; the recommended option):
+- **A webtoon site's name counts too** (§8 extended): a manga with no mode of its own and no matching genre opens in webtoon when its source's name contains "webtoon" (any case: Webtoons.com, "Webtoon XYZ"). Webtoons.com's titles carry only genres like Fantasy or Romance, so by genre alone they would open in Single. Several Tachiyomi forks do the same. The alternative was the genres only, as §8 had it.
+
+Decided in the stage (defaults, in the plan sent to the user):
+- **Which settings, and where:**
+
+  | Setting | Scope | Default | Kept in |
+  |---|---|---|---|
+  | mode (Single, Double, Webtoon) | per manga, and a global default | Single | meta `madoyomi.reader.mode`; `madoyomi.reader` |
+  | direction (right to left, left to right) | per manga, and a global default | right to left | meta `madoyomi.reader.direction`; `madoyomi.reader` |
+  | page fit (single and double) | global | fit screen | `madoyomi.reader` |
+  | strip width (webtoon) | global | 800 px | `madoyomi.reader` |
+  | page gap (webtoon) | global | off | `madoyomi.reader` |
+  | background | global | dark (#111) | `madoyomi.reader` |
+  | preload count | global | 4 pages | `madoyomi.reader` |
+  | Shift (double page) | the app session | off | — |
+
+  Mihon keeps only the reading mode (which includes the direction) per manga; the rest is global. Every default is what Stages 2–4 did, so nothing changes until a setting does. Shift is about how one chapter's spreads fall, not a preference, so it stays a session switch.
+- **Per manga in its meta** (§9 Stage 1's plan, upstream's `setMangaMeta` / `deleteMangaMeta` and `MangaType.meta`): the meta is tied to the database's manga id and goes into backups (`BackupManga.meta`, Suwayomi's ProtoNumber 9000). Values are strings. A key that isn't there, or a value the app doesn't know (a hand edit, a later version's), reads as "not set", so the manga follows the defaults. "Default" in the sheet removes the key, and so does Reset (both keys). Other apps' keys (Suwayomi-WebUI's) are left alone. Writes show at once (the cached meta is patched), go to the backend one at a time in order, and on a failure the meta is read again and the reader says "Couldn't save this manga's reader settings". No server change.
+- **Global on this device** (`stores/reader.ts`, as the theme and the item lists' sort): one JSON value, `madoyomi.reader`, read field by field (`parseReaderPrefs`): an unknown or missing field takes its default, and unreadable JSON gives all the defaults. Choices are lists (the strip widths, the preload counts), so a hand-edited 700 px is a default too.
+- **The mode by content** (`utils/readerSettings.ts`, pure): the manga's own, else the first genre whose letters, lower-cased, without anything in parentheses, are `longstrip`, `webtoon`, `webtoons`, `manhwa` or `manhua` ("Long Strip", "long-strip", "Manhwa (Korean)"; "Strip Club" or "Long" don't count), else the source's name, else the global default. The genres are the manga's as fetched (`useManga`), and the source's name comes with the meta (`MANGA_READER_META_QUERY`: `manga { meta, source { name } }`). The direction is the manga's own, else the global one; there is no direction by content.
+- **The reader waits for the meta** (and the manga) before it shows a page, so a webtoon doesn't flash in Single first. If the meta can't be read, it uses the defaults (and the genre). The page list is the slower call anyway.
+- **The toolbar's mode and direction switches save this manga's own** (as Mihon's reader does). The page gap toggle changes the global setting, and Shift the session's. The toolbar doesn't show where the mode came from; the sheet does ("Webtoon · From the genre "Long Strip"", "· From the source (Webtoons.com)", "· This manga's", "· The default").
+- **The settings sheet** (`ReaderSettings.vue`, the toolbar's Settings): a side sheet in the app's theme, "This manga" (mode and direction selects, each with "Default (…)" naming what the manga gets without its own; Reset this manga) and "All manga" (`ReaderPrefsFields.vue`, every global setting, Reset to defaults). While it is open, Esc closes it, the reader's other keys wait, and the wheel over it scrolls it. Its Close button takes the focus; closing gives it back to the reader. **Settings → Reader** has the same `ReaderPrefsFields` above the page cache.
+- **The page fit** (single and double): fit screen is Stage 2's whole page. Fit width makes each page the window's width (half of it for each page of a spread), fit height the window's height, original size the image's own. A page bigger than the window:
+  - opens at its top, and along a wider axis on the reading direction's side (`startView`);
+  - pans at 1× with the same clamp as the zoom (`utils/zoom.ts`: `clampZoom` keeps an overflowing 1× view, `panBy` moves it);
+  - scrolls with ↓/↑ (a line, 15 %), Space, Page Down/Up (a screen, 90 %), the wheel (Shift+wheel sideways) and a drag. At its edge the key turns the page as before, and so does a **new** wheel gesture (`createEdgeWheel`, as at the strip's ends), so a fling stops at the page's bottom. The next page opens at its top, and so does the previous one;
+  - ←/→ and the click zones still turn the page at once. Zoom scales the fitted page, and "back to fit" (Esc, Ctrl+0, a double-click, a turn) is the start view.
+- **The strip's width** replaces the fit in the webtoon mode (fitting a page to the window's height makes no sense in a strip): 600, 800, 1000, 1200 px or the window's, never wider than the window. A new width is a new layout, so Stage 3's anchor keeps the point at the viewport's centre (after a scroll) or the page's top (after a seek). Still no zoom in the strip.
+- **The background** applies in every mode: dark (#111, Stages 2–4's), black, gray (#3a3a3a) or white. The panels, the placeholders and a failed page take their text colours from CSS variables set with it (dark text on white). The toolbar and the sheet keep their own.
+- **The preload count** is the pages loaded ahead of the one shown: the paged mode's `ahead`, the double mode's pages after the spread, and in the strip at least `preload − 2` pages past the viewport (the viewport holds one or two; 2 with the default 4, as in Stage 3; the pixel band stays). The backend's block of 10 starts after the reader's own pages. The next chapter's first 5 pages, the 4 requests at a time and the 1 page (2 in the double mode) behind don't change. Choices 2, 4, 6, 8 and 12.
+- **New operations:** `MANGA_READER_META_QUERY`, `SET_MANGA_META_MUTATION`, `DELETE_MANGA_META_MUTATION` (53 documents), validated and run by the live spec.
 
 ## 10. Findings log
 
@@ -447,3 +491,52 @@ Decided in the stage (defaults, in the plan sent to the user):
   - Tab reaching the toolbar's buttons and Space/Enter pressing them: unchanged keyboard behaviour; not tested live;
   - double page on a real source's chapter with spreads: the generated chapter stood in (real scans' joined spreads are wider than tall in the same way); MangaPill and MangaDex weren't read in the double mode;
   - the `Double Page Test` chapters are in `live-data/local` (gitignored scratch data), not in the repo.
+
+### Stage 5 (2026-11-14)
+
+- **Baseline before the stage** (main at `75aa4d5`, Stage 4 merged as #36; rerun before any edit):
+  - server: `.\gradlew.bat build` with 794 tests: 793 passed and 1 failed (core 694 with 8 skipped and 1 failure, AndroidCompat 7, ext-host 8, api 85). The failure was `MpvIpcClientTest` "observe_property sends the current value at once, then every change, in order" (a `ConcurrentModificationException` in the test's own events list, which it reads while the client's reader thread appends to it). The server hasn't changed since Stage 1, and the class passed on its own rerun (`:core:test --tests madoyomi.core.player.MpvIpcClientTest`, BUILD SUCCESSFUL). A test race, noted for the exit run, like `CefTest` vs `SocksProxyTest`;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: the baseline job's app checks ran while this stage's first files were already being written into `app/`, so they were run again on a clean worktree of main (`git worktree add --detach … main`, `node_modules` junctioned, removed after): 50 files (49 + 1 skipped), **523 passed + 10 skipped**; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` clean;
+  - the live spec: 10/10 with 50 documents;
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - app: 54 files (53 + 1 skipped), **567 passed + 11 skipped**. The 44 new tests (and one new live-spec test, skipped in `pnpm test`):
+    - `readerSettings.spec.ts` 11: the stored prefs field by field, the meta, the genre tokens, webtoon genres and sources, the resolution order, the direction, the origin labels;
+    - `reader.spec.ts` (the store) 5: the defaults, a change kept into a new session, old and unreadable values, unknown values ignored, reset with Shift kept for the session;
+    - `useMangaReaderSettings.spec.ts` 6: the defaults once the meta is read, webtoon by genre then by source, the manga's own written and read back, "Default" and Reset removing the keys (others kept), writes in order and a failure read back, the defaults when the meta can't be read;
+    - `ReaderSettings.spec.ts` 4: the sheet's origin and "Default (…)", its events, the global fields kept and reset, a save error;
+    - `ReaderView.spec.ts` 10: waiting for the meta and opening in the manga's mode and direction; webtoon by a Long Strip genre and by Webtoons.com, and the global default; the sheet (keys wait, "Default", the direction, Esc); the global settings from the sheet and Reset this manga; the preload count's window and the backend's block; a failed save; fit width scrolled by the keys and the wheel before the page turns; fit screen unchanged; the strip's width with the page kept;
+    - `zoom.spec.ts` 5, `webtoonNav.spec.ts` 1, `usePageLoader.spec.ts` 1, `SettingsView.spec.ts` 1;
+
+    Stage 2's direction test and Stage 3's mode test now check the manga's meta (the toolbar saves this manga's own). Lint, typecheck, format:check and build clean;
+  - the live spec: **11/11 with 53 documents** (`MANGA_READER_META_QUERY`, `SET_MANGA_META_MUTATION`, `DELETE_MANGA_META_MUTATION`). The new test, on MangaPill's manga 49: the source's name read with the meta; mode webtoon, direction ltr, then mode double set (one value per key: the second replaced the first); both read back; both removed, and removing a missing key is no error;
+  - server and shell: not changed, so not rebuilt (the baseline above stands).
+- **Live in `pnpm tauri dev`** (data dir `live-data`, computer use, the dev desktop, a 1920×1080 screen):
+
+  | Check | Result |
+  |---|---|
+  | Settings → Reader | the new fields above the page cache, with their defaults (Single, Right to left, Fit screen, 800 px, no gap, Dark, 4 pages); Background → White and Pages to preload → 8 there |
+  | a manga with no settings | MangaPill "Kingdom" (Action, Drama, Historical, Military, Thriller) Chapter 893: opened in Single, right to left, on white (the reader's panels in dark text) |
+  | the preload count | Chapter 893 (20 pages) opened at page 1: its cache folder had pages 001–019 and not 020, the reader's own 1–9 and the backend's block 10–19 (with the default 4 the reader stops at page 5 and the block at page 15) |
+  | the toolbar saves the manga's | Double, then left to right: the left third went back to "Start of Chapter 893 · Previous chapter", the right third on to 2–3 with page 2 on the left; the sheet said "Double · This manga's", "Left to right · This manga's", the global defaults still Single and right to left |
+  | fit width | from the sheet: each page of the spread half the window's width, opened at its top; Space went to the spread's bottom, the next Space turned to 4–5 at its top; 2 wheel notches scrolled, a further 10 stopped at the bottom without turning, and one notch after a pause turned the page |
+  | fit height, original size | fit height: both pages the window's height; original size: the spread wider and taller than the window, opened at its top-left (left to right) |
+  | reopen, restart | Esc and Continue: Double, left to right, 6–7 / 20; after an app restart (the backend stopped with exit code 0): the same, with original size on white (this device's settings kept) |
+  | Reset this manga | the sheet showed "Single · The default", "Right to left · The default", Reset off; page 7 alone, the slider filling from the right |
+  | webtoon by genre | MangaDex [en] "First Love Trap" (Full Color, Long Strip, Romance, Slice of Life, Korean) Ch.1: opened in Webtoon, an 800 px strip on white; the sheet: "Webtoon · From the genre "Long Strip"" |
+  | strip width | 15 notches into the strip, then 1200 px from the sheet: the strip 1200 px wide, the same picture at the viewport's centre, 1 / 18 kept |
+  | webtoon by source | Webtoons.com "Funtime Phobia" (genre Romance only) Ep. 83: Webtoon; the sheet: "Webtoon · From the source (Webtoons.com)" |
+  | page gap, gray | from the sheet in the strip: gray at the sides, a 16 px gap between pages |
+  | Reset to defaults (Settings) | every global field back to its default (Single, Right to left, Fit screen, 800 px, no gap, Dark, 4 pages) |
+  | a global default reaching a manga | Default mode → Double in Settings; Kingdom (reset, no settings of its own) opened in Double, right to left, on dark; the sheet's Reset to defaults put Single back, and Kingdom followed it ("Single · The default") |
+  | the token | no `token=` in sidecar.log, madoyomi.log or the dev output; no warning in the dev output |
+
+- **Found while writing it:** a page whose image was in before `PagedReader` mounted (a mode switch, a chapter fetched ahead) got no start view, because the view followed only later loads; `onMounted` sets it now. The component test for fit screen needed the stubbed layout to follow the fit (jsdom has none).
+- **Not checked, and why:**
+  - a backup and restore with the per-manga settings: upstream's backup carries the meta (`BackupManga.meta`), but no backup was made in this stage (Phase 6 has the backups);
+  - the black background, fit height on a wide page, Shift+wheel sideways in an overflowing page, and a drag pan at 1×: by the code path or the component tests, not live (white, gray, dark, fit width, fit height and original size were);
+  - a failed meta save live: the backend wasn't killed during a switch; `useMangaReaderSettings.spec.ts` and `ReaderView.spec.ts` cover it;
+  - the window width strip setting live: 1200 px was; `ReaderView.spec.ts` checks the window width;
+  - "Manhwa" and "Manhua" genres live: a Long Strip tag and a webtoon source were read; the normalization is unit-tested;
+  - a mid-range laptop and the memory after 5 chapters (§6, step 15): Stage 6's.
