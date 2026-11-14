@@ -20,6 +20,9 @@ const ops = vi.hoisted(() => ({
   fetchChapterPages: vi.fn(),
   prefetchChapterPages: vi.fn(),
   updateChapter: vi.fn(),
+  fetchMangaReaderMeta: vi.fn(),
+  setMangaMeta: vi.fn(),
+  deleteMangaMeta: vi.fn(),
 }));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -109,6 +112,9 @@ beforeEach(() => {
   loaderSizes.clear();
 
   ops.fetchManga.mockResolvedValue(makeManga());
+  ops.fetchMangaReaderMeta.mockResolvedValue({ mangaId: 34, meta: [], sourceName: "MangaPill" });
+  ops.setMangaMeta.mockResolvedValue(undefined);
+  ops.deleteMangaMeta.mockResolvedValue(undefined);
   ops.fetchChapters.mockImplementation(async () => chapters);
   ops.fetchChapterPages.mockImplementation(async (id: number): Promise<ChapterPages> => {
     const chapter = chapters.find((c) => c.id === id)!;
@@ -212,10 +218,12 @@ describe("ReaderView", () => {
     expect(position()).toBe("0");
   });
 
-  it("flips to left to right from the toolbar, for the session", async () => {
+  it("flips to left to right from the toolbar, as this manga's own direction", async () => {
     await mountReader();
     await wrapper.find('[data-action="direction"]').trigger("click");
-    expect(useReaderStore().direction).toBe("ltr");
+    await flushPromises();
+    expect(ops.setMangaMeta).toHaveBeenCalledWith(34, "madoyomi.reader.direction", "ltr");
+    expect(useReaderStore().prefs.direction).toBe("rtl");
 
     await clickAt(850);
     expect(position()).toBe("1");
@@ -452,7 +460,8 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
 
     await wrapper.find('[data-action="mode-webtoon"]').trigger("click");
     await flushPromises();
-    expect(useReaderStore().mode).toBe("webtoon");
+    expect(ops.setMangaMeta).toHaveBeenCalledWith(34, "madoyomi.reader.mode", "webtoon");
+    expect(useReaderStore().prefs.mode).toBe("paged");
     expect(paged().exists()).toBe(false);
     expect(stripEl().scrollTop).toBe(4 * 1200);
     expect(position()).toBe("4");
@@ -472,7 +481,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
   });
 
   it("saves the page at the top of the strip, marks the chapter read on the last one, and goes on past the end", async () => {
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader();
     expect(position()).toBe("0");
 
@@ -489,7 +498,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
   });
 
   it("scrolls with the keys and jumps with the slider and Home/End", async () => {
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader();
 
     await key("PageDown");
@@ -518,7 +527,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
   });
 
   it("keeps the toolbar up while the slider seeks, and hides it on a user scroll", async () => {
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader();
     const bottom = () => wrapper.find('[data-testid="reader-bottom"]');
     expect(bottom().exists()).toBe(true);
@@ -539,7 +548,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
   });
 
   it("opens the previous chapter at its last page from the top of the strip", async () => {
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader(5002);
     expect(stripEl().scrollTop).toBe(240); // page 1 below the "Previous" panel
 
@@ -552,7 +561,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
 
   it("loads the pages around the viewport and releases the ones it leaves", async () => {
     chapters[0] = { ...chapters[0]!, pageCount: 40 };
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader();
     expect(wrapper.findAll('[data-testid="page-image"]').map((i) => i.attributes("alt"))).toEqual([
       "Page 1",
@@ -570,7 +579,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
   });
 
   it("leaves the wheel to the strip", async () => {
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader();
     const wheel = new WheelEvent("wheel", { deltaY: 120, cancelable: true, bubbles: true });
     stripEl().dispatchEvent(wheel);
@@ -586,7 +595,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
   const count = () => wrapper.find('[data-testid="page-count"]').text();
 
   it("shows the first page alone, then spreads of two right to left, step by spread", async () => {
-    useReaderStore().mode = "double";
+    useReaderStore().prefs.mode = "double";
     await mountReader();
     expect(shown()).toBe("0");
     expect(count()).toBe("1 / 10");
@@ -612,7 +621,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
   });
 
   it("pairs the first two pages with Shift, for the session", async () => {
-    useReaderStore().mode = "double";
+    useReaderStore().prefs.mode = "double";
     await mountReader();
     const shift = wrapper.find('[data-action="shift"]');
     expect(shift.text()).toBe("Shift: off");
@@ -630,7 +639,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
     // 0 | 1-2 | 3 | 4 (wide) | 5-6 | 7 (wide) | 8-9 once the sizes are known
     loaderSizes.set(4, { width: 1600, height: 1200 });
     loaderSizes.set(7, { width: 1600, height: 1200 });
-    useReaderStore().mode = "double";
+    useReaderStore().prefs.mode = "double";
     await mountReader(5001, "?page=4");
     // page 3 was paired with 4 until 4's size came: it stays on screen, alone
     expect(shown()).toBe("3");
@@ -645,7 +654,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
 
   it("saves the spread's last page, and marks the chapter read on the last spread", async () => {
     chapters[0] = { ...chapters[0]!, pageCount: 9 }; // 0 | 1-2 | 3-4 | 5-6 | 7-8
-    useReaderStore().mode = "double";
+    useReaderStore().prefs.mode = "double";
     await mountReader(5001, "?page=6");
     expect(shown()).toBe("5,6");
     expect(position()).toBe("5");
@@ -661,7 +670,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
   });
 
   it("writes the spread's last page as the place to resume", async () => {
-    useReaderStore().mode = "double";
+    useReaderStore().prefs.mode = "double";
     await mountReader(5001, "?page=4");
     expect(shown()).toBe("3,4");
     wrapper.unmount();
@@ -670,7 +679,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
   });
 
   it("keeps the page when switching to and from the single-page mode", async () => {
-    useReaderStore().mode = "double";
+    useReaderStore().prefs.mode = "double";
     await mountReader(5001, "?page=4");
     await wrapper.find('[data-action="mode-paged"]').trigger("click");
     await flushPromises();
@@ -683,7 +692,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
   it("loads the spread, the pages after it and the ones before", async () => {
     autoResolve = false;
     chapters[0] = { ...chapters[0]!, pageCount: 20 };
-    useReaderStore().mode = "double";
+    useReaderStore().prefs.mode = "double";
     await mountReader(5001, "?page=6");
     // the spread 5-6 first, then 7 and 8 (4 requests at a time)
     expect(assetCalls.map((c) => c.path.split("/").pop())).toEqual(["5", "6", "7", "8"]);
@@ -796,7 +805,7 @@ describe("ReaderView zoom and pan (Stage 4)", () => {
   });
 
   it("has no zoom in the webtoon strip", async () => {
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader();
     const e = new WheelEvent("wheel", {
       deltaY: -100,
@@ -890,7 +899,7 @@ describe("ReaderView, the webtoon strip's wheel past its ends (Stage 4)", () => 
   }
 
   it("goes on into the next chapter on a new wheel gesture at the bottom, not on the one that got there", async () => {
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader();
     await wheelAt(1000, 100);
     // 10 pages of 1200 px and the end panel (900): the bottom is at 12000
@@ -910,7 +919,7 @@ describe("ReaderView, the webtoon strip's wheel past its ends (Stage 4)", () => 
   });
 
   it("goes back into the previous chapter on a wheel gesture up at the top", async () => {
-    useReaderStore().mode = "webtoon";
+    useReaderStore().prefs.mode = "webtoon";
     await mountReader(5002);
     await scrollTo(0);
     await wheelAt(5000, -100);
@@ -936,5 +945,256 @@ describe("ReaderToolbar's focus (Stage 4)", () => {
     expect(document.activeElement).toBe(slider.element);
     await slider.trigger("pointerup");
     expect(document.activeElement).not.toBe(slider.element);
+  });
+});
+
+describe("ReaderView settings (Stage 5)", () => {
+  const reader = () => wrapper.find('[data-testid="reader"]');
+  const strip = () => wrapper.find('[data-testid="webtoon-reader"]');
+  const sheet = () => wrapper.find('[data-testid="reader-settings-sheet"]');
+
+  it("waits for the manga's own settings, then opens in its own mode and direction", async () => {
+    let answer!: (m: unknown) => void;
+    ops.fetchMangaReaderMeta.mockReturnValue(new Promise((r) => (answer = r)));
+    await mountReader();
+    expect(wrapper.find('[data-testid="reader-loading"]').exists()).toBe(true);
+    expect(paged().exists()).toBe(false);
+
+    answer({
+      mangaId: 34,
+      sourceName: "MangaPill",
+      meta: [
+        { key: "madoyomi.reader.mode", value: "double" },
+        { key: "madoyomi.reader.direction", value: "ltr" },
+      ],
+    });
+    await flushPromises();
+    expect(reader().attributes("data-mode")).toBe("double");
+    expect(paged().attributes("data-direction")).toBe("ltr");
+    expect(wrapper.find('[data-testid="spread"]').attributes("data-pages")).toBe("0");
+  });
+
+  it("opens a Long Strip title, and one from a webtoon site, in the webtoon mode; others in the default", async () => {
+    ops.fetchManga.mockResolvedValue(makeManga({ genre: ["Action", "Long Strip"] }));
+    await mountReader();
+    expect(reader().attributes("data-mode")).toBe("webtoon");
+    expect(strip().exists()).toBe(true);
+    wrapper.unmount();
+    queryClient.clear();
+
+    ops.fetchManga.mockResolvedValue(makeManga({ genre: ["Fantasy"] }));
+    ops.fetchMangaReaderMeta.mockResolvedValue({
+      mangaId: 34,
+      meta: [],
+      sourceName: "Webtoons.com",
+    });
+    await mountReader();
+    expect(reader().attributes("data-mode")).toBe("webtoon");
+    wrapper.unmount();
+    queryClient.clear();
+
+    ops.fetchMangaReaderMeta.mockResolvedValue({ mangaId: 34, meta: [], sourceName: "MangaPill" });
+    useReaderStore().set({ mode: "double", direction: "ltr" });
+    await mountReader();
+    expect(reader().attributes("data-mode")).toBe("double");
+    expect(paged().attributes("data-direction")).toBe("ltr");
+  });
+
+  it("opens the settings sheet from the toolbar; Esc closes it, and the reader's keys wait meanwhile", async () => {
+    ops.fetchManga.mockResolvedValue(makeManga({ genre: ["Manhwa"] }));
+    ops.fetchMangaReaderMeta.mockResolvedValue({
+      mangaId: 34,
+      sourceName: "MangaPill",
+      meta: [{ key: "madoyomi.reader.mode", value: "paged" }],
+    });
+    await mountReader();
+    await wrapper.find('[data-action="settings"]').trigger("click");
+    expect(sheet().exists()).toBe(true);
+    expect(sheet().find('[data-testid="mode-origin"]').text()).toBe("Single · This manga's");
+    expect(sheet().find('[data-manga-pref="mode"]').text()).toContain("Default (Webtoon)");
+
+    await key("ArrowLeft");
+    expect(position()).toBe("0");
+
+    // "Use default": the manga's own mode is removed, and the genre gives webtoon
+    await sheet().find('[data-manga-pref="mode"]').setValue("");
+    await flushPromises();
+    expect(ops.deleteMangaMeta).toHaveBeenCalledWith(34, "madoyomi.reader.mode");
+    expect(reader().attributes("data-mode")).toBe("webtoon");
+    expect(sheet().find('[data-testid="mode-origin"]').text()).toBe(
+      "Webtoon · From the genre “Manhwa”",
+    );
+
+    await sheet().find('[data-manga-pref="direction"]').setValue("ltr");
+    await flushPromises();
+    expect(ops.setMangaMeta).toHaveBeenCalledWith(34, "madoyomi.reader.direction", "ltr");
+
+    await key("Escape");
+    expect(sheet().exists()).toBe(false);
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
+  });
+
+  it("changes the global settings from the sheet, and resets the manga's own", async () => {
+    ops.fetchMangaReaderMeta.mockResolvedValue({
+      mangaId: 34,
+      sourceName: "MangaPill",
+      meta: [{ key: "madoyomi.reader.direction", value: "ltr" }],
+    });
+    await mountReader();
+    await wrapper.find('[data-action="settings"]').trigger("click");
+
+    await sheet().find('[data-pref="background"]').setValue("white");
+    expect(useReaderStore().prefs.background).toBe("white");
+    expect(reader().attributes("data-background")).toBe("white");
+    expect(reader().attributes("style")).toContain("--reader-bg: #ffffff");
+    await sheet().find('[data-pref="mode"]').setValue("double");
+    expect(reader().attributes("data-mode")).toBe("double");
+
+    await sheet().find('[data-action="reset-manga-prefs"]').trigger("click");
+    await flushPromises();
+    expect(ops.deleteMangaMeta.mock.calls).toEqual([
+      [34, "madoyomi.reader.mode"],
+      [34, "madoyomi.reader.direction"],
+    ]);
+    expect(paged().attributes("data-direction")).toBe("rtl");
+    expect(sheet().find('[data-action="reset-manga-prefs"]').attributes("disabled")).toBeDefined();
+
+    await sheet().find('[data-action="close-settings"]').trigger("click");
+    expect(sheet().exists()).toBe(false);
+  });
+
+  it("loads as many pages ahead as the preload count says, and the backend's block after them", async () => {
+    useReaderStore().set({ preload: 8 });
+    chapters = makeChapters(3).map((c) => ({ ...c, pageCount: 30 }));
+    await mountReader();
+    const loaded = new Set(assetCalls.map((c) => Number(c.path.split("/").pop())));
+    expect([...loaded].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(ops.prefetchChapterPages).toHaveBeenCalledWith(5001, 9, 10);
+  });
+
+  it("says when the manga's setting couldn't be saved", async () => {
+    ops.setMangaMeta.mockRejectedValueOnce(
+      new ApiError({ kind: "graphql", code: "INTERNAL", message: "no" }),
+    );
+    await mountReader();
+    await wrapper.find('[data-action="mode-double"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.find('[data-testid="manga-prefs-save-error"]').exists()).toBe(true);
+    expect(reader().attributes("data-mode")).toBe("paged");
+  });
+});
+
+describe("ReaderView page fit (Stage 5)", () => {
+  // The reader is 900 × 700; a 1:2 page fitted to the width is 900 × 1400, laid out 350 px above and below the
+  // window; fitted to the screen it is 350 × 700 in the middle.
+  beforeEach(() => {
+    const stub = (proto: object, prop: string, get: (el: HTMLElement) => number) => {
+      const before = Object.getOwnPropertyDescriptor(proto, prop);
+      Object.defineProperty(proto, prop, {
+        configurable: true,
+        get(this: HTMLElement) {
+          return get(this);
+        },
+      });
+      restore.push(() => {
+        if (before) Object.defineProperty(proto, prop, before);
+        else delete (proto as Record<string, unknown>)[prop];
+      });
+    };
+    const wide = (el: HTMLElement) => !!el.closest(".fit-width");
+    stub(HTMLElement.prototype, "clientWidth", () => 900);
+    stub(HTMLElement.prototype, "clientHeight", () => 700);
+    stub(HTMLImageElement.prototype, "offsetLeft", (el) => (wide(el) ? 0 : 275));
+    stub(HTMLImageElement.prototype, "offsetTop", (el) => (wide(el) ? -350 : 0));
+    stub(HTMLImageElement.prototype, "offsetWidth", (el) => (wide(el) ? 900 : 350));
+    stub(HTMLImageElement.prototype, "offsetHeight", (el) => (wide(el) ? 1400 : 700));
+  });
+
+  const layer = () => wrapper.find('[data-testid="zoom-layer"]').attributes("style") ?? "";
+  function wheel(deltaY: number) {
+    const e = new WheelEvent("wheel", { cancelable: true, bubbles: true, deltaY });
+    paged().element.dispatchEvent(e);
+    return e;
+  }
+
+  it("starts a page bigger than the window at its top, scrolls it with the keys, then turns the page", async () => {
+    useReaderStore().set({ fit: "width" });
+    await mountReader();
+    expect(paged().attributes("data-fit")).toBe("width");
+    expect(paged().classes()).toContain("scrollable");
+    expect(layer()).toContain("translate(0px, 350px) scale(1)");
+
+    await key(" ");
+    expect(position()).toBe("0");
+    expect(layer()).toContain("translate(0px, -280px)");
+    await key("ArrowDown");
+    expect(layer()).toContain("translate(0px, -350px)");
+    // at the bottom: the next step turns the page, which starts at its top
+    await key("PageDown");
+    expect(position()).toBe("1");
+    await flushPromises();
+    expect(layer()).toContain("translate(0px, 350px)");
+
+    await key("ArrowUp");
+    expect(position()).toBe("0");
+  });
+
+  it("scrolls with the wheel, and a new gesture at the page's bottom turns it", async () => {
+    useReaderStore().set({ fit: "width" });
+    await mountReader();
+    wheel(100);
+    await flushPromises();
+    expect(position()).toBe("0");
+    expect(layer()).toContain("translate(0px, 250px)");
+    await key(" ");
+    expect(layer()).toContain("translate(0px, -350px)");
+    // a new gesture at the bottom turns the page
+    await new Promise((r) => setTimeout(r, 220));
+    wheel(100);
+    await flushPromises();
+    expect(position()).toBe("1");
+  });
+
+  it("keeps Stage 2's whole page with fit screen", async () => {
+    await mountReader();
+    expect(paged().attributes("data-fit")).toBe("screen");
+    expect(paged().classes()).not.toContain("scrollable");
+    await key(" ");
+    expect(position()).toBe("1");
+  });
+});
+
+describe("ReaderView strip width (Stage 5)", () => {
+  beforeEach(() => {
+    for (const [prop, value] of [
+      ["clientWidth", 1000],
+      ["clientHeight", 900],
+    ] as const) {
+      const before = Object.getOwnPropertyDescriptor(HTMLElement.prototype, prop);
+      Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => value });
+      restore.push(() => {
+        if (before) Object.defineProperty(HTMLElement.prototype, prop, before);
+      });
+    }
+  });
+
+  it("makes the strip as wide as the setting, or the window, and keeps the page shown", async () => {
+    useReaderStore().set({ mode: "webtoon", stripWidth: 600 });
+    chapters[0] = { ...chapters[0]!, lastPageRead: 4 };
+    await mountReader();
+    const sizer = () => wrapper.find('[data-testid="webtoon-reader"] .sizer');
+    expect(sizer().attributes("style")).toContain("width: 600px");
+    // 600 px wide pages of the default ratio 1.5: 900 px each
+    expect((wrapper.find('[data-testid="webtoon-reader"]').element as HTMLElement).scrollTop).toBe(
+      4 * 900,
+    );
+
+    useReaderStore().set({ stripWidth: 0 });
+    await flushPromises();
+    expect(sizer().attributes("style")).toContain("width: 1000px");
+    expect(position()).toBe("4");
+    expect((wrapper.find('[data-testid="webtoon-reader"]').element as HTMLElement).scrollTop).toBe(
+      4 * 1500,
+    );
   });
 });

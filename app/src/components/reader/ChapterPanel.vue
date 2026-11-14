@@ -71,7 +71,7 @@ const emit = defineEmits<{ nextChapter: []; previousChapter: []; back: [] }>();
   justify-items: center;
   gap: var(--space-3);
   padding: var(--space-5);
-  color: #fff;
+  color: var(--reader-fg, #fff);
   text-align: center;
 }
 
@@ -85,7 +85,7 @@ const emit = defineEmits<{ nextChapter: []; previousChapter: []; back: [] }>();
 }
 
 .muted {
-  color: rgb(255 255 255 / 60%);
+  color: var(--reader-muted, rgb(255 255 255 / 60%));
 }
 
 .actions {

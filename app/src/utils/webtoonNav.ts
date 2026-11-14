@@ -208,8 +208,19 @@ export interface StripWindow {
   max: number;
 }
 
-export function stripWindow(viewportHeight: number): StripWindow {
-  return { behind: viewportHeight, ahead: 2 * viewportHeight, minAhead: 2, max: 16 };
+/**
+ * The strip's load window: a screen behind, two ahead, and at least `preload − 2` pages past the viewport (the
+ * preload count, Stage 5, counts from the page shown; the viewport already holds one or two): 2 with the default 4,
+ * as in Stage 3.
+ */
+export function stripWindow(viewportHeight: number, preload = 4): StripWindow {
+  const minAhead = Math.max(2, preload - 2);
+  return {
+    behind: viewportHeight,
+    ahead: 2 * viewportHeight,
+    minAhead,
+    max: Math.max(16, minAhead + 4),
+  };
 }
 
 /**

@@ -31,6 +31,7 @@ import { NEXT_EPISODE_COUNTDOWN_SECONDS, usePlayerPrefsStore } from "../stores/p
 import { THEME_CHOICES, useThemeStore, type ThemeChoice } from "../stores/theme";
 import { formatLang } from "../utils/format";
 import { canBrowse, sourceAccess } from "../utils/sources";
+import ReaderPrefsFields from "../components/reader/ReaderPrefsFields.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import PageLayout from "../components/PageLayout.vue";
 
@@ -44,7 +45,8 @@ import PageLayout from "../components/PageLayout.vue";
  * Auto-play the next episode (Stage 4) is in the same section but stays on this device.
  *
  * Reader (Phase 5 Stage 1): the chapter-page cache's cap (the backend's setting; a lower one trims the cache before
- * the backend answers), what the cache holds now, and Clear.
+ * the backend answers), what the cache holds now, and Clear. Stage 5: the reader's global settings on this device
+ * (ReaderPrefsFields, as in the reader's settings sheet), each manga's own mode and direction coming first.
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -435,6 +437,9 @@ const unknown = computed(
 
     <section class="group" aria-labelledby="settings-reader">
       <h2 id="settings-reader">Reader</h2>
+      <div class="card" data-testid="reader-prefs-card">
+        <ReaderPrefsFields id-prefix="settings-reader" />
+      </div>
       <div class="card" data-testid="reader-settings">
         <template v-if="reader">
           <div class="row">

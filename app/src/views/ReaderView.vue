@@ -9,7 +9,8 @@ import { useReaderStore } from "../stores/reader";
 import { queryKeys } from "../composables/queryKeys";
 import { useChapters, useManga } from "../composables/useEntries";
 import { useFullscreen } from "../composables/useFullscreen";
-import { PAGES_AHEAD, usePageLoader } from "../composables/usePageLoader";
+import { useMangaReaderSettings } from "../composables/useMangaReaderSettings";
+import { usePageLoader } from "../composables/usePageLoader";
 import { useReadingProgress } from "../composables/useReadingProgress";
 import {
   adjacentChapter,
@@ -45,8 +46,10 @@ import {
   spreadPagesToLoad,
 } from "../utils/doublePage";
 import { panKeyDirection, zoomKeyAction } from "../utils/zoom";
+import { BACKGROUND_COLORS } from "../utils/readerSettings";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import PagedReader from "../components/reader/PagedReader.vue";
+import ReaderSettings from "../components/reader/ReaderSettings.vue";
 import ReaderStats from "../components/reader/ReaderStats.vue";
 import ReaderToolbar from "../components/reader/ReaderToolbar.vue";
 import WebtoonReader from "../components/reader/WebtoonReader.vue";
@@ -72,6 +75,13 @@ import WebtoonReader from "../components/reader/WebtoonReader.vue";
  * The seamless next chapter: near a chapter's end (and on its "Previous chapter" panel) the next (previous) chapter's
  * page list is fetched ahead, so one more step past the panel opens it at once, in place; the wheel at the strip's
  * bottom (top) does so in the webtoon mode.
+ *
+ * Stage 5: the settings. The mode and the direction are the manga's own (its meta), else by its genres and its
+ * source's name (the mode), else the global defaults on this device (useMangaReaderSettings); the reader waits for
+ * them before it shows a page. The toolbar's mode and direction switches save this manga's own; the page gap is
+ * global and Shift is for the session. The settings sheet (the toolbar's Settings) sets both. The page fit, the
+ * strip's width, the background and the preload count are global: a fit that makes a page bigger than the window
+ * scrolls it with the wheel and the keys before the page turns.
  */
 const props = defineProps<{ id: number; chapterId: number }>();
 
@@ -83,6 +93,35 @@ const fullscreen = useFullscreen();
 
 const manga = useManga(() => props.id);
 const chapters = useChapters(() => props.id);
+const settings = useMangaReaderSettings(
+  () => props.id,
+  () => manga.data.value ?? null,
+);
+const mode = computed(() => settings.mode.value);
+const direction = computed(() => settings.direction.value);
+/** The manga and its own settings are in (or couldn't be read): the mode won't change under the reader. */
+const modeReady = computed(
+  () => settings.ready.value && (manga.isSuccess.value || manga.isError.value),
+);
+const sheet = ref(false);
+const theme = computed(() => {
+  const b = BACKGROUND_COLORS[reader.prefs.background];
+  return b.light
+    ? {
+        "--reader-bg": b.color,
+        "--reader-fg": "#111",
+        "--reader-muted": "rgb(0 0 0 / 60%)",
+        "--reader-veil": "rgb(0 0 0 / 5%)",
+        "--reader-line": "rgb(0 0 0 / 16%)",
+      }
+    : {
+        "--reader-bg": b.color,
+        "--reader-fg": "#fff",
+        "--reader-muted": "rgb(255 255 255 / 60%)",
+        "--reader-veil": "rgb(255 255 255 / 4%)",
+        "--reader-line": "rgb(255 255 255 / 16%)",
+      };
+});
 const pagesQuery = useQuery({
   queryKey: computed(() => queryKeys.chapterPages(props.chapterId)),
   queryFn: () => fetchChapterPages(props.chapterId),
@@ -174,28 +213,26 @@ watch(
 
 /** The webtoon strip's pages around its viewport, most urgent first (null in the paged mode, or before it reports). */
 const webtoonWindow = ref<number[] | null>(null);
-watch(
-  () => reader.mode,
-  () => {
-    webtoonWindow.value = null;
-  },
-);
+watch(mode, () => {
+  webtoonWindow.value = null;
+});
 /** The double-page mode's pages to load (the spread, the pages after it and before it). */
 const doubleWindow = ref<number[] | null>(null);
 const loader = usePageLoader({
   pages,
   position: () => position.value ?? 0,
   wanted: () =>
-    reader.mode === "webtoon"
+    mode.value === "webtoon"
       ? webtoonWindow.value
-      : reader.mode === "double"
+      : mode.value === "double"
         ? doubleWindow.value
         : null,
+  ahead: () => reader.prefs.preload,
 });
 
 /** The double-page mode's spreads (null in the other modes): they change as the pages' sizes arrive. */
 const spreadList = computed(() =>
-  reader.mode === "double"
+  mode.value === "double"
     ? pairPages(pageCount.value, (i) => isWide(loader.size(i)), !reader.shift)
     : null,
 );
@@ -214,7 +251,8 @@ const viewPages = computed(() => {
 watch(
   [spreadList, position],
   ([list, p]) => {
-    doubleWindow.value = list && p !== null ? spreadPagesToLoad(list, p, pageCount.value) : null;
+    doubleWindow.value =
+      list && p !== null ? spreadPagesToLoad(list, p, pageCount.value, reader.prefs.preload) : null;
   },
   { immediate: true },
 );
@@ -317,8 +355,25 @@ function scrollStrip(kind: "line" | "screen", dir: 1 | -1) {
   else if (strip.value) openChapter(dir > 0 ? "next" : "previous");
 }
 
+function openSheet() {
+  sheet.value = true;
+}
+
+function closeSheet() {
+  sheet.value = false;
+  surface.value?.focus();
+}
+
 function onKey(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null;
+  if (sheet.value) {
+    // The settings sheet is open: Esc closes it, the other keys are its own.
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSheet();
+    }
+    return;
+  }
   const tag = target?.tagName;
   if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || target?.isContentEditable) {
     return;
@@ -328,9 +383,9 @@ function onKey(event: KeyboardEvent) {
     stats.value = !stats.value;
     return;
   }
-  if (reader.mode !== "webtoon" && zoomKey(event)) return;
+  if (mode.value !== "webtoon" && (zoomKey(event) || scrollKey(event))) return;
   const action: KeyAction | WebtoonKeyAction | null =
-    reader.mode === "webtoon" ? webtoonKeyAction(event) : keyAction(event, reader.direction);
+    mode.value === "webtoon" ? webtoonKeyAction(event) : keyAction(event, direction.value);
   if (!action) return;
   event.preventDefault();
   switch (action) {
@@ -391,11 +446,31 @@ function zoomKey(event: KeyboardEvent): boolean {
   return false;
 }
 
+/**
+ * In the paged modes, a page bigger than the window (a fit other than "fit screen"): ↓/↑ scroll a line, Space,
+ * Page Down/Up a screen, through the page; at its edge they turn the page as usual. True when handled.
+ */
+function scrollKey(event: KeyboardEvent): boolean {
+  const p = pager.value;
+  if (!p?.scrollable || event.ctrlKey || event.altKey || event.metaKey) return false;
+  let move: ["line" | "screen", 1 | -1] | null = null;
+  if (event.key === "ArrowDown" && !event.shiftKey) move = ["line", 1];
+  else if (event.key === "ArrowUp" && !event.shiftKey) move = ["line", -1];
+  else if (event.key === "PageDown" || (event.key === " " && !event.shiftKey)) move = ["screen", 1];
+  else if (event.key === "PageUp" || (event.key === " " && event.shiftKey)) move = ["screen", -1];
+  if (!move || !p.scrollPage(move[0], move[1])) return false;
+  event.preventDefault();
+  toolbar.value = false;
+  return true;
+}
+
 const wheel = createWheelGate();
 const edgeWheel = createEdgeWheel();
+const pageEdgeWheel = createEdgeWheel();
 function onWheel(event: WheelEvent) {
+  if ((event.target as Element | null)?.closest?.("[data-reader-sheet]")) return;
   const dy = wheelPixels(event.deltaY, event.deltaMode, window.innerHeight);
-  if (reader.mode === "webtoon") {
+  if (mode.value === "webtoon") {
     // The strip scrolls natively; at its bottom (top) a new gesture goes on into the next (previous) chapter.
     if (event.ctrlKey) {
       event.preventDefault();
@@ -422,6 +497,18 @@ function onWheel(event: WheelEvent) {
     const dx = wheelPixels(event.deltaX, event.deltaMode, window.innerWidth);
     if (event.shiftKey) p.pan(dx + dy, 0);
     else p.pan(dx, dy);
+    return;
+  }
+  if (p?.scrollable) {
+    // A page bigger than the window scrolls; a new gesture at its edge turns the page.
+    const at = p.edges();
+    const edge = dy > 0 ? (at.bottom ? 1 : 0) : dy < 0 ? (at.top ? -1 : 0) : 0;
+    const dir = pageEdgeWheel.push(dy, performance.now(), edge);
+    if (dir) return turn(dir);
+    const dx = wheelPixels(event.deltaX, event.deltaMode, window.innerWidth);
+    if (event.shiftKey) p.pan(dx + dy, 0);
+    else p.pan(dx, dy);
+    toolbar.value = false;
     return;
   }
   const dir = wheel.push(dy, performance.now());
@@ -454,7 +541,7 @@ function prefetch(chapterId: number, from: number, count: number) {
 watch([position, data, nextChapter], ([p, d, next]) => {
   if (p === null || !d) return;
   const count = d.pages.length;
-  const range = prefetchRange(p, count, PAGES_AHEAD);
+  const range = prefetchRange(p, count, reader.prefs.preload);
   if (range && prefetchedBlock.get(d.chapter.id) !== range.block) {
     prefetchedBlock.set(d.chapter.id, range.block);
     prefetch(d.chapter.id, range.from, range.count);
@@ -489,6 +576,9 @@ watch(
     tabindex="-1"
     data-testid="reader"
     :data-position="position ?? ''"
+    :data-mode="modeReady ? mode : ''"
+    :data-background="reader.prefs.background"
+    :style="theme"
   >
     <h1 class="visually-hidden">{{ chapterName }} · {{ mangaTitle }}</h1>
 
@@ -500,18 +590,20 @@ watch(
       />
       <button type="button" class="btn" @click="back">Back to {{ mangaTitle }}</button>
     </div>
-    <p v-else-if="position === null" class="state muted" data-testid="reader-loading">
+    <p v-else-if="position === null || !modeReady" class="state muted" data-testid="reader-loading">
       {{ backend.ready ? `Loading ${chapterName}…` : "Waiting for the backend…" }}
     </p>
     <WebtoonReader
-      v-else-if="reader.mode === 'webtoon'"
+      v-else-if="mode === 'webtoon'"
       :key="`strip-${chapterId}`"
       ref="strip"
       :position="position"
       :page-count="pageCount"
       :page-state="loader.state"
       :page-size="loader.size"
-      :gap="reader.pageGap ? PAGE_GAP : 0"
+      :gap="reader.prefs.pageGap ? PAGE_GAP : 0"
+      :max-width="reader.prefs.stripWidth"
+      :preload="reader.prefs.preload"
       :chapter-name="chapterName"
       :manga-title="mangaTitle"
       :previous-name="previousChapter?.name ?? null"
@@ -532,7 +624,8 @@ watch(
       :position="position"
       :pages="viewPages"
       :page-count="pageCount"
-      :direction="reader.direction"
+      :direction="direction"
+      :fit="reader.prefs.fit"
       :page-state="loader.state"
       :chapter-name="chapterName"
       :manga-title="mangaTitle"
@@ -551,9 +644,9 @@ watch(
       :chapter-name="chapterName"
       :position="position ?? 0"
       :page-count="pageCount"
-      :direction="reader.direction"
-      :mode="reader.mode"
-      :page-gap="reader.pageGap"
+      :direction="direction"
+      :mode="mode"
+      :page-gap="reader.prefs.pageGap"
       :shift="reader.shift"
       :spread="currentSpread"
       :has-previous="neighbours.hasPrevious"
@@ -563,17 +656,42 @@ watch(
       @seek="seek"
       @previous-chapter="openChapter('previous')"
       @next-chapter="openChapter('next')"
-      @toggle-direction="reader.toggleDirection()"
-      @set-mode="reader.setMode($event)"
+      @toggle-direction="settings.setDirection(direction === 'rtl' ? 'ltr' : 'rtl')"
+      @set-mode="settings.setMode($event)"
       @toggle-page-gap="reader.togglePageGap()"
       @toggle-shift="reader.toggleShift()"
       @toggle-fullscreen="fullscreen.toggle()"
+      @open-settings="openSheet"
+    />
+
+    <ReaderSettings
+      v-if="sheet"
+      :manga-title="mangaTitle"
+      :own="settings.own.value"
+      :mode="mode"
+      :origin="settings.origin.value"
+      :direction="direction"
+      :fallback-mode="settings.fallbackMode.value"
+      :fallback-direction="settings.fallbackDirection.value"
+      :error="settings.error.value"
+      @set-mode="settings.setMode($event)"
+      @set-direction="settings.setDirection($event)"
+      @reset-manga="settings.reset()"
+      @close="closeSheet"
     />
 
     <ReaderStats v-if="stats" :first-page-ms="firstPageMs" @close="stats = false" />
 
     <p v-if="progress.error.value" class="save-error" role="status" data-testid="save-error">
       Couldn't save your place in this chapter.
+    </p>
+    <p
+      v-else-if="settings.error.value && !sheet"
+      class="save-error"
+      role="status"
+      data-testid="manga-prefs-save-error"
+    >
+      Couldn't save this manga's reader settings.
     </p>
   </div>
 </template>
@@ -585,8 +703,8 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #111;
-  color: #fff;
+  background: var(--reader-bg, #111);
+  color: var(--reader-fg, #fff);
   outline: none;
 }
 
@@ -599,7 +717,7 @@ watch(
 }
 
 .muted {
-  color: rgb(255 255 255 / 60%);
+  color: var(--reader-muted, rgb(255 255 255 / 60%));
 }
 
 .visually-hidden {

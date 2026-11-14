@@ -45,17 +45,17 @@ const failure = computed(() => {
   max-width: 480px;
   margin: 0;
   padding: var(--space-5);
-  border: 1px solid rgb(255 255 255 / 16%);
+  border: 1px solid var(--reader-line, rgb(255 255 255 / 16%));
   border-radius: var(--radius-md);
-  background: rgb(255 255 255 / 6%);
-  color: rgb(255 255 255 / 70%);
+  background: var(--reader-veil, rgb(255 255 255 / 6%));
+  color: var(--reader-muted, rgb(255 255 255 / 70%));
   font: inherit;
   text-align: center;
   cursor: pointer;
 }
 
 .title {
-  color: #fff;
+  color: var(--reader-fg, #fff);
   font-size: var(--font-size-body-large);
   font-weight: var(--font-weight-semibold);
 }

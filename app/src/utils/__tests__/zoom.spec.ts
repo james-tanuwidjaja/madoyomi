@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   clampZoom,
+  edgesOf,
   FIT,
   isZoomed,
   MAX_ZOOM,
+  overflows,
   panBy,
   panKeyDirection,
   panStep,
+  startView,
   toggleZoomAt,
   wheelZoomFactor,
   zoomAt,
@@ -132,5 +135,72 @@ describe("keys", () => {
   it("pans 15 % of the box, at least 60 px", () => {
     expect(panStep(view)).toEqual({ x: 150, y: 120 });
     expect(panStep({ width: 200, height: 100 })).toEqual({ x: 60, y: 60 });
+  });
+});
+
+/*
+ * Stage 5: a page fit other than "fit screen". Fit width: a 1000 × 1500 page in the 1000 × 800 box, laid out centred
+ * (350 px above the box, 350 below). Original size: a 1400 × 2000 page, centred both ways.
+ */
+const tall: Rect = { left: 0, top: -350, width: 1000, height: 1500 };
+const big: Rect = { left: -200, top: -600, width: 1400, height: 2000 };
+
+describe("a page bigger than the box at 1×", () => {
+  it("knows when the content overflows the box", () => {
+    expect(overflows(1, view, page)).toBe(false);
+    expect(overflows(1, view, full)).toBe(false);
+    expect(overflows(1, view, tall)).toBe(true);
+    expect(overflows(2, view, page)).toBe(true);
+  });
+
+  it("starts a page at its top, and on a wider axis on the reading direction's side", () => {
+    expect(startView(view, page, "rtl")).toBe(FIT);
+    expect(startView(view, tall, "rtl")).toEqual({ scale: 1, x: 0, y: 350 });
+    expect(onScreen(startView(view, tall, "ltr"), { x: 0, y: -350 })).toEqual({ x: 0, y: 0 });
+    // original size: the top-left corner left to right, the top-right one right to left
+    const ltr = startView(view, big, "ltr");
+    expect(onScreen(ltr, { x: -200, y: -600 })).toEqual({ x: 0, y: 0 });
+    const rtl = startView(view, big, "rtl");
+    expect(onScreen(rtl, { x: 1200, y: -600 })).toEqual({ x: 1000, y: 0 });
+  });
+
+  it("pans at 1× within the page, and not at all when it fits", () => {
+    const start = startView(view, tall, "ltr");
+    const down = panBy(start, 0, -300, view, tall);
+    expect(down).toEqual({ scale: 1, x: 0, y: 50 });
+    // clamped at the page's bottom: its bottom edge at the box's bottom
+    const bottom = panBy(down, 0, -10_000, view, tall);
+    expect(onScreen(bottom, { x: 0, y: 1150 })).toEqual({ x: 0, y: 800 });
+    expect(panBy(FIT, 0, -300, view, page)).toBe(FIT);
+    // clampZoom keeps a 1× view that overflows (it isn't FIT)
+    expect(clampZoom({ scale: 1, x: 0, y: 100 }, view, tall)).toEqual({ scale: 1, x: 0, y: 100 });
+    expect(isZoomed(down)).toBe(false);
+  });
+
+  it("says which edges the view is at", () => {
+    const start = startView(view, tall, "ltr");
+    expect(edgesOf(start, view, tall)).toEqual({
+      top: true,
+      bottom: false,
+      left: true,
+      right: true,
+    });
+    const bottom = panBy(start, 0, -10_000, view, tall);
+    expect(edgesOf(bottom, view, tall)).toEqual({
+      top: false,
+      bottom: true,
+      left: true,
+      right: true,
+    });
+    // a page that fits is at every edge
+    expect(edgesOf(FIT, view, page)).toEqual({ top: true, bottom: true, left: true, right: true });
+  });
+
+  it("zooms the fitted page from where it was scrolled", () => {
+    const start = startView(view, tall, "ltr");
+    const z = zoomAt(start, 2, { x: 500, y: 400 }, view, tall);
+    expect(z.scale).toBe(2);
+    // the point under the cursor stays: content (500, 50) was at (500, 400)
+    expect(onScreen(z, { x: 500, y: 50 })).toEqual({ x: 500, y: 400 });
   });
 });

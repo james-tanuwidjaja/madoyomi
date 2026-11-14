@@ -39,7 +39,8 @@ export interface PageLoaderOptions {
   /** The pages to load, most urgent first; when null, the ones around `position` (`behind`, `ahead`). */
   wanted?: MaybeRefOrGetter<readonly number[] | null>;
   behind?: number;
-  ahead?: number;
+  /** Pages ahead of the position when `wanted` is null (the preload count, Stage 5; a new value reloads the window). */
+  ahead?: MaybeRefOrGetter<number>;
   maxConcurrent?: number;
   fetcher?: PageFetcher;
   createUrl?: (blob: Blob) => string;
@@ -128,7 +129,7 @@ export function usePageLoader(opts: PageLoaderOptions) {
       toValue(opts.position),
       count,
       opts.behind ?? PAGES_BEHIND,
-      opts.ahead ?? PAGES_AHEAD,
+      toValue(opts.ahead) ?? PAGES_AHEAD,
     );
   }
 
@@ -174,6 +175,7 @@ export function usePageLoader(opts: PageLoaderOptions) {
   );
   watch(() => toValue(opts.position), pump);
   watch(() => toValue(opts.wanted)?.join(",") ?? null, pump);
+  watch(() => toValue(opts.ahead), pump);
   pump();
   onScopeDispose(reset);
 

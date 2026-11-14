@@ -295,3 +295,39 @@ describe("usePageLoader with the webtoon strip's window (Stage 3)", () => {
     expect(loader.size(0)).toBeUndefined();
   });
 });
+
+describe("usePageLoader: the preload count (Stage 5)", () => {
+  it("loads as many pages ahead as the count says, and follows a new count at once", async () => {
+    const ahead = ref(2);
+    const position = ref(0);
+    const s = withSetup(
+      () =>
+        usePageLoader({
+          pages: routes(30),
+          position,
+          ahead,
+          fetcher,
+          createUrl: (b) => `blob:${b.size}:${Math.random()}`,
+          revokeUrl: (u) => revoked.push(u),
+        }),
+      { pinia: createPinia(), queryClient: new QueryClient() },
+    );
+    unmount = s.unmount;
+    expect(calls.map(index)).toEqual([0, 1, 2]);
+    for (const c of [...calls]) await settle(c);
+    expect(calls.map(index)).toEqual([0, 1, 2]);
+
+    ahead.value = 8;
+    await nextTick();
+    await flushPromises();
+    expect(open().map(index)).toEqual([3, 4, 5, 6]);
+    for (const c of open()) await settle(c);
+    expect(calls.map(index)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+
+    // a lower count releases the pages past it
+    ahead.value = 2;
+    await nextTick();
+    expect(s.result.state(8)).toBeUndefined();
+    expect(s.result.state(2)).toMatchObject({ status: "loaded" });
+  });
+});

@@ -33,6 +33,7 @@ export const queryKeys = {
   playerSettings: () => ["api", "player", "settings"] as const,
   playerLanguages: () => ["api", "player", "languages"] as const,
   readerSettings: () => ["api", "reader", "settings"] as const,
+  mangaReaderMeta: (mangaId: number) => ["api", "manga", mangaId, "readerMeta"] as const,
   pageCache: () => ["api", "reader", "pageCache"] as const,
   chapterPages: (chapterId: number) => ["api", "reader", "pages", chapterId] as const,
   library: (kind?: MediaKind) =>

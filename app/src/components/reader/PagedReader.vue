@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import type { PageState } from "../../composables/usePageLoader";
 import { BEFORE, zoneAt, type ReadingDirection, type ZoneAction } from "../../utils/pagedNav";
+import type { PageFit } from "../../utils/readerSettings";
+import { scrollAmount } from "../../utils/webtoonNav";
 import {
   CLICK_DELAY_MS,
+  edgesOf,
   FIT,
   KEY_ZOOM_FACTOR,
   isZoomed,
+  overflows,
   panBy,
   panStep,
+  startView,
   toggleZoomAt,
   wheelZoomFactor,
   zoomAt,
@@ -32,6 +37,11 @@ import PageFailure from "./PageFailure.vue";
  * thirds still turn at once); zoomed in, a drag pans, a click does nothing and a double-click anywhere goes back to
  * fit. The reader drives the rest through the exposed methods (Ctrl+wheel, the zoom keys, the wheel and the arrows
  * panning). A new view (a page turn, a mode switch) or a resize goes back to fit.
+ *
+ * Stage 5: the page fit (`fit`): the whole page (`screen`, Stage 2's), the window's width (each page of a spread half
+ * of it), the window's height, or the page's own size. A page bigger than the window starts at its top, on the
+ * reading direction's side, and pans at 1× (`scrollable`): a drag, and the reader's wheel and keys through
+ * `scrollPage` and `pan`, before they turn the page. Zoom scales the fitted page; "back to fit" is that start view.
  */
 const props = defineProps<{
   position: number;
@@ -39,6 +49,8 @@ const props = defineProps<{
   pages: readonly number[];
   pageCount: number;
   direction: ReadingDirection;
+  /** How a page fits the window (Stage 5); `screen` when not given. */
+  fit?: PageFit;
   pageState: (index: number) => PageState | undefined;
   chapterName: string;
   mangaTitle: string;
@@ -62,6 +74,18 @@ const content = ref<HTMLElement | null>(null);
 const zoom = ref<Zoom>(FIT);
 const zoomed = computed(() => isZoomed(zoom.value));
 const panning = ref(false);
+const fitClass = computed(() => `fit-${props.fit ?? "screen"}`);
+/** No zoom or pan by the user since the view was (re)set: the view follows the layout to its start. */
+let fresh = true;
+/** The box and the pages' rect as last measured (after each layout change), for `scrollable`. */
+const measured = shallowRef<{ box: Box; rect: Rect }>({
+  box: { width: 0, height: 0 },
+  rect: { left: 0, top: 0, width: 0, height: 0 },
+});
+/** At 1×, the fitted pages are bigger than the window: they pan before the reader turns the page. */
+const scrollable = computed(
+  () => !zoomed.value && overflows(1, measured.value.box, measured.value.rect),
+);
 
 const two = computed(() => props.pages.length > 1);
 const stateOf = (i: number) => props.pageState(i);
@@ -97,26 +121,56 @@ function pointIn(event: { clientX: number; clientY: number }) {
   return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) };
 }
 
+function measure() {
+  measured.value = { box: box(), rect: contentRect() };
+}
+
+/** Back to the start view: the page whole, or its top on the reading direction's side when it is bigger. */
 function resetZoom() {
-  zoom.value = FIT;
+  fresh = true;
+  measure();
+  zoom.value = startView(measured.value.box, measured.value.rect, props.direction);
+}
+
+function setZoom(z: Zoom) {
+  fresh = false;
+  zoom.value = z;
 }
 
 /** Zooms by `factor` about a point of the box (its centre when none is given). */
 function zoomBy(factor: number, point?: { x: number; y: number }) {
   const b = box();
   const p = point ?? { x: b.width / 2, y: b.height / 2 };
-  zoom.value = zoomAt(zoom.value, zoom.value.scale * factor, p, b, contentRect());
+  const z = zoomAt(zoom.value, zoom.value.scale * factor, p, b, contentRect());
+  if (isZoomed(z)) setZoom(z);
+  else resetZoom();
 }
 
-/** Moves the view by `dx`, `dy` px (positive: look further right or down). */
-function pan(dx: number, dy: number) {
-  zoom.value = panBy(zoom.value, -dx, -dy, box(), contentRect());
+/** Moves the view by `dx`, `dy` px (positive: look further right or down); false when it was at that edge. */
+function pan(dx: number, dy: number): boolean {
+  const before = zoom.value;
+  const z = panBy(before, -dx, -dy, box(), contentRect());
+  if (Math.abs(z.x - before.x) < 0.5 && Math.abs(z.y - before.y) < 0.5) return false;
+  setZoom(z);
+  return true;
 }
 
 defineExpose({
   /** True while zoomed in (the reader then pans with the wheel and the arrows). */
   get zoomed() {
     return zoomed.value;
+  },
+  /** True while the fitted pages are bigger than the window at 1× (they scroll before a page turn). */
+  get scrollable() {
+    return scrollable.value;
+  },
+  /** Whether the view is at the pages' top and bottom (the wheel then turns the page). */
+  edges() {
+    return edgesOf(zoom.value, box(), contentRect());
+  },
+  /** A line or a screen down (1) or up (-1) through a page bigger than the window; false at its edge. */
+  scrollPage(kind: "line" | "screen", dir: 1 | -1): boolean {
+    return pan(0, dir * scrollAmount(kind, box().height));
   },
   resetZoom,
   /** Ctrl+wheel: zooms about the pointer. */
@@ -171,7 +225,11 @@ function onClick(event: MouseEvent) {
   if (second || menuTimer) {
     // The middle third's double-click: zoom there instead of toggling the toolbar.
     cancelMenu();
-    if (props.pages.length > 0) zoom.value = toggleZoomAt(zoom.value, point, box(), contentRect());
+    if (props.pages.length > 0) {
+      const z = toggleZoomAt(zoom.value, point, box(), contentRect());
+      if (isZoomed(z)) setZoom(z);
+      else resetZoom();
+    }
     return;
   }
   menuTimer = setTimeout(() => {
@@ -181,7 +239,7 @@ function onClick(event: MouseEvent) {
 }
 
 function onPointerDown(event: PointerEvent) {
-  if (!zoomed.value || event.button !== 0) return;
+  if ((!zoomed.value && !scrollable.value) || event.button !== 0) return;
   drag = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
   (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
 }
@@ -195,7 +253,7 @@ function onPointerMove(event: PointerEvent) {
   panning.value = true;
   drag.x = event.clientX;
   drag.y = event.clientY;
-  zoom.value = panBy(zoom.value, dx, dy, box(), contentRect());
+  setZoom(panBy(zoom.value, dx, dy, box(), contentRect()));
 }
 
 function onPointerUp(event: PointerEvent) {
@@ -210,11 +268,29 @@ watch(
   () => `${props.position}:${props.pages.join(",")}`,
   () => {
     cancelMenu();
-    resetZoom();
+    fresh = true;
+    zoom.value = FIT;
   },
 );
+// Once the DOM has the new view, a page loaded or the fit changed: a view not touched since goes to its start.
+watch(
+  () =>
+    `${props.position}:${props.pages.map((i) => props.pageState(i)?.status ?? "").join(",")}:${props.fit}:${props.direction}`,
+  () => {
+    if (fresh) resetZoom();
+    else measure();
+  },
+  { flush: "post" },
+);
+
+function onImageLoad() {
+  if (fresh) resetZoom();
+  else measure();
+}
 let observer: ResizeObserver | null = null;
 onMounted(() => {
+  // The pages may be in already (a mode switch, a chapter fetched ahead): start from their layout.
+  resetZoom();
   if (typeof ResizeObserver !== "undefined" && root.value) {
     let first = true;
     observer = new ResizeObserver(() => {
@@ -231,9 +307,9 @@ onBeforeUnmount(() => {
 });
 
 const layerStyle = computed(() =>
-  zoomed.value
-    ? { transform: `translate(${zoom.value.x}px, ${zoom.value.y}px) scale(${zoom.value.scale})` }
-    : undefined,
+  zoom.value === FIT
+    ? undefined
+    : { transform: `translate(${zoom.value.x}px, ${zoom.value.y}px) scale(${zoom.value.scale})` },
 );
 </script>
 
@@ -241,10 +317,11 @@ const layerStyle = computed(() =>
   <div
     ref="root"
     class="paged"
-    :class="{ zoomed, panning }"
+    :class="{ zoomed, scrollable, panning }"
     data-testid="paged-reader"
     :data-direction="direction"
     :data-zoom="zoom.scale.toFixed(2)"
+    :data-fit="fit ?? 'screen'"
     @click="onClick"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
@@ -255,7 +332,7 @@ const layerStyle = computed(() =>
       <div
         ref="content"
         class="spread"
-        :class="[direction, { two }]"
+        :class="[direction, fitClass, { two }]"
         :data-pages="pages.join(',')"
         data-testid="spread"
       >
@@ -268,6 +345,7 @@ const layerStyle = computed(() =>
             :data-page="i"
             draggable="false"
             data-testid="page-image"
+            @load="onImageLoad"
           />
           <div v-else-if="stateOf(i)?.status === 'error'" class="slot" :data-page="i">
             <PageFailure
@@ -311,7 +389,8 @@ const layerStyle = computed(() =>
   touch-action: none;
 }
 
-.paged.zoomed {
+.paged.zoomed,
+.paged.scrollable {
   cursor: grab;
 }
 
@@ -344,8 +423,31 @@ const layerStyle = computed(() =>
   object-fit: contain;
 }
 
-.spread.two > * {
+.spread.fit-screen.two > * {
   max-width: 50%;
+}
+
+/* The other fits can be bigger than the window: the layer pans them (utils/zoom.ts). */
+.fit-width .page,
+.fit-height .page,
+.fit-original .page {
+  flex: none;
+  max-width: none;
+  max-height: none;
+}
+
+.fit-width .page {
+  width: 100%;
+  height: auto;
+}
+
+.fit-width.two .page {
+  width: 50%;
+}
+
+.fit-height .page {
+  width: auto;
+  height: 100%;
 }
 
 .slot {
@@ -363,7 +465,7 @@ const layerStyle = computed(() =>
 .placeholder {
   margin: 0;
   padding: var(--space-5);
-  color: rgb(255 255 255 / 70%);
+  color: var(--reader-muted, rgb(255 255 255 / 70%));
   text-align: center;
 }
 </style>

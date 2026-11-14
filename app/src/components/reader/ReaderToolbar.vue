@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ReadingDirection } from "../../utils/pagedNav";
-import { READER_MODES, type ReaderMode } from "../../stores/reader";
+import { MODE_LABELS, READER_MODES, type ReaderMode } from "../../utils/readerSettings";
 
 /**
  * The reader's toolbar (Phase 5 Stage 2, a first step 11): back to the manga and the chapter's name at the top; the
@@ -14,6 +14,9 @@ import { READER_MODES, type ReaderMode } from "../../stores/reader";
  * the double-page one "Shift" and a spread's label ("4–5 / 92"). A mouse click on a button leaves the focus where it
  * was (the reader), so Space then turns the page instead of pressing the button again; Tab still reaches every
  * button, and Space or Enter presses the focused one. The slider gives the focus back once a pointer lets it go.
+ *
+ * Stage 5: the mode and the direction are the manga's (the reader saves a switch as this manga's own), the page gap
+ * the global one; Shift stays for the session. "Settings" opens the reader's settings sheet.
  */
 const props = defineProps<{
   mangaTitle: string;
@@ -43,13 +46,8 @@ const emit = defineEmits<{
   togglePageGap: [];
   toggleShift: [];
   toggleFullscreen: [];
+  openSettings: [];
 }>();
-
-const MODE_LABELS: Record<ReaderMode, string> = {
-  paged: "Single",
-  double: "Double",
-  webtoon: "Webtoon",
-};
 
 const paged = computed(() => props.mode !== "webtoon");
 /** The slider's and the buttons' order: the reading direction in the paged modes, top to bottom (left) in the strip. */
@@ -170,6 +168,9 @@ function releaseSlider(event: Event) {
     >
       {{ direction === "rtl" ? "Right to left" : "Left to right" }}
     </button>
+    <button type="button" class="btn" data-action="settings" @click="emit('openSettings')">
+      Settings
+    </button>
     <button type="button" class="btn" data-action="fullscreen" @click="emit('toggleFullscreen')">
       {{ fullscreen ? "Exit fullscreen" : "Fullscreen" }}
     </button>
@@ -219,6 +220,7 @@ function releaseSlider(event: Event) {
 .bottom.rtl .modes,
 .bottom.rtl [data-action="shift"],
 .bottom.rtl [data-action="direction"],
+.bottom.rtl [data-action="settings"],
 .bottom.rtl [data-action="fullscreen"] {
   order: 5;
 }

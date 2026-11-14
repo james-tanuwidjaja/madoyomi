@@ -7,6 +7,7 @@ import {
   itemHeight,
   itemsBetween,
   itemStart,
+  MAX_STRIP_WIDTH,
   pageHeights,
   scrollAmount,
   scrollForAnchor,
@@ -35,6 +36,10 @@ import PageFailure from "./PageFailure.vue";
  *
  * Stage 4: `edges()` says whether it is at its top or bottom, for the reader's wheel past the ends (the seamless
  * next chapter); the reader keys the strip by chapter, so each chapter gets a new one.
+ *
+ * Stage 5: the width (`maxWidth`) and the load window (`preload`) are settings. A new width is a new layout, so the
+ * anchor holds the point at the viewport's centre as it does for a resize. The colours follow the reader's background
+ * (`--reader-fg`).
  */
 const props = defineProps<{
   position: number;
@@ -43,6 +48,10 @@ const props = defineProps<{
   pageSize: (index: number) => PageSize | undefined;
   /** Between items, px. */
   gap: number;
+  /** The strip's widest, px; 0 is the window's width (Stage 5's setting; 800 by default). */
+  maxWidth?: number;
+  /** The preload count (Stage 5): the strip keeps at least `preload − 2` pages past the viewport loaded. */
+  preload?: number;
   chapterName: string;
   mangaTitle: string;
   previousName: string | null;
@@ -68,7 +77,10 @@ let anchor: Anchor = topAnchor(props.position);
 /** The scrollTop the strip set itself, until its scroll event arrives. */
 let programmatic: number | null = null;
 
-const width = computed(() => stripWidth(viewport.width));
+const width = computed(() =>
+  stripWidth(viewport.width, props.maxWidth === 0 ? Infinity : (props.maxWidth ?? MAX_STRIP_WIDTH)),
+);
+const loadWindow = computed(() => stripWindow(viewport.height, props.preload));
 /** Set once the strip is measured and scrolled to its first position: nothing is reported before. */
 const started = ref(false);
 const ready = computed(() => started.value && viewport.height > 0 && width.value > 0);
@@ -85,14 +97,16 @@ const shown = computed(() =>
   ready.value ? shownPosition(layout.value, scrollTop.value, viewport.height) : props.position,
 );
 const wanted = computed(() =>
-  ready.value ? stripPagesToLoad(layout.value, scrollTop.value, viewport.height) : [],
+  ready.value
+    ? stripPagesToLoad(layout.value, scrollTop.value, viewport.height, loadWindow.value)
+    : [],
 );
 const wantedKey = computed(() => wanted.value.join(","));
 
 /** The items in the DOM: the band of the load window, and every page being loaded. */
 const band = computed((): [number, number] => {
   if (!ready.value) return [0, -1];
-  const w = stripWindow(viewport.height);
+  const w = loadWindow.value;
   const [a, b] = itemsBetween(
     layout.value,
     scrollTop.value - w.behind,
@@ -341,7 +355,7 @@ onBeforeUnmount(() => observer?.disconnect());
   height: 100%;
   margin: 0;
   padding-top: var(--space-6, 48px);
-  background: rgb(255 255 255 / 4%);
-  color: rgb(255 255 255 / 60%);
+  background: var(--reader-veil, rgb(255 255 255 / 4%));
+  color: var(--reader-muted, rgb(255 255 255 / 60%));
 }
 </style>
