@@ -8,6 +8,7 @@ import { createQueryClient } from "../../api/realtime";
 import { api, ApiError } from "../../api/client";
 import type { Chapter, ChapterPages, ChapterPatch } from "../../api/types";
 import { useReaderStore } from "../../stores/reader";
+import { CLICK_DELAY_MS } from "../../utils/zoom";
 import { makeChapters, makeManga } from "../../test/fixtures";
 import { createTestRouter, mountView, setBackendReady } from "../../test/mountView";
 import { backendStatus, healthyStatus } from "../../test/backendStatus";
@@ -24,6 +25,24 @@ vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   ...ops,
 }));
+
+// jsdom can't decode images: the pages' natural sizes come from this map (by page index), so a test can make a page
+// wide (a spread). Without an entry a page loads unmeasured, as in jsdom.
+const loaderSizes = vi.hoisted(() => new Map<number, { width: number; height: number }>());
+vi.mock("../../composables/usePageLoader", async (importOriginal) => {
+  const m = await importOriginal<typeof import("../../composables/usePageLoader")>();
+  return {
+    ...m,
+    usePageLoader: (o: Parameters<typeof m.usePageLoader>[0]) =>
+      m.usePageLoader({
+        decode: async (url: string) => {
+          const k = /\/page\/(\d+)#/.exec(url);
+          return k ? (loaderSizes.get(Number(k[1])) ?? null) : null;
+        },
+        ...o,
+      }),
+  };
+});
 
 import ReaderView from "../ReaderView.vue";
 
@@ -46,6 +65,7 @@ let assetCalls: {
 }[];
 let autoResolve: boolean;
 const restore: (() => void)[] = [];
+let blobPaths: WeakMap<Blob, string>;
 
 const routesOf = (c: Chapter) =>
   Array.from(
@@ -62,6 +82,10 @@ async function mountReader(chapterId = 5001, query = "") {
 const position = () => wrapper.find('[data-testid="reader"]').attributes("data-position");
 const paged = () => wrapper.find('[data-testid="paged-reader"]');
 const pageQuery = () => router.currentRoute.value.query.page;
+/** What the app's router-view does after openChapter: the props follow the route. */
+async function follow() {
+  await wrapper.setProps({ chapterId: Number(router.currentRoute.value.params.chapterId) });
+}
 async function clickAt(x: number) {
   await paged().trigger("click", { clientX: x });
   await flushPromises();
@@ -81,6 +105,8 @@ beforeEach(() => {
   chapters = makeChapters(3).map((c) => ({ ...c, pageCount: 10 }));
   assetCalls = [];
   autoResolve = true;
+  blobPaths = new WeakMap();
+  loaderSizes.clear();
 
   ops.fetchManga.mockResolvedValue(makeManga());
   ops.fetchChapters.mockImplementation(async () => chapters);
@@ -105,7 +131,11 @@ beforeEach(() => {
         const call = {
           path,
           reload: !!o?.reload,
-          resolve: () => resolve(new Blob([path])),
+          resolve: () => {
+            const blob = new Blob([path]);
+            blobPaths.set(blob, path);
+            resolve(blob);
+          },
           reject,
         };
         assetCalls.push(call);
@@ -115,7 +145,9 @@ beforeEach(() => {
   restore.push(() => fetchAsset.mockRestore());
   const created = URL.createObjectURL;
   const revoked = URL.revokeObjectURL;
-  URL.createObjectURL = vi.fn(() => `blob:${Math.random()}`);
+  URL.createObjectURL = vi.fn(
+    (b: Blob) => `blob:${blobPaths.get(b) ?? ""}#${Math.random()}`,
+  ) as typeof URL.createObjectURL;
   URL.revokeObjectURL = vi.fn();
   restore.push(() => {
     URL.createObjectURL = created;
@@ -165,9 +197,17 @@ describe("ReaderView", () => {
     expect(position()).toBe("1");
     await clickAt(850);
     expect(position()).toBe("0");
-    // the middle toggles the toolbar
+    // the middle toggles the toolbar, once it is sure no second click (a double-click zooms) follows
     expect(wrapper.find('[data-testid="reader-bottom"]').exists()).toBe(false);
-    await clickAt(450);
+    vi.useFakeTimers();
+    try {
+      await clickAt(450);
+      expect(wrapper.find('[data-testid="reader-bottom"]').exists()).toBe(false);
+      vi.advanceTimersByTime(CLICK_DELAY_MS);
+      await flushPromises();
+    } finally {
+      vi.useRealTimers();
+    }
     expect(wrapper.find('[data-testid="reader-bottom"]').exists()).toBe(true);
     expect(position()).toBe("0");
   });
@@ -227,7 +267,7 @@ describe("ReaderView", () => {
     expect(ops.updateChapter).toHaveBeenCalledWith(5001, { lastPageRead: 9, isRead: true });
 
     await key("ArrowLeft");
-    expect(wrapper.find('[data-testid="panel-end"]').text()).toContain("Next: Chapter 2");
+    expect(wrapper.find('[data-testid="panel-end"]').text()).toContain("Next chapter: Chapter 2");
 
     await key("ArrowLeft");
     expect(router.currentRoute.value.path).toBe("/manga/34/read/5002");
@@ -251,7 +291,9 @@ describe("ReaderView", () => {
   it("goes back to the previous chapter's last page through its panel", async () => {
     await mountReader(5002);
     await key("ArrowRight");
-    expect(wrapper.find('[data-testid="panel-previous"]').text()).toContain("Previous: Chapter 1");
+    expect(wrapper.find('[data-testid="panel-previous"]').text()).toContain(
+      "Previous chapter: Chapter 1",
+    );
 
     await key("ArrowRight");
     expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
@@ -397,15 +439,24 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
   it("switches modes from the toolbar for the session, and keeps the page", async () => {
     chapters[0] = { ...chapters[0]!, lastPageRead: 4 };
     await mountReader();
-    expect(wrapper.find('[data-action="mode"]').text()).toBe("Paged");
+    const modes = () =>
+      wrapper
+        .findAll('[data-testid="reader-modes"] button')
+        .map((b) => b.attributes("aria-pressed"));
+    expect(wrapper.findAll('[data-testid="reader-modes"] button').map((b) => b.text())).toEqual([
+      "Single",
+      "Double",
+      "Webtoon",
+    ]);
+    expect(modes()).toEqual(["true", "false", "false"]);
 
-    await wrapper.find('[data-action="mode"]').trigger("click");
+    await wrapper.find('[data-action="mode-webtoon"]').trigger("click");
     await flushPromises();
     expect(useReaderStore().mode).toBe("webtoon");
     expect(paged().exists()).toBe(false);
     expect(stripEl().scrollTop).toBe(4 * 1200);
     expect(position()).toBe("4");
-    expect(wrapper.find('[data-action="mode"]').text()).toBe("Webtoon");
+    expect(modes()).toEqual(["false", "false", "true"]);
     expect(wrapper.find('[data-action="direction"]').exists()).toBe(false);
 
     await scrollTo(6 * 1200 + 100);
@@ -414,7 +465,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
     // scrolling hid the toolbar; M brings it back
     expect(wrapper.find('[data-testid="reader-bottom"]').exists()).toBe(false);
     await key("m");
-    await wrapper.find('[data-action="mode"]').trigger("click");
+    await wrapper.find('[data-action="mode-paged"]').trigger("click");
     await flushPromises();
     expect(paged().exists()).toBe(true);
     expect(wrapper.find('[data-testid="page-image"]').attributes("alt")).toBe("Page 7");
@@ -432,7 +483,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
 
     await scrollTo(10 * 1200); // the bottom: the end panel fills the viewport
     expect(position()).toBe("10");
-    expect(strip().find('[data-testid="panel-end"]').text()).toContain("Next: Chapter 2");
+    expect(strip().find('[data-testid="panel-end"]').text()).toContain("Next chapter: Chapter 2");
     await key("PageDown");
     expect(router.currentRoute.value.path).toBe("/manga/34/read/5002");
   });
@@ -526,5 +577,364 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
     await flushPromises();
     expect(wheel.defaultPrevented).toBe(false);
     expect(position()).toBe("0");
+  });
+});
+
+describe("ReaderView in the double-page mode (Stage 4)", () => {
+  const spread = () => wrapper.find('[data-testid="spread"]');
+  const shown = () => spread().attributes("data-pages");
+  const count = () => wrapper.find('[data-testid="page-count"]').text();
+
+  it("shows the first page alone, then spreads of two right to left, step by spread", async () => {
+    useReaderStore().mode = "double";
+    await mountReader();
+    expect(shown()).toBe("0");
+    expect(count()).toBe("1 / 10");
+
+    await key("ArrowLeft");
+    expect(shown()).toBe("1,2");
+    expect(spread().classes()).toEqual(expect.arrayContaining(["rtl", "two"]));
+    // in reading order in the DOM; right to left lays them out reversed (the first page on the right)
+    expect(wrapper.findAll('[data-testid="page-image"]').map((i) => i.attributes("alt"))).toEqual([
+      "Page 2",
+      "Page 3",
+    ]);
+    await key("m");
+    expect(count()).toBe("2–3 / 10");
+    expect(pageQuery()).toBe("2");
+
+    await key("ArrowLeft");
+    expect(shown()).toBe("3,4");
+    await key("ArrowRight");
+    expect(shown()).toBe("1,2");
+    await key("ArrowRight");
+    expect(shown()).toBe("0");
+  });
+
+  it("pairs the first two pages with Shift, for the session", async () => {
+    useReaderStore().mode = "double";
+    await mountReader();
+    const shift = wrapper.find('[data-action="shift"]');
+    expect(shift.text()).toBe("Shift: off");
+
+    await shift.trigger("click");
+    await flushPromises();
+    expect(useReaderStore().shift).toBe(true);
+    expect(shown()).toBe("0,1");
+    expect(wrapper.find('[data-action="shift"]').text()).toBe("Shift: on");
+    await key("ArrowLeft");
+    expect(shown()).toBe("2,3");
+  });
+
+  it("shows a wide page alone, at an odd and an even index, and keeps the page shown when the pairs change", async () => {
+    // 0 | 1-2 | 3 | 4 (wide) | 5-6 | 7 (wide) | 8-9 once the sizes are known
+    loaderSizes.set(4, { width: 1600, height: 1200 });
+    loaderSizes.set(7, { width: 1600, height: 1200 });
+    useReaderStore().mode = "double";
+    await mountReader(5001, "?page=4");
+    // page 3 was paired with 4 until 4's size came: it stays on screen, alone
+    expect(shown()).toBe("3");
+
+    const seen: string[] = [];
+    for (let k = 0; k < 4; k++) {
+      await key("ArrowLeft");
+      seen.push(shown()!);
+    }
+    expect(seen).toEqual(["4", "5,6", "7", "8,9"]);
+  });
+
+  it("saves the spread's last page, and marks the chapter read on the last spread", async () => {
+    chapters[0] = { ...chapters[0]!, pageCount: 9 }; // 0 | 1-2 | 3-4 | 5-6 | 7-8
+    useReaderStore().mode = "double";
+    await mountReader(5001, "?page=6");
+    expect(shown()).toBe("5,6");
+    expect(position()).toBe("5");
+
+    const slider = wrapper.find('[data-testid="page-slider"]');
+    await slider.setValue("9");
+    await flushPromises();
+    // the slider's page 9 is the second of the spread 8-9
+    expect(position()).toBe("8");
+    expect(shown()).toBe("7,8");
+    expect(count()).toBe("8–9 / 9");
+    expect(ops.updateChapter).toHaveBeenCalledWith(5001, { lastPageRead: 8, isRead: true });
+  });
+
+  it("writes the spread's last page as the place to resume", async () => {
+    useReaderStore().mode = "double";
+    await mountReader(5001, "?page=4");
+    expect(shown()).toBe("3,4");
+    wrapper.unmount();
+    expect(ops.updateChapter).toHaveBeenCalledWith(5001, { lastPageRead: 4 });
+    wrapper = undefined as unknown as VueWrapper;
+  });
+
+  it("keeps the page when switching to and from the single-page mode", async () => {
+    useReaderStore().mode = "double";
+    await mountReader(5001, "?page=4");
+    await wrapper.find('[data-action="mode-paged"]').trigger("click");
+    await flushPromises();
+    expect(shown()).toBe("3");
+    await wrapper.find('[data-action="mode-double"]').trigger("click");
+    await flushPromises();
+    expect(shown()).toBe("3,4");
+  });
+
+  it("loads the spread, the pages after it and the ones before", async () => {
+    autoResolve = false;
+    chapters[0] = { ...chapters[0]!, pageCount: 20 };
+    useReaderStore().mode = "double";
+    await mountReader(5001, "?page=6");
+    // the spread 5-6 first, then 7 and 8 (4 requests at a time)
+    expect(assetCalls.map((c) => c.path.split("/").pop())).toEqual(["5", "6", "7", "8"]);
+  });
+});
+
+describe("ReaderView zoom and pan (Stage 4)", () => {
+  const zoom = () => Number(wrapper.find('[data-testid="paged-reader"]').attributes("data-zoom"));
+  /** A click with its count (`detail`: 2 is the second click of a double-click). */
+  async function click(x: number, detail: number) {
+    paged().element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, clientX: x, clientY: 300, detail }),
+    );
+    await flushPromises();
+  }
+  function wheel(init: WheelEventInit) {
+    const e = new WheelEvent("wheel", { cancelable: true, bubbles: true, ...init });
+    paged().element.dispatchEvent(e);
+    return e;
+  }
+
+  it("zooms with Ctrl+wheel and the keys; zoomed in, the wheel and the arrows pan instead of turning", async () => {
+    await mountReader();
+    const e = wheel({ deltaY: -100, ctrlKey: true, clientX: 450, clientY: 350 });
+    await flushPromises();
+    expect(e.defaultPrevented).toBe(true);
+    expect(zoom()).toBeGreaterThan(1.2);
+    expect(paged().classes()).toContain("zoomed");
+
+    wheel({ deltaY: 120 });
+    await key("ArrowLeft");
+    await key("ArrowDown");
+    await flushPromises();
+    expect(position()).toBe("0");
+    expect(zoom()).toBeGreaterThan(1.2);
+
+    await key("=", { ctrlKey: true });
+    expect(zoom()).toBeGreaterThan(1.5);
+    await key("0", { ctrlKey: true });
+    expect(zoom()).toBe(1);
+
+    // back at fit, the arrows turn again
+    await key("ArrowLeft");
+    expect(position()).toBe("1");
+  });
+
+  it("goes back to fit on a page turn, and Esc goes back to fit before it leaves", async () => {
+    await mountReader();
+    await key("=", { ctrlKey: true });
+    expect(zoom()).toBe(1.25);
+    await key(" ");
+    expect(position()).toBe("1");
+    expect(zoom()).toBe(1);
+
+    await key("=", { ctrlKey: true });
+    await key("Escape");
+    expect(zoom()).toBe(1);
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
+    await key("Escape");
+    expect(router.currentRoute.value.path).toBe("/manga/34");
+  });
+
+  it("zooms 2× with a double-click in the middle third without toggling the toolbar, and back with another", async () => {
+    await mountReader();
+    await key("ArrowLeft"); // the toolbar hides
+    vi.useFakeTimers();
+    try {
+      await click(450, 1);
+      await click(450, 2);
+      vi.advanceTimersByTime(CLICK_DELAY_MS * 2);
+      await flushPromises();
+      expect(zoom()).toBe(2);
+      expect(wrapper.find('[data-testid="reader-bottom"]').exists()).toBe(false);
+
+      // zoomed in, a single click does nothing, even on a side
+      await click(50, 1);
+      vi.advanceTimersByTime(CLICK_DELAY_MS * 2);
+      await flushPromises();
+      expect(position()).toBe("1");
+      expect(zoom()).toBe(2);
+
+      await click(50, 1);
+      await click(50, 2);
+      await flushPromises();
+      expect(zoom()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+    // the side thirds still turn at once
+    await clickAt(50);
+    expect(position()).toBe("2");
+  });
+
+  it("pans with a drag, which isn't a click", async () => {
+    await mountReader();
+    await key("=", { ctrlKey: true });
+    const el = paged().element;
+    const pointer = (type: string, x: number) =>
+      el.dispatchEvent(
+        new MouseEvent(type, { bubbles: true, clientX: x, clientY: 300, button: 0 }),
+      );
+    pointer("pointerdown", 450);
+    pointer("pointermove", 300);
+    await flushPromises();
+    expect(paged().classes()).toContain("panning");
+    pointer("pointerup", 300);
+    await click(300, 1);
+    expect(position()).toBe("0");
+    expect(zoom()).toBe(1.25);
+  });
+
+  it("has no zoom in the webtoon strip", async () => {
+    useReaderStore().mode = "webtoon";
+    await mountReader();
+    const e = new WheelEvent("wheel", {
+      deltaY: -100,
+      ctrlKey: true,
+      cancelable: true,
+      bubbles: true,
+    });
+    wrapper.find('[data-testid="webtoon-reader"]').element.dispatchEvent(e);
+    await key("=", { ctrlKey: true });
+    expect(e.defaultPrevented).toBe(true);
+    expect(wrapper.find('[data-testid="zoom-layer"]').exists()).toBe(false);
+  });
+});
+
+describe("ReaderView, the seamless next chapter (Stage 4)", () => {
+  it("fetches the next chapter's page list near the end, and goes on into it at once", async () => {
+    let queryOf5002 = 0;
+    const base = ops.fetchChapterPages.getMockImplementation()!;
+    ops.fetchChapterPages.mockImplementation(async (id: number) => {
+      // the next chapter's own query (after the one fetched ahead) never answers: it isn't waited for
+      if (id === 5002 && ++queryOf5002 > 1) return new Promise(() => {});
+      return base(id);
+    });
+    await mountReader(5001, "?page=5");
+    expect(ops.fetchChapterPages).not.toHaveBeenCalledWith(5002);
+
+    await key("ArrowLeft"); // page 6: 5 from the end
+    expect(ops.fetchChapterPages).toHaveBeenCalledWith(5002);
+
+    await key("End");
+    await key("ArrowLeft");
+    expect(wrapper.find('[data-testid="panel-end"]').text()).toContain("Next chapter: Chapter 2");
+    await key("ArrowLeft");
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5002");
+    await follow();
+    expect(wrapper.find('[data-testid="reader-loading"]').exists()).toBe(false);
+    expect(position()).toBe("0");
+    await flushPromises();
+    expect(wrapper.find('[data-testid="page-image"]').attributes("alt")).toBe("Page 1");
+    expect(assetCalls.some((c) => c.path === "/api/v1/manga/34/chapter/2/page/0")).toBe(true);
+    expect(document.title).toContain("Chapter 2");
+    expect(ops.updateChapter).toHaveBeenCalledWith(5001, { lastPageRead: 9, isRead: true });
+  });
+
+  it("fetches the previous chapter's page list on its panel, and goes back into it at once", async () => {
+    await mountReader(5002);
+    const before = ops.fetchChapterPages.mock.calls.filter(([id]) => id === 5001).length;
+    await key("ArrowRight");
+    expect(ops.fetchChapterPages.mock.calls.filter(([id]) => id === 5001).length).toBe(before + 1);
+
+    ops.fetchChapterPages.mockImplementation(() => new Promise(() => {}));
+    await key("ArrowRight");
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
+    await follow();
+    expect(position()).toBe("9");
+    expect(wrapper.find('[data-testid="reader-loading"]').exists()).toBe(false);
+  });
+});
+
+describe("ReaderView, the webtoon strip's wheel past its ends (Stage 4)", () => {
+  beforeEach(() => {
+    for (const [prop, value] of [
+      ["clientWidth", 1000],
+      ["clientHeight", 900],
+    ] as const) {
+      const before = Object.getOwnPropertyDescriptor(HTMLElement.prototype, prop);
+      Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => value });
+      restore.push(() => {
+        if (before) Object.defineProperty(HTMLElement.prototype, prop, before);
+      });
+    }
+    let now = 1000;
+    const spy = vi.spyOn(performance, "now").mockImplementation(() => now);
+    restore.push(() => spy.mockRestore());
+    clock = (t: number) => (now = t);
+  });
+  let clock: (t: number) => void;
+
+  const stripEl = () => wrapper.find('[data-testid="webtoon-reader"]').element as HTMLElement;
+  async function scrollTo(y: number) {
+    stripEl().scrollTop = y;
+    stripEl().dispatchEvent(new Event("scroll"));
+    await flushPromises();
+  }
+  async function wheelAt(t: number, deltaY: number) {
+    clock(t);
+    const e = new WheelEvent("wheel", { deltaY, cancelable: true, bubbles: true });
+    stripEl().dispatchEvent(e);
+    await flushPromises();
+    return e;
+  }
+
+  it("goes on into the next chapter on a new wheel gesture at the bottom, not on the one that got there", async () => {
+    useReaderStore().mode = "webtoon";
+    await mountReader();
+    await wheelAt(1000, 100);
+    // 10 pages of 1200 px and the end panel (900): the bottom is at 12000
+    await scrollTo(12000);
+    await wheelAt(1050, 100);
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
+
+    const opening = await wheelAt(1600, 100);
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5002");
+    // that notch doesn't also scroll the new strip; the ones before scrolled the strip natively
+    expect(opening.defaultPrevented).toBe(true);
+    await follow();
+    await flushPromises();
+    expect(position()).toBe("0");
+    // a new strip for the chapter, page 1 at the top below its "Previous chapter" panel
+    expect(stripEl().scrollTop).toBe(240);
+  });
+
+  it("goes back into the previous chapter on a wheel gesture up at the top", async () => {
+    useReaderStore().mode = "webtoon";
+    await mountReader(5002);
+    await scrollTo(0);
+    await wheelAt(5000, -100);
+    expect(router.currentRoute.value.path).toBe("/manga/34/read/5001");
+    expect(pageQuery()).toBe("last");
+  });
+});
+
+describe("ReaderToolbar's focus (Stage 4)", () => {
+  it("leaves the focus on the reader after a mouse click on a button, and the slider gives it back", async () => {
+    await mountReader();
+    for (const action of ["mode-double", "direction", "fullscreen"]) {
+      const e = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+      wrapper.find(`[data-action="${action}"]`).element.dispatchEvent(e);
+      expect(e.defaultPrevented).toBe(true);
+    }
+    const slider = wrapper.find('[data-testid="page-slider"]');
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    slider.element.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false);
+
+    (slider.element as HTMLElement).focus();
+    expect(document.activeElement).toBe(slider.element);
+    await slider.trigger("pointerup");
+    expect(document.activeElement).not.toBe(slider.element);
   });
 });

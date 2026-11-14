@@ -129,11 +129,11 @@ describe("WebtoonReader", () => {
 
     await scrollTo(0);
     expect(last("position")).toBe(-1);
-    expect(item(-1).text()).toContain("Previous: Chapter 125");
+    expect(item(-1).text()).toContain("Previous chapter: Chapter 125");
 
     await scrollTo(240 + 100 * 1200); // the bottom: the end panel fills the viewport
     expect(last("position")).toBe(100);
-    expect(item(100).text()).toContain("Next: Chapter 127");
+    expect(item(100).text()).toContain("Next chapter: Chapter 127");
   });
 
   it("keeps the page it opened at in place when the pages above it get their real size", async () => {

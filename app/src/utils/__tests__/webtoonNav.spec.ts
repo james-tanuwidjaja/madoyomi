@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   anchorAt,
   atStripEnd,
+  createEdgeWheel,
   DEFAULT_PAGE_RATIO,
   estimateRatio,
   itemHeight,
@@ -205,5 +206,44 @@ describe("the keys", () => {
     expect(scrollAmount("line", 900)).toBe(135);
     expect(scrollAmount("line", 200)).toBe(60);
     expect(scrollAmount("screen", 900)).toBe(810);
+  });
+});
+
+describe("createEdgeWheel (the wheel past the strip's ends, Stage 4)", () => {
+  it("opens the next chapter on a new gesture down at the bottom", () => {
+    const w = createEdgeWheel();
+    expect(w.push(100, 0, 1)).toBe(1);
+  });
+
+  it("doesn't carry a fling that reaches the bottom into the next chapter", () => {
+    const w = createEdgeWheel();
+    expect(w.push(100, 0, 0)).toBe(0);
+    expect(w.push(100, 50, 1)).toBe(0);
+    expect(w.push(100, 100, 1)).toBe(0);
+    // a pause, then a notch down: on into the next chapter
+    expect(w.push(100, 400, 1)).toBe(1);
+    // the rest of that gesture doesn't open another one
+    expect(w.push(100, 450, 1)).toBe(0);
+  });
+
+  it("opens the previous chapter on a gesture up at the top, not on one down", () => {
+    const w = createEdgeWheel();
+    expect(w.push(100, 0, 0)).toBe(0);
+    expect(w.push(-100, 500, -1)).toBe(-1);
+    expect(w.push(100, 1000, 0)).toBe(0);
+  });
+
+  it("adds a trackpad's small deltas up to a notch", () => {
+    const w = createEdgeWheel();
+    expect(w.push(20, 0, 1)).toBe(0);
+    expect(w.push(20, 16, 1)).toBe(0);
+    expect(w.push(20, 32, 1)).toBe(1);
+  });
+
+  it("starts again when the strip leaves the edge", () => {
+    const w = createEdgeWheel();
+    expect(w.push(-20, 0, 0)).toBe(0);
+    expect(w.push(30, 10, 1)).toBe(0);
+    expect(w.push(30, 20, 1)).toBe(0);
   });
 });
