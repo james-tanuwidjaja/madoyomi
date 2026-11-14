@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
- * The transition panels around a chapter's pages (Phase 5, both modes): "Previous: …" before the first page (only
- * when there is a previous chapter), and "Finished … Next: …" after the last one, or that there is no next chapter.
- * Their buttons don't reach the reader's zones.
+ * The transition panels around a chapter's pages (Phase 5, every mode): "Previous chapter: …" before the first page
+ * (only when there is a previous chapter), and "Finished: … · Next chapter: …" after the last one, or that there is
+ * no next chapter. Stage 4: they are the seamless transition: one more step past them goes on into that chapter
+ * without leaving the reader (its page list is fetched ahead, so it opens at once). Their buttons don't reach the
+ * reader's zones.
  */
 defineProps<{
   kind: "previous" | "end";
@@ -19,7 +21,7 @@ const emit = defineEmits<{ nextChapter: []; previousChapter: []; back: [] }>();
 <template>
   <div v-if="kind === 'previous'" class="panel" data-testid="panel-previous">
     <p class="muted">Start of {{ chapterName }}</p>
-    <p class="title">Previous: {{ previousName }}</p>
+    <p class="title">Previous chapter: {{ previousName }}</p>
     <div class="actions">
       <button type="button" class="btn btn-accent" @click.stop="emit('previousChapter')">
         Read {{ previousName }}
@@ -32,7 +34,7 @@ const emit = defineEmits<{ nextChapter: []; previousChapter: []; back: [] }>();
       {{ pageCount === 0 ? `${chapterName} has no pages.` : `Finished: ${chapterName}` }}
     </p>
     <template v-if="nextName">
-      <p class="title">Next: {{ nextName }}</p>
+      <p class="title">Next chapter: {{ nextName }}</p>
       <div class="actions">
         <button
           type="button"

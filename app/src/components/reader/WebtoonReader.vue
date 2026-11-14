@@ -32,6 +32,9 @@ import PageFailure from "./PageFailure.vue";
  * follows a `position` that it didn't report (the slider, Home/End, a mode switch) by scrolling that page's top to
  * the viewport's top. Above the first page is the "Previous: …" panel (when there is a previous chapter), below the
  * last one the end panel, a viewport tall. A click toggles the toolbar; a failed page's click fetches it again.
+ *
+ * Stage 4: `edges()` says whether it is at its top or bottom, for the reader's wheel past the ends (the seamless
+ * next chapter); the reader keys the strip by chapter, so each chapter gets a new one.
  */
 const props = defineProps<{
   position: number;
@@ -180,7 +183,16 @@ function scrollStep(kind: "line" | "screen", dir: 1 | -1): boolean {
   return true;
 }
 
-defineExpose({ scrollStep });
+/** Whether the strip is scrolled to its top or to its bottom (the reader's wheel then goes on into a chapter). */
+function edges(): { top: boolean; bottom: boolean } {
+  if (!ready.value) return { top: false, bottom: false };
+  return {
+    top: scrollTop.value <= 1,
+    bottom: atStripEnd(layout.value, scrollTop.value, viewport.height),
+  };
+}
+
+defineExpose({ scrollStep, edges });
 
 // The pages' sizes, the window or the gap changed: the anchor goes back on its line. The strip's own scrollTop moves
 // at once (so the page shown is never read from the old offset in the new layout), the element's once the DOM has

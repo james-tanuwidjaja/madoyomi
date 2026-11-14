@@ -16,7 +16,7 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 - Backend `server/core/image/`: `ImageProxy` (`GET /api/image?src=&sourceId=`, or by page ID), a disk cache with a size limit and LRU eviction, and page prefetch. **Settled in Stage 1 (§9):** upstream's page route (`GET /api/v1/manga/{mangaId}/chapter/{sourceOrder}/page/{index}`) already is the proxy, so there is no `/api/image`. Madoyomi's part is `madoyomi.core.reader` (`PageImages`, `PageCache`, `ReaderSettings`), called from upstream's `Page.getPageImage`.
 - DB: `chapter_progress` (last page, read flag, updated at). **Settled in Stage 1:** upstream's `CHAPTER_USER` already has `last_page_read`, `is_read` and `last_read_at`, so there is no new table.
 - API: `PUT /api/chapters/{id}/progress`, `POST /api/chapters/{id}/prefetch`. **Settled in Stage 1:** progress goes through upstream's `updateChapter(s)` (Stage 2), and the prefetch is the GraphQL mutation `prefetchChapterPages`, with `readerSettings`, `setReaderSettings`, `pageCache` and `clearPageCache`.
-- UI `app/src/views/ReaderView.vue` + `app/src/components/reader/`: `PagedReader`, `WebtoonReader`, `DoublePageReader`, `ReaderToolbar`, `ReaderSettings`.
+- UI `app/src/views/ReaderView.vue` + `app/src/components/reader/`: `PagedReader`, `WebtoonReader`, `DoublePageReader`, `ReaderToolbar`, `ReaderSettings`. **Settled in Stage 4:** there is no `DoublePageReader`. `PagedReader` shows a view of one page or two (the pairing is in `utils/doublePage.ts`), so the zoom, the click zones, the failed page and the panels stay in one place (§9).
 - Reader settings: default mode (global and per manga), reading direction, fit (width/height/original), background color, page gap (webtoon), preload count.
 
 ## 4. Detailed steps
@@ -60,13 +60,13 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 - [x] Paged LTR (Stage 2: `PagedReader`, the toolbar's direction switch for the session; live on MangaPill, §10)
 - [x] Paged RTL (Stage 2: the default; the left side and ← go forward, the slider fills from the right; live, §10)
 - [x] Vertical webtoon (virtualized) (Stage 3: `WebtoonReader` over the pure `utils/webtoonNav.ts`: heights computed from each page's ratio, only the items near the viewport in the DOM, the anchor kept when sizes, the width or the gap change, a load window in pixels; live on a 103-page and a 95-page Webtoons chapter, 800×30000 pages and an empty chapter, §10)
-- [ ] Double page with spread detection + shift
-- [ ] Seamless next-chapter transition
-- [ ] Zoom/pan
+- [x] Double page with spread detection + shift (Stage 4: the double mode of `PagedReader`, over the pure `utils/doublePage.ts`. The first page is alone. A page wider than tall is alone, and the pairs start again after it. "Shift" pairs the first two. Right to left, the first page is on the right. Live on a generated chapter with spreads at an odd and an even index: both directions, Shift, the slider, and leaving and resuming, §10)
+- [x] Seamless next-chapter transition (Stage 4: the panels are the transition, "Finished: … · Next chapter: …". The neighbour's page list is fetched ahead, so one more step goes on into it at once, in place. In the strip, a new wheel gesture past its end does the same. Live in every mode, forward and back, on Webtoons and the Local source, §10)
+- [x] Zoom/pan (Stage 4: the single and double modes, over the pure `utils/zoom.ts`. Ctrl+wheel zooms about the cursor; Ctrl+=, Ctrl+− and Ctrl+0 work too, and so does a double-click in the middle third. The range is 1× to 4×, clamped to the page. A drag, the wheel or the arrows pan. A page turn goes back to fit, and so does Esc. Live, §10. None in the webtoon strip, §9)
 
 ### Controls & settings
 - [x] Keyboard, mouse wheel, click zones (Stage 2: `utils/pagedNav.ts`, unit-tested for both directions; live: clicks, ←/→, Space, Page Down, Home/End, F, Esc, M and the wheel, §10)
-- [x] Toolbar (slider, mode switch, prev/next, fullscreen) (Stage 2: all but the mode switch; Stage 3: "Paged"/"Webtoon" for the session, keeping the page, and "Page gap" in the webtoon mode; live, §10)
+- [x] Toolbar (slider, mode switch, prev/next, fullscreen) (Stage 2: all but the mode switch; Stage 3: "Paged"/"Webtoon" for the session, keeping the page, and "Page gap" in the webtoon mode; Stage 4: the three modes as a segmented control (Single, Double, Webtoon), "Shift" in the double mode, a spread's label ("4–5 / 92"), and buttons that leave the focus on the reader after a mouse click; live, §10)
 - [ ] Reader settings (global + per manga)
 
 ### Progress
@@ -77,7 +77,7 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 ### Performance & tests
 - [x] Concurrency limit for image requests (Stage 2: `usePageLoader`, at most 4, the page shown first and taking the place of a less urgent one; unit and component tests, §10)
 - [x] Performance measured on a 100+ page webtoon chapter (Stage 3, the first numbers, on the dev desktop: the 103-page Webtoons chapter top to bottom at a normal speed with no frame over 50 ms (the longest 8 ms) and no blank frame, at most 5 `<img>` and 5 items in the DOM, 552–642 ms to the first page, the WebView2 processes' memory flat after the chapter. Stage 6 measures again, with the memory after 5 chapters, §10)
-- [ ] Navigation logic unit tests (Stage 2: the paged part, `pagedNav.spec.ts` 34; Stage 3: the strip's layout, page shown, anchor, load window and keys, `webtoonNav.spec.ts` 19; double-page pairing and spread detection come in Stage 4)
+- [x] Navigation logic unit tests (Stage 2: the paged part, `pagedNav.spec.ts` 34; Stage 3: the strip's layout, page shown, anchor, load window and keys, `webtoonNav.spec.ts` 19; Stage 4: the double-page pairing, spread detection, steps, progress page and load window, `doublePage.spec.ts` 19; zoom and pan, `zoom.spec.ts` 13; the strip's wheel past its ends, `webtoonNav.spec.ts` 24 now)
 - [x] Proxy/cache backend tests (Stage 1: `PageCacheTest` 15, `ReaderSettingsTest` 4, `PageImagesApiTest` 7)
 
 ## 6. Exit criteria
@@ -123,6 +123,13 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - tests: 44 new, 469 passed + 10 skipped; no server, shell or operation change;
      - live in `pnpm tauri dev` (§10): the 103-page Webtoons chapter top to bottom with the wheel and the keys, the slider, the gap, fullscreen as a resize, a mode switch mid-chapter, leaving and reopening (after an app restart too), the read mark, the chapter boundaries, 800×30000 pages from the Local source and an empty chapter. The first step-15 numbers: no frame over 50 ms and no blank frame while scrolling, 552–642 ms to the first page, the memory flat.
 4. **Double page, zoom and pan, the seamless next chapter** (steps 8–10): `DoublePageReader` with spread detection and "shift by one", zoom and pan in paged mode, and the "Next chapter: …" transition in every mode. Verified by pairing and spread unit tests and live.
+   - *Done* (2026-11-14):
+     - the double-page mode in `PagedReader` (a view of one or two pages, side by side in the reading direction) over the pure `utils/doublePage.ts`. It covers the pairing (the first page alone, a page wider than tall alone, "shift by one"), the step by spread, the page that progress counts (the spread's last), the load window and the label. `ReaderView` keeps the position on a page index and shows the spread that holds it, so the page shown stays on screen when a size changes the pairs;
+     - zoom and pan in the single and double modes, over the pure `utils/zoom.ts`: Ctrl+wheel about the cursor, Ctrl+=/−/0, a double-click in the middle third (that third's single click, the toolbar, waits 250 ms), 1× to 4× clamped to the page, a drag, the wheel and the arrows panning, Esc and a page turn back to fit;
+     - the seamless next chapter. The panels read "Next chapter: …" / "Previous chapter: …". The next chapter's page list is fetched ahead near the end, and the previous one's on its panel, so one more step opens it at once, in place. In the strip, a new wheel gesture at the bottom (top) does the same (`createEdgeWheel`), and that notch doesn't also scroll the new strip. The strip and the pager are keyed by chapter. `useReadingProgress` follows the chapter as well as the position;
+     - the toolbar: Single / Double / Webtoon as a segmented control (`stores/reader.ts` `mode` has three values and `setMode`), "Shift" in the double mode (`shift`), the direction in both paged modes, "4–5 / 92", and buttons and a slider that leave the keys to the reader after a mouse;
+     - tests: 54 new, 523 passed + 10 skipped; no server, shell or operation change;
+     - live in `pnpm tauri dev` (§10): a generated Local chapter with spreads at an odd and an even index, both directions, Shift, the slider and resume; zoom by Ctrl+wheel, the keys and a double-click, with pans by drag, wheel and arrows; the seamless transition forward and back in all three modes, on Webtoons (network) and the Local source; the read marks and "Page 5 of 8"; the stats overlay on the 103-page chapter again.
 5. **Reader settings, global and per manga** (step 11): `ReaderSettings` (mode, direction, fit, background, page gap, preload count), global on this device and per manga in its meta, and the default mode per content type (§8). Verified by unit tests and a live change that a reopened manga keeps.
 6. **Exit run**: every §6 criterion from a fresh data dir, the step 15 measurements (time to first page, scroll FPS on a 100+ page webtoon chapter, memory after 5 chapters), and a fix round.
 
@@ -214,6 +221,38 @@ Decided in the stage (defaults, not asked; the plan was sent to the user before 
 - **A dev-only stats overlay** (`ReaderStats.vue`, the ` key, only with `import.meta.env.DEV`): fps, frames over 50 ms and the longest, "blank" frames (a page in the viewport not loaded yet: the strip's `data-blank`), the `<img>` and strip items in the DOM (now and the most), the JS heap and the time to the first page, with Reset and Close (which don't take the focus, §10). The process memory for step 15 comes from the WebView2 process tree under madoyomi.exe (`Win32_Process` by `ParentProcessId`), not from the overlay.
 - **Shared parts out of `PagedReader`:** `reader/PageFailure.vue` (a failed page and "Click to retry") and `reader/ChapterPanel.vue` (the previous and end panels, "<chapter> has no pages." for an empty one), with the same test ids.
 - **No server change, no shell change, no new operation** (so no new live-spec test).
+
+### Stage 4 (2026-11-14)
+
+Decided by the user (asked with the plan; each was the recommended option):
+- **The webtoon strip stays one strip per chapter.** The end panel is the transition, and a further scroll at the very bottom (a new wheel gesture, or the keys as in Stage 3) opens the next chapter at its top, already loaded. The alternative was one joined strip with the next chapter's pages appended below the panel, as in Mihon, with the URL, the toolbar and progress switching as you scroll. That would mean a rework of the strip's layout, anchor and load window, the loader and progress, which are all per chapter.
+- **A double-click zooms only in the middle third.** The side thirds still turn the page at once. The middle third's single click (the toolbar) waits 250 ms for a second click. Zoomed in, a double-click anywhere goes back to fit. The alternative was a double-click anywhere, with every single click waiting about 250 ms before it turns the page (Mihon with double-tap zoom on).
+- **The double page starts with page 1 alone** (the print convention: 1 | 2–3 | 4–5; a chapter often opens on a single title or colour page). "Shift" pairs from page 1 (1–2 | 3–4) for the session. The alternative was pairing from page 1 by default.
+
+Decided in the stage (defaults, in the plan sent to the user):
+- **No `DoublePageReader`:** `PagedReader` shows a view (`pages`) of one page or two, in reading order, side by side, and reversed right to left (`flex-direction: row-reverse`, so the first page is on the right). The zoom, the click zones, the failed page and the panels are shared. The pairing and the steps are pure, in `utils/doublePage.ts`.
+- **The pairing goes from the chapter's start:** the first page is alone (unless shifted). Then pairs, except that a page wider than tall (width > height, from the loader's decoded size) is alone and the pairing starts again after it. The page before a wide one has no partner and is alone too, and so can be the last page. A page whose size isn't known yet counts as portrait.
+- **The page shown stays stable:** the reader's position stays a page index (the anchor, in the URL and the slider), and the view is the spread that holds it. When a size arrives and changes the pairs, that page stays on screen: it can change sides or end up alone. Ahead of the reader the sizes are known before it gets there (the load window decodes them). Behind a resume point, a spread found later can change the pairs, which is what Shift is for.
+- **Progress counts the spread's last page** (`progressPage`): the page saved is the furthest one seen, a reopened chapter shows the same spread, and the last spread marks the chapter read. The slider seeks to a page and shows its spread; the label is "4–5 / 92".
+- **The double-page load window:** the spread, then the next 4 pages, then the 2 before (`spreadPagesToLoad`), still 4 requests at a time. The backend's block prefetch is unchanged.
+- **Steps go by spread:** forward to the next spread's first page, or past the last one to the end panel; back to the previous spread's first page, or from the first to the "Previous chapter" panel. The panels are the paged mode's. The keys, the wheel gate and the click zones are the paged mode's too.
+- **Zoom and pan** (`utils/zoom.ts`, `PagedReader`):
+  - the scale goes from 1 (fit) to 4, as `translate() scale()` on a layer the size of the reader;
+  - it is always clamped by the pages' own rect: their edges never come inside the window, and along an axis where they are still smaller than the window, they stay centred;
+  - Ctrl+wheel zooms about the cursor (about 1.2× a notch), Ctrl+= and Ctrl+− by 1.25× about the centre, and Ctrl+0 goes back to fit;
+  - zoomed in, a drag pans (a move over 4 px is a drag, not a click), the wheel pans (Shift+wheel sideways), the arrows pan by 15 % of the window, a click does nothing and a double-click goes back to fit. Space and Page Up/Down still turn the page, and Esc goes back to fit before it leaves fullscreen or the reader;
+  - a page turn, a mode switch, a new chapter or a resize goes back to fit.
+- **No zoom in the webtoon strip:** its width is already fitted (at most 800 px), zooming it would change every page's height (the layout and the anchor), and Stage 5's fit/width setting is the place for a wider strip. Ctrl+wheel there does nothing (its default is prevented). The webview's own zoom keys are off in Tauri.
+- **The seamless transition:**
+  - the panels stay as the transition ("Finished: … · Next chapter: …", "Start of … · Previous chapter: …"), so an extra step doesn't leave a chapter by accident (Mihon's transition page);
+  - near the end (the same `nearEnd` as the backend's prefetch of the next chapter's first pages), the reader also fetches the next chapter's page list, and on the "Previous chapter" panel the previous one's. These are kept for this reader only (`adjacent`, the last two), not in the query cache, and dropped once their chapter has been read here, so a later open never uses stale progress;
+  - one more step then opens the chapter from that data, with no "Loading…" screen, while its own query asks the source again in the background (same page routes, so nothing reloads);
+  - the URL, the toolbar's chapter, the window title, progress (the last chapter's flushed) and the read marks follow the route as before;
+  - the strip and the pager are keyed by chapter, so a new chapter gets a new strip. A strip kept across chapters would put its old anchor on the new layout and report a wrong position.
+- **The strip's wheel past its ends** (`createEdgeWheel`): only a gesture that starts at the end counts (after a 200 ms pause), so a fling that reaches the bottom doesn't carry on into the next chapter. One notch (50 px) then opens it. That wheel event's default is prevented (live, it also scrolled the new strip, §10). The top works the same way for the previous chapter, opened at its last page. The keys are Stage 3's.
+- **The mode switch** is a segmented control, Single / Double / Webtoon (`aria-pressed`, `data-action="mode-<mode>"`), for the session. The direction applies to both paged modes, and "Shift: on/off" shows in the double mode.
+- **The toolbar's focus** (Stage 3's open point): a mouse click on a toolbar button doesn't take the focus (`mousedown` prevented on buttons), so Space then turns the page instead of pressing the button again. Tab still reaches every button, and Space or Enter presses the focused one. The slider is blurred on pointer-up, so the keys are the reader's again after a drag. Tab still focuses it, and its arrows then move it.
+- **No server, shell or operation change** (so no new live-spec test).
 
 ## 10. Findings log
 
@@ -357,3 +396,54 @@ Decided in the stage (defaults, not asked; the plan was sent to the user before 
   - Home, `[` and `]` live in the strip: in `ReaderView.spec.ts`, and Stage 2 used the chapter steps live; End and the panels' chapter steps were used live;
   - a trackpad or a free-spinning wheel: only a notched wheel (the tool's notches);
   - the generated tall chapter and the empty "Chapter 2" folder are in `live-data/local` (gitignored scratch data), not in the repo.
+
+### Stage 4 (2026-11-14)
+
+- **Baseline before the stage** (main at `1acdacd`, Stage 3 merged as #35; rerun before any edit):
+  - server: `.\gradlew.bat build` green with 794 tests, 0 failures (core 694 with 8 skipped, AndroidCompat 7, ext-host 8, api 85), BUILD SUCCESSFUL in 8m 12s;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: 48 files (47 + 1 skipped), 469 passed + 10 skipped; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` clean;
+  - the live spec: 10/10 (50 documents, no operation changed since Stage 2);
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - app: 50 files (49 + 1 skipped), **523 passed + 10 skipped**. The 54 new tests:
+    - `doublePage.spec.ts` 19: spread detection, the pairing (first alone, shifted, wide pages at odd and even indexes, every page once), the spread of a page and a stable page when the pairs change, the steps both ways and through wide pages, the progress page, the load window, the label;
+    - `zoom.spec.ts` 13: zoom about a point, the limits, the clamp and the centring, the pan, the double-click toggle, the wheel factor, the keys;
+    - `webtoonNav.spec.ts` 5: the wheel past the strip's ends;
+    - `ReaderView.spec.ts` 17: the double mode's spreads right to left, Shift, wide pages, progress and the read mark, the resume page, a mode switch and the load window; zoom by Ctrl+wheel and the keys, the pans, Esc, a page turn, the double-click, a drag and none in the strip; the seamless step forward and back with the page list fetched ahead; the strip's wheel at both ends; the toolbar's focus.
+    
+    Lint, typecheck, format:check and build clean. Stage 2's middle-click test now waits the 250 ms, and the mode test uses the segmented control;
+  - server and shell: not changed, so not rebuilt (the baseline above stands); no operation changed, so the live spec wasn't rerun.
+- **Live in `pnpm tauri dev`** (data dir `live-data`, computer use, the dev desktop, a 1920×1080 screen). The test chapters were generated with Pillow into `live-data/local/Double Page Test` (gitignored, not in the repo): Chapter 1 has 14 pages of 1000×1500, with 2000×1500 spreads at indexes 3 and 8 (pages 4 and 9); Chapter 2 has 8 pages with a spread at index 5. Every page is numbered, with a grid, a red border and corner labels:
+
+  | Check | Result |
+  |---|---|
+  | the mode switch, the focus | "Single · Double · Webtoon" in the toolbar; a click on Double, then **Space turned the page** (the button kept no focus) |
+  | double, right to left | 1 alone, then 2–3 with 2 on the right, **4 (the spread at an odd index) alone**, 5–6, 7–8, **9 (the spread at an even index) alone**, 10–11 |
+  | Shift, left to right | Home, then Shift: 1–2 ("1–2 / 14", "Shift: on"); left to right put 1 on the left; → gave 3 alone (its partner 4 is wide), then 4, then 5–6 ("5–6 / 14") |
+  | the slider | in right to left it fills from the right: a click showed 2–3 / 8; Space after it turned the page (the slider let the focus go) |
+  | leave and resume | Esc on Chapter 2's 4–5: the row "Page 5 of 8" (the spread's last page), "Continue: Chapter 2"; Continue reopened on 4–5 / 8 |
+  | zoom by the keys | Ctrl+= ×3: about 1.95× about the centre; ↑ and ← ×8 stopped exactly at the page's top-left corner (its red border at the window's edge, no black past it) |
+  | pan by drag and wheel | a drag moved the view; the wheel panned down to the page's bottom edge and **didn't turn the page** |
+  | double-click | at fit, in the middle third: 2× there, and the toolbar didn't toggle; zoomed, a double-click went back to fit; Space after a zoom turned the page and went back to fit |
+  | Ctrl+wheel | 3 notches about the cursor: about 1.8×, the point under it kept (the "3" moved from y≈175 to ≈230 in the half-scale shot, as a zoom about y≈102 puts it), the page still narrower than the window centred. **The computer-use tool's scroll doesn't hold Ctrl** (twice it turned back a page, as a plain wheel does), so this check used a real Ctrl+wheel sent through Windows input (`SendInput`, a scratch script in the gitignored agent folder) |
+  | Ctrl+0, Esc | both back to fit; Esc while zoomed didn't leave the reader |
+  | the seamless transition, double | End (14 alone), Space: "Finished: Chapter 1 · Next chapter: Chapter 2"; Space: Chapter 2's page 1 in the next screenshot, the toolbar "Chapter 2", "2–3 / 8"; back: "Start of Chapter 2 · Previous chapter: Chapter 1", then Chapter 1's 14. Chapter 1 Read in the list |
+  | the seamless transition, single, a network source | Webtoons "Osora" (S2) Chapter 124 (99 pages), End, Space ×2: **Chapter 125's first page in the screenshot taken right after the key**, no "Loading…" (Stage 3 measured 642 ms to its first page cold); the toolbar "(S2) Chapter 125", "1 / 95"; back through "Previous chapter: (S2) Chapter 124" into 124's last page at once; 124 Read in the list |
+  | the seamless transition, webtoon | Local Chapter 2 at its top ("Previous chapter" panel): the gesture that got there stayed; a new notch up opened Chapter 1 with page 14's top at the window's top. At the bottom of Chapter 1, the gesture that got there stayed, a new notch opened Chapter 2 with page 1's top at the top |
+  | the stats overlay, 103 pages | Chapter 126 in the strip, pages 1 → 13 at a normal speed: 4,282 frames at 145 fps, **no frame over 50 ms (the longest 8 ms), 0 blank frames**, at most 5 `<img>` and 5 items, the heap 28 MB, 507 ms to the first page (Stage 3: the longest 8 ms, 552–642 ms) |
+  | the token | no `token=` in sidecar.log, madoyomi.log or the dev output; no warning in the dev output; the backend stopped with exit code 0 |
+
+- **Found and fixed live:** the wheel notch that opened the next (previous) chapter in the strip also scrolled the new strip about 80 px, so its first page's top sat below the window's top (and page 13's bottom showed above Chapter 1's page 14). The opening wheel event's default is prevented now (a test). After the fix both ends put the page's top exactly at the top.
+- **Found while writing it:**
+  - a strip kept across a chapter change would have put its old anchor (the end panel) on the new chapter's layout and reported the new chapter's end panel as the position, marking it read. The strip and the pager are keyed by chapter;
+  - the progress watcher missed a step into a chapter that lands on the same position (an empty chapter's 0 → the next one's 0); it now follows the chapter too;
+  - `zoom.ts` gave `-0` for a centred axis; normalized.
+- **Not checked, and why:**
+  - a mid-range laptop (§6) and memory after 5 chapters: Stage 6's;
+  - a trackpad (pinch, momentum past the strip's end): only a notched wheel;
+  - Ctrl+wheel through the computer-use tool: it doesn't send Ctrl with its wheel (above); checked with a real input instead;
+  - Shift+wheel sideways, a resize while zoomed, and a double-click in a side third (two page turns): in the component tests or by the code path, not live;
+  - Tab reaching the toolbar's buttons and Space/Enter pressing them: unchanged keyboard behaviour; not tested live;
+  - double page on a real source's chapter with spreads: the generated chapter stood in (real scans' joined spreads are wider than tall in the same way); MangaPill and MangaDex weren't read in the double mode;
+  - the `Double Page Test` chapters are in `live-data/local` (gitignored scratch data), not in the repo.

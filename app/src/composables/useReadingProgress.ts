@@ -14,6 +14,9 @@ import { writeChapters } from "./useEntries";
  *
  * Stage 3: reaching the end panel marks the chapter read too, with its last page, if showing the last page didn't
  * (a fling down the webtoon strip, or End, can pass the last page between two scroll events).
+ *
+ * Stage 4: in the double-page mode the reader gives the spread's last page as the position, so the furthest page
+ * seen is saved and the last spread marks the chapter read.
  */
 
 export const PROGRESS_DEBOUNCE_MS = 1000;
@@ -82,9 +85,10 @@ export function useReadingProgress(opts: ReadingProgressOptions) {
     send(id, isRead ? { lastPageRead: page, isRead: true } : { lastPageRead: page });
   }
 
+  // The chapter too: a seamless step into the next chapter can land on the same position (an empty chapter's 0).
   watch(
-    () => toValue(opts.position),
-    (position) => {
+    () => [toValue(opts.position), toValue(opts.chapter)?.id] as const,
+    ([position]) => {
       const chapter = toValue(opts.chapter);
       const count = toValue(opts.pageCount);
       if (!chapter || position === null || position < 0 || count <= 0 || position > count) return;

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQuery } from "@tanstack/vue-query";
 import { fetchChapterPages, prefetchChapterPages } from "../api/operations";
+import type { ChapterPages } from "../api/types";
 import { useBackendStore } from "../stores/backend";
 import { useReaderStore } from "../stores/reader";
 import { queryKeys } from "../composables/queryKeys";
@@ -12,6 +13,7 @@ import { PAGES_AHEAD, usePageLoader } from "../composables/usePageLoader";
 import { useReadingProgress } from "../composables/useReadingProgress";
 import {
   adjacentChapter,
+  BEFORE,
   clampPosition,
   createWheelGate,
   isPage,
@@ -27,7 +29,22 @@ import {
   type NavResult,
   type ZoneAction,
 } from "../utils/pagedNav";
-import { PAGE_GAP, webtoonKeyAction, type WebtoonKeyAction } from "../utils/webtoonNav";
+import {
+  createEdgeWheel,
+  PAGE_GAP,
+  webtoonKeyAction,
+  type WebtoonKeyAction,
+} from "../utils/webtoonNav";
+import {
+  doubleStep,
+  isWide,
+  pairPages,
+  progressPage,
+  spreadOf,
+  spreadPages,
+  spreadPagesToLoad,
+} from "../utils/doublePage";
+import { panKeyDirection, zoomKeyAction } from "../utils/zoom";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import PagedReader from "../components/reader/PagedReader.vue";
 import ReaderStats from "../components/reader/ReaderStats.vue";
@@ -47,6 +64,14 @@ import WebtoonReader from "../components/reader/WebtoonReader.vue";
  * at its top as the position, and the pages to load around its viewport, which replace the paged ±N; the wheel
  * scrolls it natively, the keys scroll it by a line or a screen, and past its ends they open the next or previous
  * chapter. Switching modes keeps the page.
+ *
+ * Stage 4: the double-page mode (utils/doublePage.ts): the chapter in spreads of two pages (a wide page, and by
+ * default the first, alone; "shift by one" pairs the first two); the position stays a page index and the spread that
+ * holds it is shown, steps go spread by spread, progress counts the spread's last page. Zoom and pan in both paged
+ * modes (PagedReader; Ctrl+wheel, Ctrl+=/−/0, and while zoomed the wheel and the arrows pan, Esc goes back to fit).
+ * The seamless next chapter: near a chapter's end (and on its "Previous chapter" panel) the next (previous) chapter's
+ * page list is fetched ahead, so one more step past the panel opens it at once, in place; the wheel at the strip's
+ * bottom (top) does so in the webtoon mode.
  */
 const props = defineProps<{ id: number; chapterId: number }>();
 
@@ -67,10 +92,43 @@ const pagesQuery = useQuery({
   gcTime: 0,
 });
 
-/** The data for the chapter of the route (not the previous one while the next loads). */
+/**
+ * The next and previous chapters' page lists, fetched ahead (near the end, on the "Previous chapter" panel), so that
+ * going on into one shows it at once while its own query asks the source again. Kept only for this reader: a list
+ * is dropped once its chapter has been read here, so its progress is never stale.
+ */
+const adjacent = shallowRef<ChapterPages[]>([]);
+const adjacentAsked = new Set<number>();
+
+function fetchAdjacent(id: number) {
+  if (adjacentAsked.has(id)) return;
+  adjacentAsked.add(id);
+  fetchChapterPages(id).then(
+    (d) => {
+      if (adjacentAsked.has(id)) {
+        adjacent.value = [...adjacent.value.filter((a) => a.chapter.id !== id), d].slice(-2);
+      }
+    },
+    (e: unknown) => {
+      adjacentAsked.delete(id);
+      console.debug("couldn't fetch the page list ahead", id, e);
+    },
+  );
+}
+
+watch(
+  () => props.chapterId,
+  (_, left) => {
+    adjacentAsked.delete(left);
+    adjacent.value = adjacent.value.filter((a) => a.chapter.id !== left);
+  },
+);
+
+/** The data for the chapter of the route (not the previous one while the next loads): its query's, else fetched ahead. */
 const data = computed(() => {
   const d = pagesQuery.data.value;
-  return d && d.chapter.id === props.chapterId ? d : null;
+  if (d && d.chapter.id === props.chapterId) return d;
+  return adjacent.value.find((a) => a.chapter.id === props.chapterId) ?? null;
 });
 const pages = computed(() => data.value?.pages ?? []);
 const pageCount = computed(() => pages.value.length);
@@ -122,11 +180,51 @@ watch(
     webtoonWindow.value = null;
   },
 );
+/** The double-page mode's pages to load (the spread, the pages after it and before it). */
+const doubleWindow = ref<number[] | null>(null);
 const loader = usePageLoader({
   pages,
   position: () => position.value ?? 0,
-  wanted: () => (reader.mode === "webtoon" ? webtoonWindow.value : null),
+  wanted: () =>
+    reader.mode === "webtoon"
+      ? webtoonWindow.value
+      : reader.mode === "double"
+        ? doubleWindow.value
+        : null,
 });
+
+/** The double-page mode's spreads (null in the other modes): they change as the pages' sizes arrive. */
+const spreadList = computed(() =>
+  reader.mode === "double"
+    ? pairPages(pageCount.value, (i) => isWide(loader.size(i)), !reader.shift)
+    : null,
+);
+const currentSpread = computed(() => {
+  const p = position.value;
+  return spreadList.value && p !== null && isPage(p, pageCount.value)
+    ? spreadOf(spreadList.value, p)
+    : null;
+});
+/** The pages on screen in the paged modes, in reading order (none on a panel). */
+const viewPages = computed(() => {
+  const p = position.value;
+  if (p === null || !isPage(p, pageCount.value)) return [];
+  return currentSpread.value ? spreadPages(currentSpread.value) : [p];
+});
+watch(
+  [spreadList, position],
+  ([list, p]) => {
+    doubleWindow.value = list && p !== null ? spreadPagesToLoad(list, p, pageCount.value) : null;
+  },
+  { immediate: true },
+);
+/** The page progress counts: the double-page spread's last page, else the position. */
+const progressPosition = computed(() => {
+  const p = position.value;
+  if (p === null || !spreadList.value) return p;
+  return progressPage(spreadList.value, p, pageCount.value);
+});
+const pager = ref<InstanceType<typeof PagedReader> | null>(null);
 const strip = ref<InstanceType<typeof WebtoonReader> | null>(null);
 // Back after a restart: the pages that failed while it was away are fetched again by themselves.
 watch(
@@ -135,7 +233,7 @@ watch(
     if (ready) loader.retryTransient();
   },
 );
-const progress = useReadingProgress({ chapter, pageCount, position });
+const progress = useReadingProgress({ chapter, pageCount, position: progressPosition });
 
 const toolbar = ref(true);
 
@@ -190,7 +288,11 @@ function apply(result: NavResult) {
 function turn(delta: 1 | -1) {
   if (position.value === null) return;
   toolbar.value = false;
-  apply(step(position.value, pageCount.value, delta, neighbours.value));
+  apply(
+    spreadList.value
+      ? doubleStep(spreadList.value, position.value, pageCount.value, delta, neighbours.value)
+      : step(position.value, pageCount.value, delta, neighbours.value),
+  );
 }
 
 function seek(index: number) {
@@ -226,6 +328,7 @@ function onKey(event: KeyboardEvent) {
     stats.value = !stats.value;
     return;
   }
+  if (reader.mode !== "webtoon" && zoomKey(event)) return;
   const action: KeyAction | WebtoonKeyAction | null =
     reader.mode === "webtoon" ? webtoonKeyAction(event) : keyAction(event, reader.direction);
   if (!action) return;
@@ -262,15 +365,66 @@ function onKey(event: KeyboardEvent) {
   }
 }
 
+/** The zoom keys in the paged modes, and while zoomed the arrows (pan) and Esc (back to fit). True when handled. */
+function zoomKey(event: KeyboardEvent): boolean {
+  const p = pager.value;
+  if (!p) return false;
+  const z = zoomKeyAction(event);
+  if (z) {
+    event.preventDefault();
+    if (z === "zoomReset") p.resetZoom();
+    else p.zoomStep(z === "zoomIn" ? 1 : -1);
+    return true;
+  }
+  if (!p.zoomed) return false;
+  const dir = panKeyDirection(event);
+  if (dir) {
+    event.preventDefault();
+    p.panStep(dir);
+    return true;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    p.resetZoom();
+    return true;
+  }
+  return false;
+}
+
 const wheel = createWheelGate();
+const edgeWheel = createEdgeWheel();
 function onWheel(event: WheelEvent) {
-  // The strip scrolls natively; Ctrl+wheel is left to zoom (Stage 4).
-  if (event.ctrlKey || reader.mode === "webtoon") return;
+  const dy = wheelPixels(event.deltaY, event.deltaMode, window.innerHeight);
+  if (reader.mode === "webtoon") {
+    // The strip scrolls natively; at its bottom (top) a new gesture goes on into the next (previous) chapter.
+    if (event.ctrlKey) {
+      event.preventDefault();
+      return;
+    }
+    const at = strip.value?.edges();
+    if (!at) return;
+    const edge = dy > 0 ? (at.bottom ? 1 : 0) : dy < 0 ? (at.top ? -1 : 0) : 0;
+    const dir = edgeWheel.push(dy, performance.now(), edge);
+    if (dir) {
+      // That notch opens the chapter; it doesn't also scroll the new strip.
+      event.preventDefault();
+      openChapter(dir > 0 ? "next" : "previous");
+    }
+    return;
+  }
   event.preventDefault();
-  const dir = wheel.push(
-    wheelPixels(event.deltaY, event.deltaMode, window.innerHeight),
-    performance.now(),
-  );
+  const p = pager.value;
+  if (event.ctrlKey) {
+    p?.zoomWheel(dy, event.clientX, event.clientY);
+    return;
+  }
+  if (p?.zoomed) {
+    const dx = wheelPixels(event.deltaX, event.deltaMode, window.innerWidth);
+    if (event.shiftKey) p.pan(dx + dy, 0);
+    else p.pan(dx, dy);
+    return;
+  }
+  const dir = wheel.push(dy, performance.now());
   if (dir) turn(dir);
 }
 
@@ -305,6 +459,9 @@ watch([position, data, nextChapter], ([p, d, next]) => {
     prefetchedBlock.set(d.chapter.id, range.block);
     prefetch(d.chapter.id, range.from, range.count);
   }
+  // The neighbours' page lists ahead, for the seamless transition.
+  if (next && nearEnd(p, count)) fetchAdjacent(next.id);
+  if (p === BEFORE && previousChapter.value) fetchAdjacent(previousChapter.value.id);
   if (next && nearEnd(p, count) && !prefetchedNext.has(d.chapter.id)) {
     prefetchedNext.add(d.chapter.id);
     prefetch(
@@ -348,6 +505,7 @@ watch(
     </p>
     <WebtoonReader
       v-else-if="reader.mode === 'webtoon'"
+      :key="`strip-${chapterId}`"
       ref="strip"
       :position="position"
       :page-count="pageCount"
@@ -369,7 +527,10 @@ watch(
     />
     <PagedReader
       v-else
+      :key="`paged-${chapterId}`"
+      ref="pager"
       :position="position"
+      :pages="viewPages"
       :page-count="pageCount"
       :direction="reader.direction"
       :page-state="loader.state"
@@ -393,6 +554,8 @@ watch(
       :direction="reader.direction"
       :mode="reader.mode"
       :page-gap="reader.pageGap"
+      :shift="reader.shift"
+      :spread="currentSpread"
       :has-previous="neighbours.hasPrevious"
       :has-next="neighbours.hasNext"
       :fullscreen="fullscreen.active.value"
@@ -401,8 +564,9 @@ watch(
       @previous-chapter="openChapter('previous')"
       @next-chapter="openChapter('next')"
       @toggle-direction="reader.toggleDirection()"
-      @toggle-mode="reader.toggleMode()"
+      @set-mode="reader.setMode($event)"
       @toggle-page-gap="reader.togglePageGap()"
+      @toggle-shift="reader.toggleShift()"
       @toggle-fullscreen="fullscreen.toggle()"
     />
 

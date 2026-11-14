@@ -285,3 +285,38 @@ export function webtoonKeyAction(e: KeyLike): WebtoonKeyAction | null {
 export function scrollAmount(kind: "line" | "screen", viewportHeight: number): number {
   return kind === "line" ? Math.max(60, viewportHeight * 0.15) : viewportHeight * 0.9;
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// The wheel past the strip's ends (Stage 4, the seamless next chapter)
+
+/**
+ * The wheel at the strip's ends: the strip scrolls natively, so at its bottom (the end panel fully shown) a further
+ * wheel gesture down opens the next chapter, and at its top one up the previous chapter. Only a gesture that starts
+ * at that end counts (after a pause of `gapMs`), so a fling that reaches the end doesn't carry on into the next
+ * chapter; its deltas then add up to `threshold` px (one notch).
+ */
+export function createEdgeWheel({ threshold = 50, gapMs = 200 } = {}) {
+  let lastEvent = -Infinity;
+  let armed: 1 | -1 | 0 = 0;
+  let sum = 0;
+  return {
+    /** `edge`: 1 at the strip's bottom, -1 at its top, 0 between; returns the chapter to open (1, -1) or 0. */
+    push(deltaY: number, now: number, edge: 1 | -1 | 0): 1 | -1 | 0 {
+      if (now - lastEvent > gapMs) {
+        armed = edge;
+        sum = 0;
+      }
+      lastEvent = now;
+      if (armed === 0 || edge !== armed || Math.sign(deltaY) !== armed) {
+        if (edge !== armed) armed = 0;
+        return 0;
+      }
+      sum += Math.abs(deltaY);
+      if (sum < threshold) return 0;
+      const dir = armed;
+      armed = 0;
+      sum = 0;
+      return dir;
+    },
+  };
+}
