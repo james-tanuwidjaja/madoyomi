@@ -13,9 +13,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.condition.EnabledOnOs
 import org.junit.jupiter.api.condition.OS
-import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -38,7 +38,10 @@ class MpvIpcClientTest {
     private val pipe = "madoyomi-mpv-test-${UUID.randomUUID()}"
     private val servers = mutableListOf<FakeMpvServer>()
     private val clients = mutableListOf<MpvIpcClient>()
-    private val events: MutableList<JsonObject> = Collections.synchronizedList(mutableListOf())
+
+    // Iterated by the tests while the client's reader thread appends: a snapshot per iteration. A synchronized
+    // list locks only single calls; iterating it threw ConcurrentModificationException (Phase 5 Stage 5's baseline).
+    private val events: MutableList<JsonObject> = CopyOnWriteArrayList()
 
     private fun server(
         mode: String = "idle",

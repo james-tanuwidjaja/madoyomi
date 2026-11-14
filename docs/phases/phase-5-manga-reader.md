@@ -76,21 +76,21 @@ A fast, comfortable manga reader in the Vue app with paged (LTR/RTL), vertical w
 
 ### Performance & tests
 - [x] Concurrency limit for image requests (Stage 2: `usePageLoader`, at most 4, the page shown first and taking the place of a less urgent one; unit and component tests, §10)
-- [x] Performance measured on a 100+ page webtoon chapter (Stage 3, the first numbers, on the dev desktop: the 103-page Webtoons chapter top to bottom at a normal speed with no frame over 50 ms (the longest 8 ms) and no blank frame, at most 5 `<img>` and 5 items in the DOM, 552–642 ms to the first page, the WebView2 processes' memory flat after the chapter. Stage 6 measures again, with the memory after 5 chapters, §10)
+- [x] Performance measured on a 100+ page webtoon chapter (Stage 3, the first numbers, on the dev desktop: the 103-page Webtoons chapter top to bottom at a normal speed with no frame over 50 ms (the longest 8 ms) and no blank frame, at most 5 `<img>` and 5 items in the DOM, 552–642 ms to the first page, the WebView2 processes' memory flat after the chapter. Stage 6, the exit run, from fresh data dirs: the same chapter cold with no frame over 50 ms (the longest 16 ms) and no blank frame after the fix round, 674–825 ms to the first page, and the memory flat over 5 chapters (472 pages), §10)
 - [x] Navigation logic unit tests (Stage 2: the paged part, `pagedNav.spec.ts` 34; Stage 3: the strip's layout, page shown, anchor, load window and keys, `webtoonNav.spec.ts` 19; Stage 4: the double-page pairing, spread detection, steps, progress page and load window, `doublePage.spec.ts` 19; zoom and pan, `zoom.spec.ts` 13; the strip's wheel past its ends, `webtoonNav.spec.ts` 24 now)
 - [x] Proxy/cache backend tests (Stage 1: `PageCacheTest` 15, `ReaderSettingsTest` 4, `PageImagesApiTest` 7)
 
 ## 6. Exit criteria
 
-- [ ] A 100+ page webtoon chapter scrolls smoothly (no visible stutter, no blank pages while scrolling at normal speed) on a mid-range laptop.
-- [ ] All four modes work and remember per-manga settings. (Stage 5 checked the per-manga mode and direction live in Double with left to right, after a reopen and an app restart; the exit run checks every mode again from a fresh data dir.)
-- [ ] Reopening a chapter resumes at the last page.
+- [x] A 100+ page webtoon chapter scrolls smoothly (no visible stutter, no blank pages while scrolling at normal speed) on a mid-range laptop. (**Stage 6, on the dev desktop** (NVIDIA GPU, 145 Hz): no mid-range laptop was at hand, and the user decided to close the criterion there with this note (§9). Webtoons "Osora" (S2) Chapter 126 (103 pages) from a fresh data dir, cold (the first chapter after the app started), top to bottom at a normal speed with real wheel input: after the fix round 0 frames over 50 ms (the longest 16 ms) and 0 blank frames, 674 ms to the first page. Five more chapters in one go (472 pages) had 0 frames over 50 ms, and the WebView2 processes' memory stayed flat. The first run's pass of the same chapter had 3 frames over 50 ms (the longest 90 ms) once, after a fresh start, which no later pass showed; its blank frames at chapter crossings were fixed, §10.)
+- [x] All four modes work and remember per-manga settings. (Stage 6, from two fresh data dirs through the UI: Single right to left and left to right on MangaPill, Double with Shift and a wide page alone (Kingdom's credits page), Webtoon by its source (Webtoons.com) and by its genre (MangaDex's Long Strip); each manga's own mode and direction kept after a reopen and an app restart; a global default reaching a manga with none, §10.)
+- [x] Reopening a chapter resumes at the last page. (Stage 6, in Single, Double and Webtoon, after a reopen and after an app restart, from both fresh data dirs. The fix round stopped a reopened double-page spread from moving the place forward a page, §10.)
 
 ## 7. Risks & notes
 
 - Sources that need cookies from Cloudflare: the proxy must use the same cookie jar as the source (PLAN.md §6, Cloudflare).
 - Very tall images (some webtoons put a whole chapter in a few huge images) may need tiling or downscaling. **Stage 3: shown whole.** Live, 800×30000 pages scrolled with no frame over 50 ms and no blank frame. Each decodes to about 96 MB, so with two around the viewport the renderer held 373 MB private, back to the baseline once the chapter was left (§10). Revisit if a source's pages are wider or taller than that.
-- Watch memory: release off-screen images in webtoon mode. **Stage 3:** pages outside the load window (a screen behind, two ahead) are aborted and their object URLs revoked; live, the WebView2 processes' memory after the 103-page chapter was where it started (§10).
+- Watch memory: release off-screen images in webtoon mode. **Stage 3:** pages outside the load window (a screen behind, two ahead) are aborted and their object URLs revoked; live, the WebView2 processes' memory after the 103-page chapter was where it started (§10). **Stage 6:** over 5 chapters read in one go (472 pages), 512 MB working set and 293 MB private before, 514–518 MB and 298–319 MB at each chapter's end, 479 MB and 298 MB after leaving; the next chapter's two opening pages held ahead (Stage 6, §9) add at most four decoded pages near a chapter's ends.
 
 ## 8. Decisions closed here
 
@@ -140,6 +140,13 @@ Agreed with the user in Stage 1. Each stage ends in something verifiable and a c
      - tests: 44 new, 567 passed + 11 skipped (the new live-spec test); the live spec 11/11 with **53 documents**; no server or shell change;
      - live in `pnpm tauri dev` (§10): Settings → Reader and the sheet, MangaPill's Kingdom with no settings and then Double and left to right (kept after a reopen and an app restart, then reset), MangaDex's "First Love Trap" in webtoon by its Long Strip tag, Webtoons.com's "Funtime Phobia" by its source, every fit, white, gray and dark, the strip at 1200 px, the page gap, preload 8 in the cache folder, and both resets.
 6. **Exit run**: every §6 criterion from a fresh data dir, the step 15 measurements (time to first page, scroll FPS on a 100+ page webtoon chapter, memory after 5 chapters), and a fix round.
+   - *Done* (2026-11-14):
+     - the baseline rerun (§10): 794 server tests green on the first build (no flake), smoke 24/24, the app's 567 + 11, the live spec 11/11, `cargo test` 17;
+     - every §6 criterion from a fresh data dir (`p5-exit`) in `pnpm tauri dev`, through the UI: the Keiyoushi repo added, MangaPill, MangaDex and Webtoons.com installed, every mode on a real source, each manga's mode and direction after a reopen and an app restart, the defaults and the sheet, resume in every mode, and the open "Not checked" items a live run can reach (`[`/`]`, Tab through the toolbar, the black background, Shift+wheel and a drag at 1×, a failed page in the strip, the window-wide strip);
+     - step 15 on the dev desktop (the user's decision, §9): Chapter 126 (103 pages) cold, top to bottom, the time to the first page, and the memory over 5 chapters (472 pages);
+     - the fix round (§9, §10): the next (previous) chapter's opening pages held decoded ahead, so a chapter crossing shows them in the first frame (2–7 blank frames each before); a new page fit or direction goes back to the start view after a pan; a reopened double-page spread no longer saves its other page; the dev overlay's first-page timer for a page already in; `MpvIpcClientTest`'s race. Tests: 11 new (578 + 11), and the server's test-only fix (794);
+     - the affected checks again on a second fresh data dir (`p5-exit2`): Chapter 126 cold with 0 frames over 50 ms and 0 blank frames, crossings both ways with 0 blank frames, the fit change, the double-page resume after reopens and two app restarts, and the webtoon resume;
+     - **Phase 5 done (2026-11-14).**
 
 ## 9. Decision record
 
@@ -297,6 +304,25 @@ Decided in the stage (defaults, in the plan sent to the user):
 - **The background** applies in every mode: dark (#111, Stages 2–4's), black, gray (#3a3a3a) or white. The panels, the placeholders and a failed page take their text colours from CSS variables set with it (dark text on white). The toolbar and the sheet keep their own.
 - **The preload count** is the pages loaded ahead of the one shown: the paged mode's `ahead`, the double mode's pages after the spread, and in the strip at least `preload − 2` pages past the viewport (the viewport holds one or two; 2 with the default 4, as in Stage 3; the pixel band stays). The backend's block of 10 starts after the reader's own pages. The next chapter's first 5 pages, the 4 requests at a time and the 1 page (2 in the double mode) behind don't change. Choices 2, 4, 6, 8 and 12.
 - **New operations:** `MANGA_READER_META_QUERY`, `SET_MANGA_META_MUTATION`, `DELETE_MANGA_META_MUTATION` (53 documents), validated and run by the live spec.
+
+### Stage 6 (2026-11-14)
+
+Decided by the user:
+- **§6's first criterion is closed on the dev desktop**, with a note. It names a mid-range laptop, and none was at hand. The numbers are from the dev desktop (NVIDIA GPU, 145 Hz screen), with the WebView2 renderer's GPU rasterization. The alternative was to measure there and leave the criterion and PLAN.md's milestone open for a laptop run.
+- **Phase 6's stage plan** (for its Stage 1, PLAN.md §8): Categories with the two §8 decisions, History and badges, the update checker, manga downloads, anime downloads, backup and restore, the exit run.
+
+Decided in the stage (defaults, fixes for what the run found):
+- **The pages a neighbouring chapter opens on are held decoded ahead** (`usePageLoader`'s `held`). Once its page list is fetched ahead (near the end, on the "Previous chapter" panel), the loader fetches and decodes:
+  - the next chapter's opening page (its first, or where reading stopped in it) and the one after it;
+  - the previous chapter's last two pages.
+
+  This happens only after every page of the reader's own window has its request, and only on a free request; a page of the window takes the request back. A held page that fails is left to the chapter's own loader. When the next page list holds a held route, its decoded page and size are taken over as they are: the step into a chapter shows its page in the first frame instead of 2–7 blank frames while it decoded (14–48 ms; all 18 blank frames of the 5-chapter run were these). The loader starts over for a new list in `pump()` itself, so the order in which Vue runs the component's watchers doesn't matter.
+- **The strip's window is tagged with its chapter.** Right after a step into the next chapter, the old strip's window (its last pages) stood for the new list, and the loader dropped the page held ahead as outside it. Until the new strip reports its window, the loader loads around the position.
+- **Until the reader moves off the page a chapter opened on, progress saves that page**, not the double-page spread's last one. Stage 4's rule (the spread's last page) kept a reopened chapter on the same spread when the pairing was the same. It isn't always: Shift is for the session, and the sizes of the pages behind the resume point aren't known yet. Live, a chapter left on 8–9 reopened on 9–10 and saved 10, then after an app restart on 10–11 and saved 11. Once the reader turns, the spread's last page counts again, so the read mark on the last spread is unchanged. Stage 4's "writes the spread's last page" test now turns before it closes.
+- **A new page fit or direction is a new view**: back to its start view even after a pan or a zoom. Live, original size panned and then fit screen left the spread off-centre and cut off until the next turn.
+- **The dev overlay's first-page time** fires by chapter, so a page already in when the chapter opens (held ahead) reads about 0 ms, instead of "…" or the time of a later Home.
+- **`MpvIpcClientTest`'s events list is a `CopyOnWriteArrayList`**: the test iterated a synchronized list while the client's reader thread appended to it (Stage 5's baseline flake). A test-only change, so server/UPSTREAM.md doesn't apply.
+- **Not changed:** a reopened double-page chapter can still show a different spread than it was left on, when the pairing differs (Stage 4's note: Shift is for that); the page left on is on screen and is what stays saved. A chapter opened at its last page (`[` from the next one) is marked read, Mihon's rule (Stage 2). After the newest chapter is read, "Continue" offers the first unread from the oldest (Stage 2's rule).
 
 ## 10. Findings log
 
@@ -540,3 +566,94 @@ Decided in the stage (defaults, in the plan sent to the user):
   - the window width strip setting live: 1200 px was; `ReaderView.spec.ts` checks the window width;
   - "Manhwa" and "Manhua" genres live: a Long Strip tag and a webtoon source were read; the normalization is unit-tested;
   - a mid-range laptop and the memory after 5 chapters (§6, step 15): Stage 6's.
+
+### Stage 6 (2026-11-14): exit run
+
+- **Baseline before the stage** (main at `48b33db`, Stage 5 merged as #37; rerun before any edit):
+  - server: `.\gradlew.bat build` green with 794 tests, 0 failures (core 694 with 8 skipped, AndroidCompat 7, ext-host 8, api 85), BUILD SUCCESSFUL in 6m 7s; `MpvIpcClientTest` passed this time;
+  - `tools/smoke-api.ps1 -NoBuild`: 24/24;
+  - app: 54 files (53 + 1 skipped), 567 passed + 11 skipped; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` clean;
+  - the live spec: 11/11 (53 documents);
+  - `cargo test`: 17; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **After the stage:**
+  - app: 54 files (53 + 1 skipped), **578 passed + 11 skipped**. The 11 new tests:
+    - `usePageLoader.spec.ts` 5: held pages wait for the window and use only free requests; the window takes a held page's request; a held page and its size are taken over by the next list; held pages that aren't held any more, and all of them on close, are revoked; a failed held page is left to the chapter's own loader;
+    - `ReaderView.spec.ts` 6: the next chapter's first pages held near the end and shown in the first render; the previous chapter's last pages held on its panel and shown in the first render; nothing held before the end, and the opening page where reading stopped; the strip's next chapter shown from the held page without a second fetch (it failed with the window not tagged by chapter); a reopened spread saving the page it opened on; a fit change after a pan back to the start view.
+
+    Stage 4's "writes the spread's last page as the place to resume" now turns before it closes. Lint, typecheck, format:check and build clean;
+  - server: 794 tests, 0 failures, green, after the test-only `MpvIpcClientTest` change; smoke 24/24;
+  - no operation changed, so the live spec wasn't rerun (11/11 in the baseline); the shell didn't change.
+- **The first run, from a fresh data dir** (`tools/dev-data/agent/p5-exit`, gitignored), in `pnpm tauri dev`, through the UI (computer use), on the dev desktop (NVIDIA GPU, a 1920×1080 screen at 145 Hz):
+
+  | Check | Result |
+  |---|---|
+  | first start | healthy after 6.9 s; the manga Library empty; Extensions: "No manga repo yet. Madoyomi ships with none" |
+  | this device's settings | the webview's `madoyomi.reader` held the defaults (Single, right to left, fit screen, 800 px, no gap, dark, 4 pages), as Stage 5's run left them; the page cache 1 GB, "0 bytes in 0 pages" in `p5-exit\cache\manga` |
+  | the repo | Keiyoushi's `index.pb`: "Added Keiyoushi as a manga repo (type detected), with 1603 extensions", "Signing key trusted" |
+  | the extensions | MangaPill 1.6.1, MangaDex 1.6.4 and Webtoons.com 1.6.3 installed, trusted by the repo's key (no prompt) |
+  | webtoon by source | Webtoons.com "Osora" (genre Fantasy only) Chapter 126 opened in Webtoon at 1 / 103; the sheet: "Webtoon · From the source (Webtoons.com)", "Right to left · The default" |
+  | webtoon by genre | MangaDex "First Love Trap" (Full Color, Long Strip, Romance, Slice of Life, Korean) Ch.1: Webtoon; the sheet: "From the genre "Long Strip"" |
+  | the strip at the window's width | from the sheet: the strip filled the window; the sheet's Reset to defaults put 800 px back |
+  | Single, right to left | MangaPill "Kingdom" (Action, Drama, Historical, Military, Thriller) Chapter 892: Single, right to left, 1 / 20, the slider filling from the right; the left third and ← forward, → back (1 → 2 → 3 → 2) |
+  | `]` and `[` | `]` opened Chapter 893 at 1 / 20 (the newest: no Next chapter button); `[` opened 892 at its last page ("#892 END"), which marked it read (Stage 2's rule) |
+  | left to right (the toolbar) | Home, the right third, →: 3 / 20, the slider filling from the left, Next chapter on the right; the sheet: "Left to right · This manga's", the defaults unchanged |
+  | Double | 2–3 / 20 with page 2 on the left; stepping through 892: no spread inside the chapter |
+  | a wide page alone, Shift | Kingdom's first page is the group's credits, 1480×1253 (wider than tall): with Shift on, 1 / 20 alone and then 2–3. Without spread detection Shift would pair 1–2 |
+  | fit height, original size | fit height on the wide page: the window's height, centred (the same as fit screen for a page that the height limits); original size: the spread 2–3 (2683 px wide) at its top-left |
+  | Shift+wheel, a drag at 1× | Shift+wheel (real input through Windows) panned the original-size spread sideways; a drag panned it at 1× |
+  | black background | from the sheet: the reader on black |
+  | Tab through the toolbar | Tab: ← Kingdom, the slider, Next chapter, Single, each with a focus ring; five more to Settings; Enter opened the sheet |
+  | **a fit change after a pan** | **found:** the sheet's Reset to defaults (original size → fit screen) after the pan left the spread off-centre, cut off at the right and the bottom, until the next page turn (fixed) |
+  | **Double, resume** | Kingdom 891 left on 8–9 (Shift on): "Page 9 of 20". Reopened on 9–10 (page 1's size not known yet, so it paired 1–2) with page 9 on screen. **Found:** that reopen saved page 10, and after an app restart (Shift off: 10–11) page 11, with no page turned (fixed) |
+  | a global default | Settings → Default mode → Double: MangaPill "Berserk" (no settings) Group 2 Chapter 385 opened in Double, right to left, page 1 on the right, "Page 2 of 23"; Default mode back to Single, and it followed |
+  | Single, resume | Berserk 385 left at 7 / 23: "Page 7 of 23"; after an app restart Single, right to left, at 7 / 23 |
+  | Webtoon, resume | Osora 119 left at 48 / 105: "Page 48 of 105", reopened with page 48's top at the top; after an app restart the same |
+  | after the app restart | the backend stopped with exit code 0, healthy again after 9.5 s; Kingdom in Double, left to right (its own), Berserk and Osora by the defaults and the source |
+  | a failed page in the strip | Osora 119: the slider to page 30, then the backend killed 80 ms later (its pid from sidecar.log): "NETWORK · The backend didn't answer. Failed to fetch." with "Click to retry" in the strip, and "Couldn't save your place in this chapter". After the shell's restart (9.1 s) the page and the save came back by themselves. With the backend killed before the seek, "The backend stopped" sits over the reader and takes the click, so the seek had to come first |
+  | a double-click in a side third | Berserk: two page turns (7 → 9) |
+  | a resize while zoomed | Ctrl+= three times (about 2×), then F: fullscreen at fit; F again: windowed at fit |
+  | the token | no `token=` in madoyomi.log, sidecar.log, sidecar.1.log or the dev output; no warning in the dev output; the backend stopped with exit code 0 at each close |
+
+- **Step 15 on the dev desktop** (the dev stats overlay, Reset before each measured scroll; memory from the WebView2 process tree under madoyomi.exe, the JVM left out). The scroll is real wheel input through Windows (a scratch script: 5 notches 40 ms apart every 0.5 s, about 3 pages a second on Osora's 800 px pages):
+
+  | Measurement | Result |
+  |---|---|
+  | time to the first page | 825 ms (Chapter 126, cold, the first chapter after a fresh start), 641 ms (125), 694 ms (120), 674 ms (126 cold, second data dir), 819 ms (124 after a slider jump, second data dir); 13–34 ms into a neighbour from the backend's cache before the fix, at once after it |
+  | Chapter 126 (103 pages), cold, top to bottom | 39,232 frames at 145 fps, **3 over 50 ms (the longest 90 ms)**, 0 blank frames, at most 5 `<img>` and 5 items, the JS heap 31 MB |
+  | Chapter 125 (95 pages) and into 126 | 43,045 frames, 0 over 50 ms (the longest 26 ms), **3 blank frames (21 ms)**, all at the crossing into 126 (126 → 125 back alone: 3 blank frames, 34 ms to its page) |
+  | Chapters 120 → 124 in one go (472 pages) and into 125 | the memory read every 10 s: 163,067 frames at 145 fps, 0 over 50 ms (the longest 27 ms), **18 blank frames (125 ms), all at the 5 crossings** |
+  | memory | before the chapters (the details page) 512 MB working set, 293 MB private; at the end of 120: 517 / 302; 121: 518 / 313; 122: 514 / 298; 123: 515 / 319; 124: 489 / 317 (the renderer 97–164 MB private while reading); after leaving the reader 485 / 300, 40 s later 479 / 298. Flat. At the first start 431 / 234, before the first chapter 501 / 308 |
+  | after the fix round (second data dir) | Chapter 126 cold, top to bottom: 125,668 frames, **0 over 50 ms (the longest 16 ms), 0 blank frames**, at most 5 `<img>` and 5 items, the heap 29 MB. The crossing 125 → 126 and back 126 → 125: **0 blank frames**, the longest frame 8 ms |
+
+  The first pass's 3 frames over 50 ms came once, on the first chapter after a fresh start, with the memory being read every 20 s and a screenshot at its end. The 125 pass (no memory reads), the 5-chapter pass (memory read every 10 s) and the cold pass on the second data dir (the same conditions as the first: a fresh start, the first chapter) had none, so it isn't the reader's work per page. No frame-level timing exists to pin it down (the overlay counts only).
+- **Found and fixed** (§9): the blank frames at every chapter crossing (the held pages); the held page dropped in the strip by the old chapter's window (found on the second data dir, when the first fix still left 3 blank frames: "first page 13 ms" said the page wasn't taken over); the pan kept across a fit change; the double-page place moving forward on a reopen; the overlay's first-page time ("…" after a held page, then 56131 ms after a Home); the `MpvIpcClientTest` race (ktlint asked for a blank line before the commented field).
+- **The second run, after the fix round, from a fresh data dir** (`p5-exit2`):
+
+  | Check | Result |
+  |---|---|
+  | first start | healthy after 9.2 s; the Library empty; this device's settings at the defaults |
+  | the repo, the extensions | Keiyoushi (1603 extensions), Webtoons.com 1.6.3 and MangaPill 1.6.1 |
+  | Chapter 126 cold, the crossings | the step-15 rows above: 0 frames over 50 ms, 0 blank frames, both ways |
+  | a paged crossing | Kingdom 891 in Double: End, the end panel, then one more step: 892's first page in the screenshot taken right after the key |
+  | the fit change | Kingdom 891, original size, a drag, then fit screen from the sheet: the spread whole and centred |
+  | Double, resume | Kingdom 891 (Single, right to left at first: no settings yet; then Double and left to right from the toolbar) left on 8–9 with Shift on: "Page 9 of 20"; reopened on 9–10 and left: **still "Page 9 of 20"**. Chapter 890, after an app restart in Double and left to right (its own), left on 8–9; after another restart it reopened on 8–9 and kept "Page 9 of 20" |
+  | Webtoon, resume | Osora 122 left at 44 / 96, reopened at 44 / 96 (the strip's window now by chapter) |
+  | the token | no `token=` in the data dir's logs or the dev output; the backend stopped with exit code 0 |
+
+- **The tooling for this session.** The agent's shell was the Linux VM again, so the builds, the tests and `pnpm tauri dev` ran through the job runner (`tools/dev-data/agent/`, gitignored): `readscroll.ps1` (the measured scroll: real wheel notches at a point of the screen, the cursor put back before each burst, the memory and the cache folder logged, `-NoMem`), `ctrlwheel.ps1` got `-Shift`. Pitfalls:
+  - Windows drops injected input while an elevated window (Task Manager) is in front, so two scripted scrolls stalled for 2–3 minutes until a screenshot hid it; computer use hides the windows it isn't granted while it holds the screen, and the scroll ran on;
+  - the native window title stays "Madoyomi" (the chapter is in `document.title` only), so the scripts follow the chapter by the backend's cache folder;
+  - the Claude window took the keyboard focus after each message, so a first click or key after it was lost;
+  - read the toolbar's buttons from a full screenshot, not a zoom (a zoomed coordinate hit Webtoon instead of Shift, which changed Kingdom's own mode for a while).
+- **Not checked, and why:**
+  - a mid-range laptop: none was at hand; criterion 1 is closed on the dev desktop (the user's decision, §9);
+  - a real spread inside a chapter: Kingdom 892 has none, so the real-source check is the wide credits page at a chapter's start (alone with Shift); Stage 4's generated chapter has spreads at an odd and an even index;
+  - a trackpad, momentum past a strip's end, a pinch: only a notched wheel;
+  - "Manhwa" and "Manhua" genres live: a Long Strip tag and the source rule were read; the tokens are unit-tested;
+  - a source's own page failure (`SOURCE_FAILED` with an HTTP status) and an expiring image URL live: no page failed at a source; a backend kill stood in (`NETWORK`);
+  - very tall pages and an empty chapter: Stage 3 checked them; a fresh data dir has no Local manga, and the strip's layout didn't change;
+  - gray and white backgrounds, fit width: Stage 5 checked them (black now);
+  - a failed meta save live: in `useMangaReaderSettings.spec.ts` and `ReaderView.spec.ts`;
+  - backup and restore of the per-manga settings: Phase 6 (the meta goes into upstream's backup);
+  - the memory run again after the fix round: the fix holds at most four more decoded pages near a chapter's ends; not measured again;
+  - the generated test chapters stay in `live-data/local` (gitignored scratch data), not in the repo; no page image was generated this stage.
