@@ -6,3 +6,4 @@ export * from "./preferences";
 export * from "./playback";
 export * from "./player";
 export * from "./reader";
+export * from "./categories";

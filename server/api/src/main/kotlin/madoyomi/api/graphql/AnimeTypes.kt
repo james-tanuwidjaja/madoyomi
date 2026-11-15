@@ -107,6 +107,10 @@ class AnimeType(
     fun seasons(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<AnimeNodeList> =
         dataFetchingEnvironment.getValueFromDataLoader("SeasonsForAnimeDataLoader", id)
 
+    @GraphQLDescription("The categories it is in, by position; empty when it is in Default (Phase 6)")
+    fun categories(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<List<AnimeCategoryType>> =
+        dataFetchingEnvironment.getValueFromDataLoader("CategoriesForAnimeDataLoader", id)
+
     fun parent(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<AnimeType?> =
         parentId?.let { dataFetchingEnvironment.getValueFromDataLoader("AnimeDataLoader", it) }
             ?: CompletableFuture.completedFuture(null)

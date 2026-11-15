@@ -7,6 +7,7 @@ import { useDetailsPage } from "../composables/useDetailsPage";
 import { useChapters, useManga, useRefreshManga } from "../composables/useEntries";
 import { resumeChapter } from "../utils/pagedNav";
 import ChapterList from "../components/ChapterList.vue";
+import EntryCategoriesButton from "../components/EntryCategoriesButton.vue";
 import EntryHeader from "../components/EntryHeader.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import PageLayout from "../components/PageLayout.vue";
@@ -80,6 +81,7 @@ const notStored = computed(
           >
             {{ entry.inLibrary ? "Remove from library" : "Add to library" }}
           </button>
+          <EntryCategoriesButton v-if="entry.inLibrary" :id="id" kind="manga" />
           <button
             type="button"
             class="btn"

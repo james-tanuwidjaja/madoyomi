@@ -6,6 +6,7 @@ import { useBackendStore } from "../stores/backend";
 import type { EntrySummary } from "../api/types";
 import { useDetailsPage } from "../composables/useDetailsPage";
 import { useAnime, useEpisodes, useRefreshAnime, useSeasons } from "../composables/useEntries";
+import EntryCategoriesButton from "../components/EntryCategoriesButton.vue";
 import EntryHeader from "../components/EntryHeader.vue";
 import EpisodeList from "../components/EpisodeList.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
@@ -90,6 +91,7 @@ const seasonCards = computed<EntrySummary[]>(() =>
           >
             {{ entry.inLibrary ? "Remove from library" : "Add to library" }}
           </button>
+          <EntryCategoriesButton v-if="entry.inLibrary" :id="id" kind="anime" />
           <button
             type="button"
             class="btn"

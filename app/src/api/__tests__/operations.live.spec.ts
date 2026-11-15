@@ -667,6 +667,193 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.info(report.join("\n"));
   }, 180_000);
 
+  // The library's categories (Phase 6 Stage 1), one list per kind: upstream's for manga, Madoyomi's for anime. Two
+  // categories are made, renamed, moved, given a sort in their meta, given two stored entries of the kind (any, in
+  // the library or not) and taken back out; a third, flagged for new entries, gets an entry added to the library
+  // and taken out again; then all three are deleted. The kind's other categories and its entries' other categories
+  // are left as they were. The database only, no site.
+  it("creates, renames, moves, assigns and deletes categories of each kind", async () => {
+    type Category = {
+      id: number;
+      order: number;
+      name: string;
+      isDefaultCategory: boolean;
+      meta: { key: string; value: string }[];
+    };
+    const report: string[] = [];
+    for (const kind of ["anime", "manga"] as const) {
+      const anime = kind === "anime";
+      const list = async (): Promise<Category[]> =>
+        anime
+          ? (await client.gql<{ animeCategories: Category[] }>(operations.ANIME_CATEGORIES_QUERY))
+              .animeCategories
+          : (
+              await client.gql<{ categories: { nodes: Category[] } }>(
+                operations.MANGA_CATEGORIES_QUERY,
+              )
+            ).categories.nodes;
+      const created: number[] = [];
+      const create = async (name: string, isDefault = false) => {
+        const d = await client.gql<Record<string, { category: Category }>>(
+          anime
+            ? operations.CREATE_ANIME_CATEGORY_MUTATION
+            : operations.CREATE_MANGA_CATEGORY_MUTATION,
+          { name, default: isDefault },
+        );
+        const category = Object.values(d)[0]!.category;
+        created.push(category.id);
+        return category;
+      };
+      const before = await list();
+      expect(
+        before.filter((c) => c.isDefaultCategory),
+        `${kind}: one Default category`,
+      ).toHaveLength(1);
+      const tag = `live-${Date.now().toString(36)}`;
+      try {
+        const a = await create(`${tag} A`);
+        const b = await create(`${tag} B`);
+        await client.gql(
+          anime
+            ? operations.UPDATE_ANIME_CATEGORY_MUTATION
+            : operations.UPDATE_MANGA_CATEGORY_MUTATION,
+          { id: a.id, patch: { name: `${tag} A2` } },
+        );
+        await client.gql(
+          anime
+            ? operations.UPDATE_ANIME_CATEGORY_ORDER_MUTATION
+            : operations.UPDATE_MANGA_CATEGORY_ORDER_MUTATION,
+          { id: b.id, position: 1 },
+        );
+        await client.gql(
+          anime
+            ? operations.SET_ANIME_CATEGORY_META_MUTATION
+            : operations.SET_MANGA_CATEGORY_META_MUTATION,
+          { categoryId: a.id, key: "madoyomi.library.sort", value: "title:asc" },
+        );
+        const after = await list();
+        const others = after.filter((c) => !c.isDefaultCategory).sort((x, y) => x.order - y.order);
+        expect(others[0]!.id, `${kind}: moved to the first position`).toBe(b.id);
+        const renamed = after.find((c) => c.id === a.id)!;
+        expect(renamed.name).toBe(`${tag} A2`);
+        expect(renamed.meta).toContainEqual({ key: "madoyomi.library.sort", value: "title:asc" });
+
+        // two stored entries of the kind
+        const stored = anime
+          ? (
+              await client.gql<{ animes: { nodes: { id: number }[] } }>(
+                "{ animes(first: 2) { nodes { id } } }",
+              )
+            ).animes.nodes
+          : (
+              await client.gql<{ mangas: { nodes: { id: number }[] } }>(
+                "{ mangas(first: 2) { nodes { id } } }",
+              )
+            ).mangas.nodes;
+        const ids = stored.map((e) => e.id);
+        const categoriesOf = async (id: number) =>
+          anime
+            ? (
+                await client.gql<{ anime: { categories: { id: number }[] } }>(
+                  `{ anime(id: ${id}) { categories { id } } }`,
+                )
+              ).anime.categories.map((c) => c.id)
+            : (
+                await client.gql<{ manga: { categories: { nodes: { id: number }[] } } }>(
+                  `{ manga(id: ${id}) { categories { nodes { id } } } }`,
+                )
+              ).manga.categories.nodes.map((c) => c.id);
+        const assign = anime
+          ? operations.UPDATE_ANIMES_CATEGORIES_MUTATION
+          : operations.UPDATE_MANGAS_CATEGORIES_MUTATION;
+        if (ids.length) {
+          await client.gql(assign, { ids, patch: { addToCategories: [a.id, b.id] } });
+          for (const id of ids)
+            expect(await categoriesOf(id)).toEqual(expect.arrayContaining([a.id, b.id]));
+          await client.gql(assign, { ids, patch: { removeFromCategories: [b.id] } });
+          for (const id of ids) {
+            const now = await categoriesOf(id);
+            expect(now).toContain(a.id);
+            expect(now).not.toContain(b.id);
+          }
+        }
+
+        // an entry added to the library goes into the categories flagged for new entries (upstream's GraphQL didn't
+        // do it for manga; Madoyomi's MangaNewEntryCategories does). One out of the library and in no category is
+        // added and taken out again, so it ends as it was but for its date added.
+        const flagged = await create(`${tag} New`, true);
+        const outside = anime
+          ? (
+              await client.gql<{
+                animes: { nodes: { id: number; categories: { id: number }[] }[] };
+              }>(
+                "{ animes(condition: { inLibrary: false }, first: 50) { nodes { id categories { id } } } }",
+              )
+            ).animes.nodes.filter((e) => e.categories.length === 0)
+          : (
+              await client.gql<{
+                mangas: { nodes: { id: number; categories: { nodes: { id: number }[] } }[] };
+              }>(
+                "{ mangas(condition: { inLibrary: false }, first: 50) { nodes { id categories { nodes { id } } } } }",
+              )
+            ).mangas.nodes.filter((e) => e.categories.nodes.length === 0);
+        const added = outside[0]?.id;
+        if (added !== undefined) {
+          const setInLibrary = (inLibrary: boolean) =>
+            client.gql(
+              anime ? operations.UPDATE_ANIME_MUTATION : operations.UPDATE_MANGA_MUTATION,
+              {
+                id: added,
+                inLibrary,
+              },
+            );
+          try {
+            await setInLibrary(true);
+            expect(
+              await categoriesOf(added),
+              `${kind}: a new entry is in the flagged category`,
+            ).toContain(flagged.id);
+          } finally {
+            await setInLibrary(false);
+            await client.gql(assign, { ids: [added], patch: { clearCategories: true } });
+          }
+          expect(await categoriesOf(added)).toEqual([]);
+        }
+
+        for (const id of [a.id, b.id, flagged.id]) {
+          await client.gql(
+            anime
+              ? operations.DELETE_ANIME_CATEGORY_MUTATION
+              : operations.DELETE_MANGA_CATEGORY_MUTATION,
+            { id },
+          );
+        }
+        created.length = 0;
+        const end = await list();
+        expect(end.map((c) => c.id).sort()).toEqual(before.map((c) => c.id).sort());
+        for (const id of ids) expect(await categoriesOf(id)).not.toContain(a.id);
+        report.push(
+          `${kind}: ${before.length} categories before and after, ${ids.length} entries assigned and back, ` +
+            (added === undefined
+              ? "no entry out of the library to add"
+              : `entry ${added} added into the flagged category and back`),
+        );
+      } finally {
+        for (const id of created) {
+          await client
+            .gql(
+              anime
+                ? operations.DELETE_ANIME_CATEGORY_MUTATION
+                : operations.DELETE_MANGA_CATEGORY_MUTATION,
+              { id },
+            )
+            .catch(() => undefined);
+        }
+      }
+    }
+    console.info(report.join("\n"));
+  }, 60_000);
+
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];
     let onConnected!: () => void;

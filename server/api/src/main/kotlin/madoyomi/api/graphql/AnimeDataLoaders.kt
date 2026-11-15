@@ -30,6 +30,7 @@ val animeDataLoaders: List<KotlinDataLoader<*, *>> =
         SeasonsForAnimeDataLoader(),
         AnimeSourceDataLoader(),
         AnimeForAnimeSourceDataLoader(),
+        CategoriesForAnimeDataLoader(),
     )
 
 /** An anime by id; null (through the Java DataLoader, as upstream's MangaDataLoader) for an unknown id. */

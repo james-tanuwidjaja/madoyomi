@@ -4,6 +4,8 @@ import type {
   Episode,
   Extension,
   ExtensionStore,
+  LibraryCategory,
+  LibraryEntry,
   Manga,
   MediaKind,
   PlaybackEvent,
@@ -243,6 +245,40 @@ export function makePlaybackEvent(
     retried: false,
     failedVideo: null,
     nextVideo: null,
+    ...overrides,
+  };
+}
+
+/** A library category as `fetchCategories` returns it (Phase 6). */
+export function makeCategory(overrides: Partial<LibraryCategory> = {}): LibraryCategory {
+  return {
+    id: 1,
+    order: 1,
+    name: "Watching",
+    default: false,
+    isDefaultCategory: false,
+    includeInUpdate: "UNSET",
+    includeInDownload: "UNSET",
+    meta: [],
+    ...overrides,
+  };
+}
+
+/** A kind's Default category. */
+export function makeDefaultCategory(id = 0): LibraryCategory {
+  return makeCategory({ id, order: 0, name: "Default", isDefaultCategory: true });
+}
+
+/** A library card as `fetchLibrary` returns it. */
+export function makeLibraryEntry(overrides: Partial<LibraryEntry> = {}): LibraryEntry {
+  return {
+    kind: "anime",
+    id: 1,
+    title: "Entry",
+    thumbnailUrl: null,
+    inLibrary: true,
+    inLibraryAt: 0,
+    categoryIds: [],
     ...overrides,
   };
 }
