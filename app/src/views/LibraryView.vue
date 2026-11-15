@@ -8,6 +8,7 @@ import {
   useSetCategorySort,
 } from "../composables/useCategories";
 import { useLibrary } from "../composables/useEntries";
+import { useUpdateMarks } from "../composables/useLibraryUpdates";
 import { useBackendStore } from "../stores/backend";
 import { useLibraryCategoryStore } from "../stores/libraryCategory";
 import {
@@ -21,6 +22,7 @@ import { categorySort, entriesIn, libraryTabs, pickTab } from "../utils/categori
 import { formatCount } from "../utils/format";
 import CategoriesDialog from "../components/CategoriesDialog.vue";
 import CategoryPicker from "../components/CategoryPicker.vue";
+import LibraryUpdateButton from "../components/LibraryUpdateButton.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import MediaCard from "../components/MediaCard.vue";
 import PageLayout from "../components/PageLayout.vue";
@@ -40,6 +42,9 @@ import VirtualGrid from "../components/VirtualGrid.vue";
  *
  * Phase 6 Stage 2: each card shows its unwatched/unread count (from the library query, fetched again when progress
  * changes), and the sort has "Unwatched/Unread" and "Last watched/read".
+ *
+ * Phase 6 Stage 3: "Update library" checks the kind's library for new items ("Update <tab>" only the open category),
+ * and a card an update check found new items in shows "N new" until the entry is opened.
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -51,6 +56,7 @@ const library = useLibrary(kind);
 const categories = useCategories(kind);
 const setCategorySort = useSetCategorySort();
 const removeFromLibrary = useRemoveFromLibrary();
+const marks = useUpdateMarks(kind);
 
 const all = computed(() => library.data.value ?? []);
 const tabs = computed(() => libraryTabs(categories.data.value ?? [], all.value));
@@ -255,6 +261,10 @@ function onKeydown(event: KeyboardEvent) {
           {{ directionLabel }}
         </button>
         <span class="spacer" />
+        <LibraryUpdateButton
+          :kind="kind"
+          :category="current ? { id: current.category.id, name: current.category.name } : null"
+        />
         <button type="button" class="btn" data-action="select" @click="startSelecting">
           Select
         </button>
@@ -329,6 +339,7 @@ function onKeydown(event: KeyboardEvent) {
             :entry="item"
             hide-library-badge
             :count="item.unreadCount"
+            :new-count="marks.data.value?.[item.id] ?? 0"
             :selectable="selecting"
             :selected="selectedSet.has(item.id)"
             @select="onCardClick($event, item.id)"

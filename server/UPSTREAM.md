@@ -124,7 +124,7 @@ Deliberately **not** rebranded: package names (rule above); i18n strings (they o
 | `server-config/.../ServerConfig.kt` | defaults: `ip` `127.0.0.1`, `port` `0` (min lowered to 0), `initialOpenInBrowserEnabled`, `systemTrayEnabled`, `webUIEnabled` and `kcefEnabled` all `false` (KCEF code stays for Phase 2) |
 | `core/.../server/JavalinSetup.kt` | connector always binds `127.0.0.1` and is exposed as `JavalinSetup.connector`; startup log shows the bound port; CORS allows only the Tauri origins (`MadoyomiFeatures.ALLOWED_ORIGINS`), on every path; OPDS routes not registered; `javalinSetup(configure)` hook, called before upstream's `defineCore()`, and it returns the app; the `api/` "unmatched → 404" `after` handler leaves a 401 alone (otherwise token rejections would turn into 404s) |
 | `core/.../server/ServerSetup.kt` | SyncYomi scheduling off |
-| `core/.../manga/impl/update/Updater.kt` | no SyncYomi sync before library updates |
+| `core/.../manga/impl/update/Updater.kt` | no SyncYomi sync before library updates; since Phase 6 Stage 3 no scheduled update of its own either (`scheduleUpdateTask` returns early behind `MadoyomiFeatures.upstreamLibraryUpdateScheduleEnabled`; see "Library updates (Phase 6)") |
 | `core/.../manga/controller/MangaController.kt`, `core/.../graphql/mutations/ChapterMutation.kt` | no KOReader progress pushes |
 | `core/.../global/impl/AppUpdate.kt` | server update check returns nothing (never calls Suwayomi's GitHub) |
 | `core/.../server/util/WebInterfaceManager.kt` | WebUI update check/download is a no-op while the WebUI is disabled |
@@ -502,6 +502,39 @@ Tests: `api/src/test/kotlin/madoyomi/api/HistoryApiTest.kt` (6: what stamps eith
 
 Not changed: upstream's REST `Chapter.kt` paths that stamp `last_read_at` (the app doesn't use them); `CHAPTER_USER` has no index on `last_read_at` (an upstream table: the history query groups the user's rows by manga, fine at a desktop library's size; measure in a large library before adding one).
 
+### Library updates (Phase 6)
+
+Phase 6 doc §9 "Stage 3". The library update check is Madoyomi's, for both kinds, in place of upstream's manga-only `Updater` (`suwayomi.tachidesk.manga.impl.update`), with one edit:
+
+| File | Change |
+|---|---|
+| `core/.../manga/impl/update/Updater.kt` (`scheduleUpdateTask`) | **Stage 3:** returns right after descheduling, behind `MadoyomiFeatures.upstreamLibraryUpdateScheduleEnabled` (false; one `// Madoyomi:` comment). Upstream scheduled a manga-only check every `globalUpdateInterval` hours (12 by default) once the `Updater` was first used, which happened in the app whenever a manga was added to the library. Madoyomi's schedule (off by default, the user's decision) covers both kinds; two schedules would have hit the manga sources twice. The rest of the `Updater` stays: `addMangasToQueue` still fetches a never-initialized manga added through `updateMangas`, and upstream's `updateLibrary`, `updateLibraryManga`, `updateCategoryManga`, `updateStop`, `libraryUpdateStatus` and `libraryUpdateStatusChanged` still work for manga, but the app doesn't use them. |
+
+`madoyomi.core.library`:
+- `LibraryUpdater`: one check at a time for both kinds (a start while one runs adds the entries not queued yet; `stop`).
+  - **Which entries:** upstream's `addCategoriesToUpdateQueue` rule for `includeInUpdate`. It reads upstream's `Category.getCategoryList`, `CategoryManga.getCategoryMangaList` and `getMangasCategories` for manga, and `AnimeCategories` for anime. Strategy `ONLY_FETCH_ONCE` is left out. The skip filters are Madoyomi's settings in place of upstream's per-user `excludeCompleted`, `excludeUnreadChapters` and `excludeNotStarted`, which only upstream's `Updater` read.
+  - **The fetch:** upstream's `Manga.updateMangaAndChapters`, with the details only when the user's `updateMangas` is on or the manga was never initialized (upstream's rule); `AnimeDetails.fetch` for anime. A Seasons entry gets its season list, then the episodes of the seasons that have some stored.
+  - **The order:** upstream's model, one channel per source with its entries one at a time, plus a stagger (`staggerMs`, 1 s) and a semaphore of `serverConfig.maxSourcesInParallel` permits.
+  - **The new count:** the item ids the fetch added, fetched since the check started; none for an entry with nothing stored before. It goes into the marks.
+  - **The status** (`StateFlow`): running, the trigger, the times, total/done/skipped, the entries being checked, failures with the error, what was found per entry.
+- `LibraryUpdateSettings` / `LibraryUpdateSettingsStore`: `<data dir>/library-update.json`, as the player and reader settings. It holds the interval (0, 6, 12 or 24 h), skip completed (true), skip with unwatched/unread (false), skip not started (false), the toast (false), and the schedule's anchor.
+- `LibraryUpdateScheduler`: upstream's `HAScheduler`, started from `madoyomi.api.Main`. It schedules one interval after the anchor, or a minute after the start when that is past, and reschedules when the interval changes. `MADOYOMI_UPDATE_INTERVAL_SECONDS` (env) or `madoyomi.updateIntervalSeconds` replaces the interval while it is on.
+- `LibraryUpdateMarks` (`AnimeUpdateMarkTable`, `MangaUpdateMarkTable`, M0073): a count per library entry (per user for manga), added to by a check, cleared by `clearUpdateMarks`.
+- `LibraryUpdatesFeed`: the Updates lists. Items of library entries fetched after the entry joined the library (`ANIME.ADDED_AT`, upstream's `MANGAUSER.IN_LIBRARY_AT`) and after the entry's first fetch (the minimum `fetched_at` of its items), newest first. This is upstream's `Chapter.getRecentChapters` rule plus the first-fetch one. An episode of a season counts for its library parent.
+- `AnimeDetails.reconcileEpisodes` (Madoyomi code) now carries a deleted episode's `fetched_at` to the re-listed one with the same number, as upstream's `Chapter.updateChapterListDatabase` does, so it isn't new.
+
+GraphQL (`madoyomi.api.graphql.LibraryUpdateGraphQL`), named apart from upstream's:
+- `libraryCheck` → `LibraryCheckType`: `running`, `trigger` (`MANUAL`/`SCHEDULED`), `startedAt`/`finishedAt` (epoch ms), `total`, `done`, `skipped`, `checking`, `failures { entry error }`, `found { entry newCount }`, `newEpisodes`, `newChapters`, `cancelled`, `nextScheduledAt`. The entries are `{ kind id title }`;
+- `startLibraryUpdate(input: {kind, categoryId})` (no kind: both; a category needs a kind, else `BAD_REQUEST`; an unknown one is `NOT_FOUND`), `stopLibraryUpdate`;
+- the `libraryUpdates` subscription: the status at once, then on every change;
+- `libraryUpdateSettings`, `setLibraryUpdateSettings(input: {intervalHours, skipCompleted, skipUnseen, skipNotStarted, notify})`. An interval other than 0, 6, 12 or 24 is `BAD_REQUEST`;
+- `animeUpdates(limit, offset)` → `{ hasMore, items { anime, episode, fetchedAt } }` and `mangaUpdates(limit, offset)` → `{ hasMore, items { manga, chapter, fetchedAt } }` (upstream's `MangaType` and `ChapterType` with the user's data);
+- `updateMarks(kind)` → `[{ entryId, newCount, markedAt }]` (library entries only) and `clearUpdateMarks(input: {kind, entryIds})` (null: all) → `{ cleared }`.
+
+Tests: `api/src/test/kotlin/madoyomi/api/LibraryUpdateApiTest.kt` (8: the anime diff through a fake source with the counts, the mark, the feed's first-fetch rule and a re-listed episode; a Seasons entry; the manga diff through upstream's code with a fake manga source and a failure; the category rule for both kinds and one category's check; the skip settings; one entry per source with the stagger and the parallel limit; stop, adding to a running check and the subscription; the settings file, their checks and a 400 ms real schedule), and `MigrationsFromEmptyDbTest` (M0073's tables and foreign keys).
+
+Not changed: upstream's per-user library update settings (`excludeUnreadChapters`, `excludeNotStarted`, `excludeCompleted`, `globalUpdateInterval`) stay in its config but nothing Madoyomi runs reads them. `CATEGORY.include_in_download` is shown in the app but used only from Stage 4.
+
 ### New Madoyomi code
 
 | Path | What |
@@ -518,7 +551,7 @@ Not changed: upstream's REST `Chapter.kt` paths that stamp `last_read_at` (the a
 | `core/src/main/kotlin/madoyomi/core/extension/TrustedSignatureTable.kt` | `TRUSTED_SIGNATURE` table + `SignatureTrustOrigin { USER, STORE }` |
 | `core/src/main/kotlin/madoyomi/core/anime/model/table/*.kt` | `AnimeSourceTable`, `AnimeTable`, `EpisodeTable`, `AnimeHistoryTable`, `AnimeCategoryTable` (Stage 3: the M0071 columns and unique indexes; Phase 6: `AnimeCategoryTable` is the category list and `AnimeCategoryAnimeTable` the join, M0072) |
 | `core/src/main/kotlin/madoyomi/core/database/MadoyomiMigration.kt` | marker interface for Madoyomi migrations (see "Database migrations") |
-| `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0069_MadoyomiExtensionKinds.kt`, `M0070_AnimeTables.kt`, `M0071_AnimeBrowse.kt`, `M0072_AnimeCategories.kt` | Madoyomi migrations. New files, but in upstream's migration package, because the runner only scans that package. |
+| `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0069_MadoyomiExtensionKinds.kt`, `M0070_AnimeTables.kt`, `M0071_AnimeBrowse.kt`, `M0072_AnimeCategories.kt`, `M0073_LibraryUpdateMarks.kt` | Madoyomi migrations. New files, but in upstream's migration package, because the runner only scans that package. |
 | `core/src/test/kotlin/madoyomi/core/database/MigrationsFromEmptyDbTest.kt` | the migration chain on empty and pre-Madoyomi H2 databases, re-runs, schema and Exposed-table checks |
 | `core/src/main/kotlin/madoyomi/core/repo/ExtensionListing.kt`, `RepoStoreMeta.kt` | the common listing model (`ExtensionListing`, `ListingSource`), repo metadata, `FetchedRepo`, signing-key normalisation, the pkg/kind check |
 | `core/src/main/kotlin/madoyomi/core/repo/RepoIndexParser.kt` | `RepoIndexParser` + `ParsedIndex` (v2 store, legacy `repo.json`, legacy `index.min.json`), gzip sniff (64 MiB cap) |
@@ -571,6 +604,7 @@ Not changed: upstream's REST `Chapter.kt` paths that stamp `last_read_at` (the a
 | `core/src/test/kotlin/madoyomi/core/player/{PlayerSettingsTest,PlayerLanguagesTest,TrackSelectionTest,VideoPreferencesTest}.kt`, `api/src/test/kotlin/madoyomi/api/PlayerSettingsApiTest.kt` (Phase 4 Stage 5) | their tests |
 | `core/src/main/kotlin/madoyomi/core/anime/AnimeCategories.kt`, `core/src/main/kotlin/madoyomi/core/anime/model/table/AnimeCategoryTable.kt` (`AnimeCategoryTable`, `AnimeCategoryAnimeTable`), `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0072_AnimeCategories.kt`, `api/src/main/kotlin/madoyomi/api/graphql/AnimeCategoryGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/AnimeCategoryApiTest.kt` (Phase 6 Stage 1) | the anime library's categories: the tables (the stub `AnimeCategoryTable` became the list), the rules, the migration, the GraphQL and the data loader, and their tests (see "Library categories (Phase 6)"). `AnimeMutation.updateAnimes` and `AnimeType.categories` call them |
 | `core/src/main/kotlin/madoyomi/core/library/{AnimeHistory,MangaHistory}.kt`, `api/src/main/kotlin/madoyomi/api/graphql/HistoryGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/HistoryApiTest.kt` (Phase 6 Stage 2) | the watch history in `ANIME_HISTORY` and the reading history in upstream's `CHAPTER_USER.last_read_at`: the stamps, the lists with the resume targets, delete and clear, the library counts (`AnimeStatsDataLoader`), and their test (see "History and badges (Phase 6)"). `EpisodeProgress.save`, `AnimeMutation.updateEpisodes`, `AnimeDetails.reconcileEpisodes` and `AnimeType` call them |
+| `core/src/main/kotlin/madoyomi/core/library/{LibraryUpdater,LibraryUpdateScheduler,LibraryUpdateSettings,LibraryUpdateMarkTables,LibraryUpdatesFeed}.kt`, `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0073_LibraryUpdateMarks.kt`, `api/src/main/kotlin/madoyomi/api/graphql/LibraryUpdateGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/LibraryUpdateApiTest.kt` (Phase 6 Stage 3) | the library update check for both kinds, its schedule and settings, the "new" marks, the Updates feed, their GraphQL and test (see "Library updates (Phase 6)"). `madoyomi.api.Main` starts the scheduler; `MadoyomiFeatures.upstreamLibraryUpdateScheduleEnabled` turns upstream's schedule off |
 | `core/src/main/kotlin/madoyomi/core/library/MangaNewEntryCategories.kt`, `api/src/test/kotlin/madoyomi/api/MangaNewEntryCategoriesApiTest.kt` (Phase 6 Stage 1) | manga added to the library through upstream's GraphQL go into the categories flagged for new entries, called from upstream's `MangaMutation.updateMangas` (see "Library categories (Phase 6)"), and its test |
 | `core/src/main/kotlin/madoyomi/core/reader/{ReaderSettings,PageCache,PageImages}.kt`, `api/src/main/kotlin/madoyomi/api/graphql/ReaderGraphQL.kt` (Phase 5 Stage 1) | the reader settings and their file, the chapter-page cache (single-flight, retry, errors, cap and eviction), the page fetch with the expired-URL retry and the prefetch, and their GraphQL (see "Manga reader (Phase 5)") |
 | `core/src/test/kotlin/madoyomi/core/reader/{PageCacheTest,ReaderSettingsTest}.kt`, `api/src/test/kotlin/madoyomi/api/PageImagesApiTest.kt` (Phase 5 Stage 1) | their tests |
@@ -602,6 +636,8 @@ Rules for Madoyomi migrations:
 
 Sources are typed by table (manga in `SOURCE`, anime in `ANIME_SOURCE`), and repos and extensions by the `type` column. The reasoning is in the Phase 1 doc (`docs/phases/phase-1-backend-foundation.md`, step 6).
 
+| `M0073_LibraryUpdateMarks` (Phase 6 Stage 3) | Creates `ANIME_UPDATE_MARK` (`ANIME` → `ANIME`, `CASCADE`, unique; `NEW_COUNT` default 0; `MARKED_AT` epoch s, default 0) and `MANGA_UPDATE_MARK` (`MANGA` → `MANGA` and `USER_ID` → `USERACCOUNT`, both `CASCADE`, unique `(MANGA, USER_ID)`; `NEW_COUNT`, `MARKED_AT`). Idempotent: `SchemaUtils.create` skips existing tables |
+
 ### Numbering collisions on an upstream sync
 
 When the upstream diff adds migrations of its own, say `k` of them, numbered `M0069`…`M00(68+k)`:
@@ -616,6 +652,7 @@ When the upstream diff adds migrations of its own, say `k` of them, numbered `M0
 - The jar's manifest has `Add-Opens: java.base/java.lang java.base/java.util.concurrent`, which `java -jar` applies (Phase 2 Stage 6: uninstall stops the threads an extension left running). A launch that doesn't use `-jar` (a jlink launcher, `-cp`) must pass `--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED` itself. Without them, uninstall can only interrupt those threads, and a local server blocked in `accept()` keeps the extension's classes until the process ends.
 - Env `MADOYOMI_TOKEN`: the API token. If unset, a random one is used and the API is effectively locked.
 - Env `MADOYOMI_MPV` (optional, Phase 4): the `mpv.exe` to play with, unless the player settings name one (Stage 5, `<data dir>/player-settings.json`); without either the backend uses `mpv.exe` from `PATH`. Env `MADOYOMI_PLAYER_DIR` (optional): mpv's config dir; without it `<data dir>/player`. mpv is started as the JVM's child, without `MADOYOMI_TOKEN` in its environment, and at startup the backend ends an mpv that an earlier (crashed) backend on the same data dir left running. Since Stage 2 the backend drives mpv over `\\.\pipe\madoyomi-mpv-<session>` and stops it with `quit` (mpv then exits with 0).
+- Env `MADOYOMI_UPDATE_INTERVAL_SECONDS` (optional, Phase 6 Stage 3, for live checks): while the library update schedule is on, it runs this many seconds apart instead of the chosen 6, 12 or 24 hours. The schedule itself is in `<data dir>/library-update.json`.
 - Binds `127.0.0.1` on a random free port and prints exactly one line `MADOYOMI_PORT=<port>` on stdout once listening (other stdout lines are logs).
 - Every request needs `Authorization: Bearer <token>`, except `GET /health` and CORS preflights. `GET` requests and WebSocket upgrades may pass `?token=<token>` instead. A rejected request gets `401 {"code":"UNAUTHORIZED","message":…,"details":null}`.
 - Binary REST routes: upstream's (`/api/v1/manga/{id}/thumbnail`, pages, extension icons) and `GET /api/v1/anime/{animeId}/thumbnail` (Phase 2).

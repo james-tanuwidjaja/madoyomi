@@ -8,7 +8,7 @@ import { ApiError } from "../../api/client";
 import type { LibraryCategory, LibraryEntry, MediaKind } from "../../api/types";
 import { LIBRARY_CATEGORY_KEY } from "../../stores/libraryCategory";
 import { LIBRARY_SORT_KEY } from "../../stores/librarySort";
-import { makeCategory, makeDefaultCategory } from "../../test/fixtures";
+import { makeCategory, makeDefaultCategory, makeLibraryCheck } from "../../test/fixtures";
 import { useMediaKindStore } from "../../stores/mediaKind";
 import { mountView, setBackendReady } from "../../test/mountView";
 
@@ -18,6 +18,9 @@ const ops = vi.hoisted(() => ({
   setCategoryMeta: vi.fn(),
   setEntriesCategories: vi.fn(),
   setManyInLibrary: vi.fn(),
+  fetchLibraryCheck: vi.fn(),
+  fetchUpdateMarks: vi.fn(),
+  startLibraryUpdate: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -82,6 +85,8 @@ beforeEach(() => {
   ops.setCategoryMeta.mockResolvedValue(undefined);
   ops.setEntriesCategories.mockResolvedValue(undefined);
   ops.setManyInLibrary.mockResolvedValue(undefined);
+  ops.fetchLibraryCheck.mockResolvedValue(makeLibraryCheck());
+  ops.fetchUpdateMarks.mockResolvedValue({});
 });
 
 afterEach(() => {
@@ -363,6 +368,52 @@ describe("LibraryView", () => {
 
       expect(wrapper.find('[data-testid="library-bulk"]').exists()).toBe(false);
       expect(wrapper.find('[data-testid="media-card"]').attributes("href")).toBe("/anime/3");
+    });
+  });
+
+  describe("library updates (Phase 6 Stage 3)", () => {
+    it("starts a check of the kind's library, or of the open tab, and shows the running check with Stop", async () => {
+      ops.startLibraryUpdate.mockResolvedValue(
+        makeLibraryCheck({ running: true, total: 3, done: 1 }),
+      );
+      await mountLibrary();
+      expect(wrapper.find('[data-action="update-category"]').exists()).toBe(false);
+
+      await wrapper.find('[data-action="update-library"]').trigger("click");
+      await flushPromises();
+      expect(ops.startLibraryUpdate).toHaveBeenCalledWith("anime", undefined);
+      expect(wrapper.find('[data-testid="update-progress"]').text()).toBe("Checking 1 of 3…");
+      expect(wrapper.find('[data-action="stop-update"]').exists()).toBe(true);
+      expect(wrapper.find('[data-action="update-library"]').exists()).toBe(false);
+    });
+
+    it("has Update <tab> for the open category", async () => {
+      categoryLists.anime = [
+        makeDefaultCategory(),
+        makeCategory({ id: 1, order: 1, name: "Watching" }),
+      ];
+      libraries.anime = libraries.anime.map((e) => (e.id === 1 ? { ...e, categoryIds: [1] } : e));
+      localStorage.setItem(LIBRARY_CATEGORY_KEY, JSON.stringify({ anime: 1 }));
+      ops.startLibraryUpdate.mockResolvedValue(makeLibraryCheck({ running: true, total: 1 }));
+      await mountLibrary();
+
+      const button = wrapper.find('[data-action="update-category"]');
+      expect(button.text()).toBe("Update Watching");
+      await button.trigger("click");
+      await flushPromises();
+      expect(ops.startLibraryUpdate).toHaveBeenCalledWith("anime", 1);
+    });
+
+    it("shows the New mark on the cards a check found new items in", async () => {
+      ops.fetchUpdateMarks.mockResolvedValue({ 1: 2 });
+      await mountLibrary();
+
+      const marked = wrapper
+        .findAll('[data-testid="media-card"]')
+        .filter((c) => c.find('[data-testid="new-count"]').exists())
+        .map((c) => [c.attributes("title"), c.find('[data-testid="new-count"]').text()]);
+      expect(marked).toEqual([["Bocchi the Rock!", "2 new"]]);
+      expect(ops.fetchUpdateMarks).toHaveBeenCalledWith("anime", expect.anything());
     });
   });
 });

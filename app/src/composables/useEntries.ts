@@ -104,6 +104,8 @@ export function invalidateProgress(
 ) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.library(kind) });
   void queryClient.invalidateQueries({ queryKey: queryKeys.history(kind) });
+  // Phase 6 Stage 3: the Updates rows show the watched/read state too
+  void queryClient.invalidateQueries({ queryKey: queryKeys.updates(kind) });
 }
 
 /** The library of `kind`, unsorted (the view sorts it). */

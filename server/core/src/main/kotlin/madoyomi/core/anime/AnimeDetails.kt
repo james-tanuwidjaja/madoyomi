@@ -140,6 +140,8 @@ object AnimeDetails {
         val totalSeconds: Long,
         /** Its watch history (`ANIME_HISTORY.last_seen`), 0 for none. */
         val lastSeen: Long,
+        /** When it was first fetched: kept, so a re-listed episode isn't new in the Updates view (upstream's rule). */
+        val fetchedAt: Long,
     )
 
     /**
@@ -147,8 +149,9 @@ object AnimeDetails {
      * `Chapter.updateChapterListDatabase`:
      * - by url (the list is deduplicated, episodes without a url are left out);
      * - `source_order` counts from the oldest (1) to the newest, as upstream numbers chapters;
-     * - an episode the list no longer has is deleted, and its watch state and history move to a new episode with the
-     *   same number (≥ 0), as upstream carries the read state and `last_read_at` over;
+     * - an episode the list no longer has is deleted, and its watch state, history and first fetch date move to a new
+     *   episode with the same number (≥ 0), as upstream carries the read state, `last_read_at` and `fetched_at` over
+     *   (Phase 6 Stage 3: so a re-listed episode isn't new in the Updates view);
      * - an update never touches the watch state (`watched`, `bookmark`, `last_second_seen`, `total_seconds`) or
      *   `fetched_at`; a `date_upload` of 0 keeps the stored date, and a new episode without one gets the newest date
      *   of the older episodes in the list (or now), as upstream does;
@@ -181,6 +184,7 @@ object AnimeDetails {
                                 it[EpisodeTable.lastSecondSeen],
                                 it[EpisodeTable.totalSeconds],
                                 goneSeen[it[EpisodeTable.id].value] ?: 0L,
+                                it[EpisodeTable.fetchedAt],
                             )
                     }
             if (gone.isNotEmpty()) {
@@ -231,7 +235,7 @@ object AnimeDetails {
                                 it[EpisodeTable.previewUrl] = episode.preview_url
                                 it[EpisodeTable.memo] = episode.memo
                                 it[EpisodeTable.sourceOrder] = order
-                                it[EpisodeTable.fetchedAt] = now / 1000
+                                it[EpisodeTable.fetchedAt] = state?.fetchedAt?.takeIf { at -> at > 0 } ?: (now / 1000)
                                 it[EpisodeTable.anime] = animeId
                                 if (state != null) {
                                     it[EpisodeTable.watched] = state.watched

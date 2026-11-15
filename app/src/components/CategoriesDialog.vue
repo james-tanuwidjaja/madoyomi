@@ -9,7 +9,7 @@ import {
   DialogRoot,
   DialogTitle,
 } from "reka-ui";
-import type { LibraryCategory, LibraryEntry, MediaKind } from "../api/types";
+import type { IncludeOrExclude, LibraryCategory, LibraryEntry, MediaKind } from "../api/types";
 import {
   useCategories,
   useCreateCategory,
@@ -26,6 +26,10 @@ import ErrorNotice from "./ErrorNotice.vue";
  * move up and down, flag for new entries ("Add new entries here", upstream's `default`) and delete (confirmed in the
  * row, saying where its entries go). Default is built in and isn't listed: an entry is in it by being in no other.
  * Every change is saved at once.
+ *
+ * Phase 6 Stage 3: each category, Default too, has the "Updates" flag (its entries are checked by Update library and
+ * the schedule: upstream's `includeInUpdate`, UNSET when on, EXCLUDE when off) and the "Downloads" flag
+ * (`includeInDownload`, the same way, for the automatic downloads of new items).
  */
 const props = defineProps<{ kind: MediaKind; entries: readonly LibraryEntry[] }>();
 const open = defineModel<boolean>("open", { required: true });
@@ -37,6 +41,16 @@ const move = useMoveCategory();
 const remove = useDeleteCategory();
 
 const list = computed(() => (categories.data.value ?? []).filter((c) => !c.isDefaultCategory));
+const defaultCategory = computed(
+  () => (categories.data.value ?? []).find((c) => c.isDefaultCategory) ?? null,
+);
+
+type Flag = "includeInUpdate" | "includeInDownload";
+const flagOn = (value: IncludeOrExclude) => value !== "EXCLUDE";
+function toggleFlag(c: LibraryCategory, flag: Flag) {
+  const next: IncludeOrExclude = flagOn(c[flag]) ? "EXCLUDE" : "UNSET";
+  update.mutate({ kind: props.kind, id: c.id, patch: { [flag]: next } });
+}
 
 const newName = ref("");
 const newTouched = ref(false);
@@ -245,6 +259,27 @@ async function confirmDelete(c: LibraryCategory) {
                 />
                 New entries
               </label>
+              <label class="flag" title="Update library and the schedule check its entries">
+                <input
+                  type="checkbox"
+                  :checked="flagOn(c.includeInUpdate)"
+                  data-testid="category-updates"
+                  @change="toggleFlag(c, 'includeInUpdate')"
+                />
+                Updates
+              </label>
+              <label
+                class="flag"
+                title="Its entries' new episodes and chapters can be downloaded automatically"
+              >
+                <input
+                  type="checkbox"
+                  :checked="flagOn(c.includeInDownload)"
+                  data-testid="category-downloads"
+                  @change="toggleFlag(c, 'includeInDownload')"
+                />
+                Downloads
+              </label>
               <button
                 type="button"
                 class="btn icon"
@@ -288,6 +323,34 @@ async function confirmDelete(c: LibraryCategory) {
             </template>
           </li>
         </ol>
+
+        <div v-if="defaultCategory" class="row" data-testid="default-category-row">
+          <span class="grow name">
+            <span>{{ defaultCategory.name }}</span>
+            <span class="muted count">entries in no category</span>
+          </span>
+          <label class="flag" title="Update library and the schedule check its entries">
+            <input
+              type="checkbox"
+              :checked="flagOn(defaultCategory.includeInUpdate)"
+              data-testid="default-updates"
+              @change="toggleFlag(defaultCategory, 'includeInUpdate')"
+            />
+            Updates
+          </label>
+          <label
+            class="flag"
+            title="Its entries' new episodes and chapters can be downloaded automatically"
+          >
+            <input
+              type="checkbox"
+              :checked="flagOn(defaultCategory.includeInDownload)"
+              data-testid="default-downloads"
+              @change="toggleFlag(defaultCategory, 'includeInDownload')"
+            />
+            Downloads
+          </label>
+        </div>
 
         <ErrorNotice v-if="error" title="Couldn't save the change" :error="error" />
 

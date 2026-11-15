@@ -514,6 +514,9 @@ export interface LibraryCategory {
 export interface CategoryPatch {
   name?: string;
   default?: boolean;
+  /** Phase 6 Stage 3: the Categories dialog's "Updates" and "Downloads" flags (UNSET when on, EXCLUDE when off). */
+  includeInUpdate?: IncludeOrExclude;
+  includeInDownload?: IncludeOrExclude;
 }
 
 /** A change to entries' categories, as upstream's `UpdateMangaCategoriesPatch`. */
@@ -769,4 +772,66 @@ export interface PageCache {
   limitBytes: LongString;
   /** `<data dir>/cache/manga`. */
   path: string;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Library updates (Phase 6 Stage 3)
+
+/** An entry a library update check looked at. */
+export interface LibraryCheckEntry {
+  kind: ExtensionKind;
+  id: number;
+  title: string;
+}
+
+/**
+ * The library update check that runs, else the last one (Madoyomi's `LibraryCheckType`): the `libraryCheck` query and
+ * the `libraryUpdates` subscription (the WS "library.updates" event). Times are epoch milliseconds ("0": never).
+ */
+export interface LibraryCheck {
+  running: boolean;
+  trigger: "MANUAL" | "SCHEDULED" | null;
+  startedAt: LongString;
+  finishedAt: LongString;
+  total: number;
+  /** Entries checked, failed ones included. */
+  done: number;
+  /** Entries the settings or their update strategy left out. */
+  skipped: number;
+  checking: LibraryCheckEntry[];
+  failures: { entry: LibraryCheckEntry; error: string }[];
+  /** The entries the check found new items in. */
+  found: { entry: LibraryCheckEntry; newCount: number }[];
+  newEpisodes: number;
+  newChapters: number;
+  cancelled: boolean;
+  /** The next scheduled check, or null while the schedule is off. */
+  nextScheduledAt: LongString | null;
+}
+
+/** Settings → Updates, kept by the backend for both kinds. */
+export interface LibraryUpdateSettings {
+  /** Hours between scheduled checks; 0: off. */
+  intervalHours: 0 | 6 | 12 | 24;
+  skipCompleted: boolean;
+  /** Skip entries with unwatched episodes or unread chapters. */
+  skipUnseen: boolean;
+  /** Skip entries with nothing watched or read yet. */
+  skipNotStarted: boolean;
+  /** A Windows toast when a check finds new items (the app shows it). */
+  notify: boolean;
+}
+
+/** An Updates row: a new episode or chapter of a library entry, with when it was fetched (epoch seconds). */
+export interface UpdatesItem {
+  kind: MediaKind;
+  /** The episode's or chapter's entry (for an anime season, the season). */
+  entry: EntrySummary;
+  item: HistoryTarget;
+  at: number;
+}
+
+export interface UpdatesPage {
+  items: UpdatesItem[];
+  hasMore: boolean;
 }

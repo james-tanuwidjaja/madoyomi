@@ -25,6 +25,12 @@ import {
   useSetReaderSettings,
 } from "../composables/useReaderSettings";
 import { useSources } from "../composables/useSources";
+import {
+  useLibraryCheck,
+  useLibraryUpdateSettings,
+  useSetLibraryUpdateSettings,
+} from "../composables/useLibraryUpdates";
+import { clockTime } from "../utils/updates";
 import { useBackendStore } from "../stores/backend";
 import { useMediaKindStore } from "../stores/mediaKind";
 import { NEXT_EPISODE_COUNTDOWN_SECONDS, usePlayerPrefsStore } from "../stores/playerPrefs";
@@ -47,6 +53,10 @@ import PageLayout from "../components/PageLayout.vue";
  * Reader (Phase 5 Stage 1): the chapter-page cache's cap (the backend's setting; a lower one trims the cache before
  * the backend answers), what the cache holds now, and Clear. Stage 5: the reader's global settings on this device
  * (ReaderPrefsFields, as in the reader's settings sheet), each manga's own mode and direction coming first.
+ *
+ * Updates (Phase 6 Stage 3): the library update check's schedule (off, the user's default, or every 6, 12 or 24 h)
+ * with the next check, which entries it skips (completed, with unwatched/unread items, not started), and the Windows
+ * toast (off by default, the user's decision). The backend keeps them, for both kinds.
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -57,6 +67,20 @@ const playerSettings = usePlayerSettings();
 const languages = usePlayerLanguages();
 const setPlayer = useSetPlayerSettings();
 const player = computed(() => playerSettings.data.value ?? null);
+
+const updateSettings = useLibraryUpdateSettings();
+const setUpdates = useSetLibraryUpdateSettings();
+const libraryCheck = useLibraryCheck();
+const updates = computed(() => updateSettings.data.value ?? null);
+const INTERVALS = [0, 6, 12, 24] as const;
+const nextCheck = computed(() => {
+  const next = libraryCheck.data.value?.nextScheduledAt;
+  return updates.value?.intervalHours && next ? `Next check at ${clockTime(Number(next))}.` : "";
+});
+function saveInterval(e: Event) {
+  const v = Number(selectValue(e)) as (typeof INTERVALS)[number];
+  if (INTERVALS.includes(v)) setUpdates.mutate({ intervalHours: v });
+}
 
 /** 50 % to 95 % in steps of 5 (the backend's range). */
 const THRESHOLDS = Array.from({ length: 10 }, (_, i) => 50 + i * 5);
@@ -245,6 +269,109 @@ const unknown = computed(
           <span class="value" data-testid="language">English</span>
         </div>
       </div>
+    </section>
+
+    <section class="group" aria-labelledby="settings-updates">
+      <h2 id="settings-updates">Updates</h2>
+      <div class="card" data-testid="update-settings">
+        <template v-if="updates">
+          <div class="row">
+            <label class="text" for="settings-interval">
+              <span>Check for new episodes and chapters</span>
+              <span class="summary">
+                Checks the library's sources while the app runs, both anime and manga. Update
+                library in the Library or Updates checks at once. {{ nextCheck }}
+              </span>
+            </label>
+            <select
+              id="settings-interval"
+              class="field"
+              data-testid="interval-select"
+              :value="updates.intervalHours"
+              @change="saveInterval"
+            >
+              <option v-for="h in INTERVALS" :key="h" :value="h">
+                {{ h === 0 ? "Off" : `Every ${h} hours` }}
+              </option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="text">
+              <span id="settings-skip-completed">Skip completed entries</span>
+              <span class="summary">Entries whose source says they are finished.</span>
+            </div>
+            <SwitchRoot
+              :model-value="updates.skipCompleted"
+              class="switch"
+              aria-labelledby="settings-skip-completed"
+              data-testid="skip-completed-switch"
+              @update:model-value="(v: boolean) => setUpdates.mutate({ skipCompleted: v })"
+            >
+              <SwitchThumb class="switch-thumb" />
+            </SwitchRoot>
+          </div>
+          <div class="row">
+            <div class="text">
+              <span id="settings-skip-unseen">Skip entries with unwatched or unread items</span>
+              <span class="summary">Catch up first, then they are checked again.</span>
+            </div>
+            <SwitchRoot
+              :model-value="updates.skipUnseen"
+              class="switch"
+              aria-labelledby="settings-skip-unseen"
+              data-testid="skip-unseen-switch"
+              @update:model-value="(v: boolean) => setUpdates.mutate({ skipUnseen: v })"
+            >
+              <SwitchThumb class="switch-thumb" />
+            </SwitchRoot>
+          </div>
+          <div class="row">
+            <div class="text">
+              <span id="settings-skip-not-started">Skip entries not started</span>
+              <span class="summary">Nothing watched or read in them yet.</span>
+            </div>
+            <SwitchRoot
+              :model-value="updates.skipNotStarted"
+              class="switch"
+              aria-labelledby="settings-skip-not-started"
+              data-testid="skip-not-started-switch"
+              @update:model-value="(v: boolean) => setUpdates.mutate({ skipNotStarted: v })"
+            >
+              <SwitchThumb class="switch-thumb" />
+            </SwitchRoot>
+          </div>
+          <div class="row">
+            <div class="text">
+              <span id="settings-notify">Windows notification</span>
+              <span class="summary">
+                When a check finds new episodes or chapters while the app is in the background.
+              </span>
+            </div>
+            <SwitchRoot
+              :model-value="updates.notify"
+              class="switch"
+              aria-labelledby="settings-notify"
+              data-testid="notify-switch"
+              @update:model-value="(v: boolean) => setUpdates.mutate({ notify: v })"
+            >
+              <SwitchThumb class="switch-thumb" />
+            </SwitchRoot>
+          </div>
+        </template>
+        <ErrorNotice
+          v-else-if="updateSettings.isError.value"
+          class="row"
+          title="Couldn't load the update settings"
+          :error="updateSettings.error.value"
+          @retry="updateSettings.refetch()"
+        />
+        <p v-else class="row muted">Loading…</p>
+      </div>
+      <ErrorNotice
+        v-if="setUpdates.error.value"
+        title="Couldn't save the change"
+        :error="setUpdates.error.value"
+      />
     </section>
 
     <section class="group" aria-labelledby="settings-player">

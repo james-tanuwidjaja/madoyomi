@@ -6,12 +6,12 @@ import { progressText } from "./progress";
  * and where Resume goes.
  */
 
-export interface HistoryDay {
+export interface HistoryDay<T extends { at: number } = HistoryItem> {
   /** The local day, `YYYY-MM-DD` (a stable key). */
   key: string;
   /** "Today", "Yesterday", else the date ("Monday, November 9", with the year when it isn't this one). */
   label: string;
-  items: HistoryItem[];
+  items: T[];
 }
 
 function dayKey(d: Date): string {
@@ -34,9 +34,15 @@ export function dayLabel(d: Date, now: Date): string {
   });
 }
 
-/** `items` (newest first, as the backend gives them) in groups by local day, in the same order. */
-export function groupByDay(items: readonly HistoryItem[], now: Date = new Date()): HistoryDay[] {
-  const days: HistoryDay[] = [];
+/**
+ * `items` (newest first, as the backend gives them) in groups by local day, in the same order. Phase 6 Stage 3: any
+ * item with an `at` in epoch seconds (the Updates rows too).
+ */
+export function groupByDay<T extends { at: number }>(
+  items: readonly T[],
+  now: Date = new Date(),
+): HistoryDay<T>[] {
+  const days: HistoryDay<T>[] = [];
   for (const item of items) {
     const d = new Date(item.at * 1000);
     const key = dayKey(d);
@@ -48,7 +54,7 @@ export function groupByDay(items: readonly HistoryItem[], now: Date = new Date()
 }
 
 /** The time of day an item was played or read ("9:05 PM"). */
-export function historyTime(item: HistoryItem): string {
+export function historyTime(item: { at: number }): string {
   return new Date(item.at * 1000).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",

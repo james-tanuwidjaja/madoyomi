@@ -13,16 +13,22 @@ import {
 import {
   EXTENSION_INSTALL_PROGRESS_SUBSCRIPTION,
   EXTENSION_STORE_REFRESHED_SUBSCRIPTION,
+  LIBRARY_UPDATES_SUBSCRIPTION,
   PLAYBACK_EVENTS_SUBSCRIPTION,
 } from "./operations/subscriptions";
+import { fetchLibraryUpdateSettings } from "./operations/updates";
 import type {
   Episode,
   ExtensionInstallProgress,
   ExtensionStoreRefreshed,
+  LibraryCheck,
+  MediaKind,
   PlaybackEvent,
   PlaybackSession,
 } from "./types";
 import { mediaKindOf } from "./types";
+import { foundSignature, toastText } from "../utils/updates";
+import { showToast, windowFocused } from "../utils/toast";
 
 /**
  * The app's vue-query defaults (Phase 3 §9 "Stage 2"):
@@ -65,7 +71,11 @@ export interface RealtimeOptions {
  *   episodes again, as stored;
  * - after a reconnect (events may have been missed: nothing is replayed) invalidates the extension and repo queries,
  *   and forgets the session it was following (its CLOSED may be lost; a backend restart ends mpv anyway);
- * - when the backend comes back, refetches the queries that failed while it was away.
+ * - when the backend comes back, refetches the queries that failed while it was away;
+ * - subscribes to `libraryUpdates` (Phase 6 Stage 3, the WS "library.updates" event): each status replaces the cached
+ *   `libraryCheck`; when a check finds new items in an entry, that kind's library (its counts), Updates and marks are
+ *   fetched again, and so is the entry's episode or chapter list if it is cached; when a check ends, both kinds' are,
+ *   and if it found something, the toast setting is on and the window isn't focused, a Windows toast says what.
  *
  * Call after Pinia is installed. Returns a function that stops all of it.
  */
@@ -90,6 +100,7 @@ export function startRealtime(options: RealtimeOptions): {
   const invalidateProgress = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.library("anime") });
     void queryClient.invalidateQueries({ queryKey: queryKeys.history("anime") });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.updates("anime") });
   };
 
   const invalidateExtensions = () => {
@@ -107,6 +118,8 @@ export function startRealtime(options: RealtimeOptions): {
       events.connections++;
       if (!first) {
         invalidateExtensions();
+        void queryClient.invalidateQueries({ queryKey: queryKeys.libraryCheck() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.updateMarks() });
         const stale = playback.session;
         if (stale) {
           playback.clear();
@@ -174,6 +187,59 @@ export function startRealtime(options: RealtimeOptions): {
       error: (e) => console.warn("playbackEvents subscription failed:", e.code, e.message),
     },
   );
+
+  // Phase 6 Stage 3: what a library update check changes
+  const invalidateUpdates = (kind: MediaKind) => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.library(kind) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.updates(kind) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.updateMarks(kind) });
+  };
+  let found = "";
+  client.subscribe<{ libraryUpdates: LibraryCheck }>(
+    LIBRARY_UPDATES_SUBSCRIPTION,
+    {},
+    {
+      next: ({ libraryUpdates: check }) => {
+        const previous = queryClient.getQueryData<LibraryCheck>(queryKeys.libraryCheck());
+        queryClient.setQueryData(queryKeys.libraryCheck(), check);
+        const signature = foundSignature(check);
+        if (signature !== found) {
+          found = signature;
+          const kinds = new Set(check.found.map((f) => mediaKindOf(f.entry.kind)));
+          kinds.forEach(invalidateUpdates);
+          for (const f of check.found) {
+            void queryClient.invalidateQueries({
+              queryKey:
+                f.entry.kind === "ANIME"
+                  ? queryKeys.episodes(f.entry.id)
+                  : queryKeys.chapters(f.entry.id),
+            });
+          }
+        }
+        if (previous?.running && !check.running) {
+          invalidateUpdates("anime");
+          invalidateUpdates("manga");
+          void toastAfter(check);
+        }
+      },
+      error: (e) => console.warn("libraryUpdates subscription failed:", e.code, e.message),
+    },
+  );
+
+  async function toastAfter(check: LibraryCheck) {
+    const text = toastText(check);
+    if (!text || check.cancelled || windowFocused()) return;
+    try {
+      const settings = await queryClient.fetchQuery({
+        queryKey: queryKeys.libraryUpdateSettings(),
+        queryFn: () => fetchLibraryUpdateSettings(),
+        staleTime: 60_000,
+      });
+      if (settings.notify) await showToast(text);
+    } catch {
+      // no settings, no toast
+    }
+  }
 
   const scope = effectScope(true);
   scope.run(() => {

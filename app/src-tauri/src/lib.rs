@@ -6,6 +6,7 @@ use tauri::{Manager, RunEvent};
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Start the JVM backend right away. The UI follows it through the `backend-status` event and
             // `get_backend_status`, and gets `{ baseUrl, token }` from `get_backend_info` once it is healthy.

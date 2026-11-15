@@ -17,6 +17,7 @@ const ops = vi.hoisted(() => ({
   fetchChapters: vi.fn(),
   refreshManga: vi.fn(),
   setInLibrary: vi.fn(),
+  clearUpdateMarks: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -74,6 +75,20 @@ afterEach(() => {
 });
 
 describe("MangaDetailsView", () => {
+  it("clears the manga's New mark from a library update when it is opened (Phase 6 Stage 3)", async () => {
+    ops.clearUpdateMarks.mockResolvedValue(1);
+    queryClient.setQueryData(queryKeys.updateMarks("manga"), { 34: 2, 5: 1 });
+    await mountDetails();
+    expect(ops.clearUpdateMarks).toHaveBeenCalledWith("manga", [34]);
+    expect(queryClient.getQueryData(queryKeys.updateMarks("manga"))).toEqual({ 5: 1 });
+
+    // an entry without a mark costs no request
+    wrapper.unmount();
+    ops.clearUpdateMarks.mockClear();
+    await mountDetails(5 + 1);
+    expect(ops.clearUpdateMarks).not.toHaveBeenCalled();
+  });
+
   it("shows the stored details and chapters", async () => {
     await mountDetails();
 

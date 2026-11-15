@@ -8,3 +8,4 @@ export * from "./player";
 export * from "./reader";
 export * from "./categories";
 export * from "./history";
+export * from "./updates";

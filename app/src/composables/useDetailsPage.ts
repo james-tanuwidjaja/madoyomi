@@ -3,6 +3,7 @@ import type { ApiError } from "../api/client";
 import type { MediaKind } from "../api/types";
 import { canBrowse, sourceAccess } from "../utils/sources";
 import { claimAutoRefresh, useSetInLibrary } from "./useEntries";
+import { useClearMarkOnOpen } from "./useLibraryUpdates";
 import { useOpenInExtensions } from "./useOpenInExtensions";
 import { useSources } from "./useSources";
 
@@ -29,7 +30,8 @@ interface EntryState {
  *   anything: the page says why and points to Extensions, and shows what is stored;
  * - the refresh from the source: by the button, and by itself the first time an entry that was never fetched
  *   (`initialized` false) is opened in the session (`claimAutoRefresh`). The source's error is kept with the data;
- * - adding to and removing from the library.
+ * - adding to and removing from the library;
+ * - (Phase 6 Stage 3) opening the entry clears its "new" mark from a library update check.
  */
 export function useDetailsPage(opts: {
   kind: MediaKind;
@@ -56,6 +58,9 @@ export function useDetailsPage(opts: {
 
   // A new entry in the same view (a season, the parent) starts with no refresh state.
   watch(id, () => refresh.reset());
+
+  const clearMark = useClearMarkOnOpen();
+  watch(id, (v) => clearMark(kind, v), { immediate: true });
 
   const forThisEntry = computed(() => refresh.variables.value === id());
   const refreshing = computed(() => refresh.isPending.value && forThisEntry.value);
