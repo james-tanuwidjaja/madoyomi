@@ -23,6 +23,10 @@ defineProps<{ name: NavItem }>();
       <rect x="8.25" y="3" width="3.5" height="14" rx="1" />
       <path d="M13.6 4.2l3.2-0.9 2 13.3-3.3 0.9z" />
     </template>
+    <template v-else-if="name === 'updates'">
+      <path d="M10 3a5 5 0 0 0-5 5v3.2L3.6 14h12.8L15 11.2V8a5 5 0 0 0-5-5z" />
+      <path d="M8.2 16.5a2 2 0 0 0 3.6 0" />
+    </template>
     <template v-else-if="name === 'history'">
       <circle cx="10" cy="10" r="7" />
       <path d="M10 6v4l2.8 1.8" />

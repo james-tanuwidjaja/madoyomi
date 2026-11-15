@@ -1,4 +1,5 @@
 import { PLAYBACK_SESSION_FIELDS } from "./playback";
+import { LIBRARY_CHECK_FIELDS } from "./updates";
 
 /** Every install and update step, of every extension (no `pkgName` filter: the app follows all of them). */
 export const EXTENSION_INSTALL_PROGRESS_SUBSCRIPTION = /* GraphQL */ `
@@ -55,4 +56,17 @@ export const PLAYBACK_EVENTS_SUBSCRIPTION = /* GraphQL */ `
     }
   }
   ${PLAYBACK_SESSION_FIELDS}
+`;
+
+/**
+ * The library update check's status (Phase 6 Stage 3, the WS "library.updates" event): at once on subscribing, then on
+ * every change (an entry started or done, the end). The latest one wins when they come faster than they are read.
+ */
+export const LIBRARY_UPDATES_SUBSCRIPTION = /* GraphQL */ `
+  subscription LibraryUpdates {
+    libraryUpdates {
+      ...LibraryCheckFields
+    }
+  }
+  ${LIBRARY_CHECK_FIELDS}
 `;

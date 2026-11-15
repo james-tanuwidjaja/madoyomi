@@ -189,6 +189,7 @@ describe("HistoryView", () => {
     expect(invalidate.mock.calls.map((c) => (c[0] as { queryKey: unknown }).queryKey)).toEqual([
       queryKeys.library("anime"),
       queryKeys.history("anime"),
+      queryKeys.updates("anime"),
     ]);
 
     const clear = wrapper.find('[data-action="clear-history"]');

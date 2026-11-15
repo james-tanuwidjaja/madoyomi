@@ -23,6 +23,12 @@ object MadoyomiFeatures {
     /** Server self-update check against Suwayomi's GitHub releases. */
     val appUpdateCheckEnabled = false
 
+    /**
+     * Upstream's scheduled manga library update (`Updater.scheduleUpdateTask`, every `globalUpdateInterval` hours).
+     * Madoyomi schedules its own for both kinds (`madoyomi.core.library.LibraryUpdateScheduler`, Phase 6 Stage 3).
+     */
+    val upstreamLibraryUpdateScheduleEnabled = false
+
     /** Upstream's single-instance check, which probes the configured port. Tauri owns the lifecycle instead. */
     val appMutexEnabled = false
 

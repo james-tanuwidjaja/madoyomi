@@ -5,6 +5,7 @@ import type {
   Extension,
   ExtensionStore,
   LibraryCategory,
+  LibraryCheck,
   LibraryEntry,
   Manga,
   MediaKind,
@@ -281,6 +282,27 @@ export function makeLibraryEntry(overrides: Partial<LibraryEntry> = {}): Library
     categoryIds: [],
     unreadCount: 0,
     lastReadAt: 0,
+    ...overrides,
+  };
+}
+
+/** A library update check as `libraryCheck` returns it: by default none has run yet (Phase 6 Stage 3). */
+export function makeLibraryCheck(overrides: Partial<LibraryCheck> = {}): LibraryCheck {
+  return {
+    running: false,
+    trigger: null,
+    startedAt: "0",
+    finishedAt: "0",
+    total: 0,
+    done: 0,
+    skipped: 0,
+    checking: [],
+    failures: [],
+    found: [],
+    newEpisodes: 0,
+    newChapters: 0,
+    cancelled: false,
+    nextScheduledAt: null,
     ...overrides,
   };
 }

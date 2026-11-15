@@ -961,6 +961,158 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.info(report.join("\n"));
   }, 60_000);
 
+  it("checks one category of each kind for new items, follows it over the WebSocket, and reads the Updates and the marks", async (ctx) => {
+    const report: string[] = [];
+    type Check = {
+      running: boolean;
+      startedAt: string;
+      total: number;
+      done: number;
+      found: { entry: { id: number }; newCount: number }[];
+      failures: { entry: { id: number }; error: string }[];
+    };
+    // the settings round-trip unchanged (the schedule isn't touched here)
+    const settings = (
+      await client.gql<{ libraryUpdateSettings: Record<string, unknown> }>(
+        operations.LIBRARY_UPDATE_SETTINGS_QUERY,
+      )
+    ).libraryUpdateSettings;
+    const same = await client.gql<{
+      setLibraryUpdateSettings: { settings: Record<string, unknown> };
+    }>(operations.SET_LIBRARY_UPDATE_SETTINGS_MUTATION, { notify: settings.notify });
+    expect(same.setLibraryUpdateSettings.settings).toEqual(settings);
+
+    const episode = (
+      await client.gql<{ episodes: { nodes: { animeId: number }[] } }>(
+        "{ episodes(first: 1) { nodes { animeId } } }",
+      )
+    ).episodes.nodes[0];
+    const chapter = (
+      await client.gql<{ chapters: { nodes: { mangaId: number }[] } }>(
+        "{ chapters(first: 1) { nodes { mangaId } } }",
+      )
+    ).chapters.nodes[0];
+    if (!episode && !chapter) return ctx.skip();
+
+    const events: Check[] = [];
+    let onConnected!: () => void;
+    const connected = new Promise<void>((resolve) => (onConnected = resolve));
+    const ws = createSubscriptionClient({ onConnected: () => onConnected() });
+    try {
+      ws.subscribe<{ libraryUpdates: Check }>(
+        operations.LIBRARY_UPDATES_SUBSCRIPTION,
+        {},
+        { next: (d) => events.push(d.libraryUpdates) },
+      );
+      ws.setEndpoint(client.subscriptionUrl());
+      await connected;
+      await expect.poll(() => events.length, { timeout: 10_000 }).toBeGreaterThan(0);
+      const idle = (await client.gql<{ libraryCheck: Check }>(operations.LIBRARY_CHECK_QUERY))
+        .libraryCheck;
+      if (idle.running) {
+        await client.gql(operations.STOP_LIBRARY_UPDATE_MUTATION);
+      }
+
+      for (const kind of ["anime", "manga"] as const) {
+        const entryId = kind === "anime" ? episode?.animeId : chapter?.mangaId;
+        if (entryId === undefined) {
+          report.push(`${kind}: nothing stored, skipped`);
+          continue;
+        }
+        const anime = kind === "anime";
+        const wasInLibrary = (
+          await client.gql<Record<string, { inLibrary: boolean }>>(
+            `{ ${kind}(id: ${entryId}) { inLibrary } }`,
+          )
+        )[kind]!.inLibrary;
+        if (!wasInLibrary) {
+          await client.gql(
+            anime ? operations.UPDATE_ANIME_MUTATION : operations.UPDATE_MANGA_MUTATION,
+            {
+              id: entryId,
+              inLibrary: true,
+            },
+          );
+        }
+        const category = (
+          await client.gql<Record<string, { category: { id: number } }>>(
+            anime
+              ? operations.CREATE_ANIME_CATEGORY_MUTATION
+              : operations.CREATE_MANGA_CATEGORY_MUTATION,
+            { name: `Live check ${Date.now()}` },
+          )
+        )[anime ? "createAnimeCategory" : "createCategory"]!.category.id;
+        try {
+          await client.gql(
+            anime
+              ? operations.UPDATE_ANIMES_CATEGORIES_MUTATION
+              : operations.UPDATE_MANGAS_CATEGORIES_MUTATION,
+            { ids: [entryId], patch: { addToCategories: [category] } },
+          );
+          const from = events.length;
+          const started = (
+            await client.gql<{ startLibraryUpdate: { libraryCheck: Check } }>(
+              operations.START_LIBRARY_UPDATE_MUTATION,
+              { kind: anime ? "ANIME" : "MANGA", categoryId: category },
+            )
+          ).startLibraryUpdate.libraryCheck;
+          expect(started.total).toBe(1);
+          await expect
+            .poll(() => events.slice(from).some((e) => !e.running && e.done === 1), {
+              timeout: 90_000,
+            })
+            .toBe(true);
+          const end = events.slice(from).find((e) => !e.running && e.done === 1)!;
+          expect(events.slice(from).some((e) => e.running)).toBe(true);
+
+          const feed = await client.gql<Record<string, { items: unknown[] }>>(
+            anime ? operations.ANIME_UPDATES_QUERY : operations.MANGA_UPDATES_QUERY,
+            { limit: 5, offset: 0 },
+          );
+          const marks = (
+            await client.gql<{ updateMarks: { entryId: number; newCount: number }[] }>(
+              operations.UPDATE_MARKS_QUERY,
+              { kind: anime ? "ANIME" : "MANGA" },
+            )
+          ).updateMarks;
+          const found = end.found.find((f) => f.entry.id === entryId)?.newCount ?? 0;
+          if (found > 0)
+            expect(marks.find((m) => m.entryId === entryId)?.newCount).toBeGreaterThanOrEqual(
+              found,
+            );
+          await client.gql(operations.CLEAR_UPDATE_MARKS_MUTATION, {
+            kind: anime ? "ANIME" : "MANGA",
+            entryIds: [entryId],
+          });
+          const failure = end.failures.find((f) => f.entry.id === entryId)?.error;
+          report.push(
+            `${kind}: entry ${entryId} checked, ${found} new, ${feed[anime ? "animeUpdates" : "mangaUpdates"]!.items.length} in the feed` +
+              (failure ? `, the source failed: ${failure}` : ""),
+          );
+        } finally {
+          await client.gql(
+            anime
+              ? operations.DELETE_ANIME_CATEGORY_MUTATION
+              : operations.DELETE_MANGA_CATEGORY_MUTATION,
+            { id: category },
+          );
+          if (!wasInLibrary) {
+            await client.gql(
+              anime ? operations.UPDATE_ANIME_MUTATION : operations.UPDATE_MANGA_MUTATION,
+              {
+                id: entryId,
+                inLibrary: false,
+              },
+            );
+          }
+        }
+      }
+    } finally {
+      ws.dispose();
+    }
+    console.log(report.join("\n"));
+  }, 240_000);
+
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];
     let onConnected!: () => void;

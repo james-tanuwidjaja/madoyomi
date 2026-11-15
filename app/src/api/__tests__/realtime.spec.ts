@@ -13,6 +13,16 @@ import type { Episode, PlaybackSession } from "../types";
 import { queryKeys } from "../../composables/queryKeys";
 import { backendStatus, healthyStatus } from "../../test/backendStatus";
 import { fakeSocketFactory } from "../../test/fakeSocket";
+import { makeLibraryCheck } from "../../test/fixtures";
+import type { LibraryCheck } from "../types";
+
+const toast = vi.hoisted(() => ({ showToast: vi.fn(), windowFocused: vi.fn() }));
+vi.mock("../../utils/toast", () => toast);
+const updatesOps = vi.hoisted(() => ({ fetchLibraryUpdateSettings: vi.fn() }));
+vi.mock("../operations/updates", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  ...updatesOps,
+}));
 
 const TOKEN = "test-token-0123";
 
@@ -57,7 +67,7 @@ afterEach(() => {
 });
 
 describe("realtime", () => {
-  it("connects to the backend's WebSocket with the token, and subscribes to the three event streams", () => {
+  it("connects to the backend's WebSocket with the token, and subscribes to the four event streams", () => {
     expect(sockets.last.url).toBe(`ws://127.0.0.1:50266/api/graphql?token=${TOKEN}`);
     sockets.last.open();
     sockets.last.ack();
@@ -65,7 +75,8 @@ describe("realtime", () => {
     const queries = sockets.last
       .sentOfType("subscribe")
       .map((m) => (m.payload as { query: string }).query);
-    expect(queries).toHaveLength(3);
+    expect(queries).toHaveLength(4);
+    expect(queries.some((q) => q.includes("libraryUpdates"))).toBe(true);
     expect(queries.some((q) => q.includes("extensionInstallProgress"))).toBe(true);
     expect(queries.some((q) => q.includes("extensionStoreRefreshed"))).toBe(true);
     expect(queries.some((q) => q.includes("playbackEvents"))).toBe(true);
@@ -104,6 +115,119 @@ describe("realtime", () => {
       queryKeys.extensionStores(),
       queryKeys.extensions("anime"),
     ]);
+  });
+
+  describe("library update events (Phase 6 Stage 3)", () => {
+    const send = (check: LibraryCheck) =>
+      sockets.last.receive({
+        id: opId("libraryUpdates"),
+        type: "next",
+        payload: { data: { libraryUpdates: check } },
+      });
+    const found = (kind: "ANIME" | "MANGA", id: number, newCount: number) => ({
+      entry: { kind, id, title: `${kind} ${id}` },
+      newCount,
+    });
+
+    beforeEach(() => {
+      sockets.last.open();
+      sockets.last.ack();
+      toast.windowFocused.mockReturnValue(false);
+      toast.showToast.mockResolvedValue(true);
+      updatesOps.fetchLibraryUpdateSettings.mockResolvedValue({ notify: true });
+    });
+
+    it("keeps the cached check current, and refetches a kind's lists when its entries get new items", () => {
+      const spy = vi.spyOn(queryClient, "invalidateQueries");
+      send(makeLibraryCheck({ running: true, startedAt: "1", total: 3 }));
+      expect(queryClient.getQueryData<LibraryCheck>(queryKeys.libraryCheck())?.total).toBe(3);
+      expect(spy).not.toHaveBeenCalled();
+
+      send(
+        makeLibraryCheck({
+          running: true,
+          startedAt: "1",
+          total: 3,
+          done: 1,
+          found: [found("ANIME", 4, 2)],
+          newEpisodes: 2,
+        }),
+      );
+      expect(invalidatedKeys(spy)).toEqual([
+        queryKeys.library("anime"),
+        queryKeys.updates("anime"),
+        queryKeys.updateMarks("anime"),
+        queryKeys.episodes(4),
+      ]);
+
+      // the same finds again: nothing more
+      spy.mockClear();
+      send(
+        makeLibraryCheck({
+          running: true,
+          startedAt: "1",
+          total: 3,
+          done: 2,
+          found: [found("ANIME", 4, 2)],
+          newEpisodes: 2,
+        }),
+      );
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("after a check that found something, refetches both kinds and shows the toast when it is on and the window isn't focused", async () => {
+      queryClient.setQueryData(
+        queryKeys.libraryCheck(),
+        makeLibraryCheck({ running: true, startedAt: "1", total: 2 }),
+      );
+      const spy = vi.spyOn(queryClient, "invalidateQueries");
+      const done = makeLibraryCheck({
+        startedAt: "1",
+        finishedAt: "2",
+        total: 2,
+        done: 2,
+        found: [found("MANGA", 7, 3)],
+        newChapters: 3,
+      });
+      send(done);
+      await vi.waitFor(() => expect(toast.showToast).toHaveBeenCalledOnce());
+      expect(toast.showToast).toHaveBeenCalledWith({ title: "3 new chapters", body: "MANGA 7" });
+      expect(invalidatedKeys(spy)).toEqual(
+        expect.arrayContaining([
+          queryKeys.library("anime"),
+          queryKeys.updates("manga"),
+          queryKeys.chapters(7),
+        ]),
+      );
+    });
+
+    it("shows no toast when it is off, the window is focused, the check found nothing or was stopped", async () => {
+      const run = async (check: LibraryCheck) => {
+        queryClient.setQueryData(
+          queryKeys.libraryCheck(),
+          makeLibraryCheck({ running: true, startedAt: "1" }),
+        );
+        send(check);
+        await flushMicrotasks();
+      };
+      const finds = {
+        startedAt: "1",
+        finishedAt: "2",
+        found: [found("ANIME", 1, 1)],
+        newEpisodes: 1,
+      };
+
+      updatesOps.fetchLibraryUpdateSettings.mockResolvedValue({ notify: false });
+      await run(makeLibraryCheck(finds));
+      updatesOps.fetchLibraryUpdateSettings.mockResolvedValue({ notify: true });
+      queryClient.removeQueries({ queryKey: queryKeys.libraryUpdateSettings() });
+      toast.windowFocused.mockReturnValue(true);
+      await run(makeLibraryCheck(finds));
+      toast.windowFocused.mockReturnValue(false);
+      await run(makeLibraryCheck({ startedAt: "1", finishedAt: "2" }));
+      await run(makeLibraryCheck({ ...finds, cancelled: true }));
+      expect(toast.showToast).not.toHaveBeenCalled();
+    });
   });
 
   describe("playback events", () => {
@@ -149,7 +273,11 @@ describe("realtime", () => {
       queryClient.setQueryData(queryKeys.episodes(12), makeEpisodes(2));
     });
 
-    const progressKeys = [queryKeys.library("anime"), queryKeys.history("anime")];
+    const progressKeys = [
+      queryKeys.library("anime"),
+      queryKeys.history("anime"),
+      queryKeys.updates("anime"),
+    ];
 
     it("keeps the live session in the playback store, without refetching on PROGRESS", () => {
       const spy = vi.spyOn(queryClient, "invalidateQueries");
@@ -262,12 +390,14 @@ describe("realtime", () => {
 
     sockets.last.open();
     sockets.last.ack();
-    expect(sockets.last.sentOfType("subscribe")).toHaveLength(3);
+    expect(sockets.last.sentOfType("subscribe")).toHaveLength(4);
     // a reconnect may have missed events: the lists are fetched again
     expect(invalidatedKeys(invalidate)).toEqual([
       queryKeys.extensionStores(),
       queryKeys.extensions(),
       queryKeys.sources(),
+      queryKeys.libraryCheck(),
+      queryKeys.updateMarks(),
     ]);
   });
 
@@ -304,3 +434,8 @@ describe("query defaults", () => {
     expect(retry(0, new Error("bug"))).toBe(false);
   });
 });
+
+async function flushMicrotasks() {
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+}

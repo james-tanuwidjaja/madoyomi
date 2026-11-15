@@ -6,6 +6,7 @@ import type { AcceptableValue } from "reka-ui";
 import type { MediaKind } from "../api/types";
 import type { NavItem } from "../router";
 import { useMediaKindStore } from "../stores/mediaKind";
+import { useUpdateMarks } from "../composables/useLibraryUpdates";
 import NavIcon from "./NavIcon.vue";
 import ShellFooter from "./ShellFooter.vue";
 
@@ -19,12 +20,20 @@ const mediaKind = useMediaKindStore();
 
 const items: { id: NavItem; label: string; to: string }[] = [
   { id: "library", label: "Library", to: "/library" },
+  { id: "updates", label: "Updates", to: "/updates" },
   { id: "history", label: "History", to: "/history" },
   { id: "browse", label: "Browse", to: "/browse" },
   { id: "extensions", label: "Extensions", to: "/extensions" },
   { id: "downloads", label: "Downloads", to: "/downloads" },
 ];
 const settings = { id: "settings" as const, label: "Settings", to: "/settings" };
+
+// Phase 6 Stage 3: Updates shows how many new episodes or chapters the kind's entries got since they were opened
+const marks = useUpdateMarks(() => mediaKind.kind);
+const badges = computed<Partial<Record<NavItem, string>>>(() => {
+  const n = marks.total.value;
+  return n > 0 ? { updates: n > 99 ? "99+" : String(n) } : {};
+});
 
 // The section of the last page that has one of its own. A details page opened from Browse keeps Browse marked rather
 // than jumping to Library (found in the exit run, §10); opened directly, it marks its default.
@@ -88,6 +97,13 @@ watch(
           >
             <NavIcon :name="item.id" />
             <span>{{ item.label }}</span>
+            <span
+              v-if="badges[item.id]"
+              class="nav-badge"
+              :data-testid="`nav-badge-${item.id}`"
+              :aria-label="`${badges[item.id]} new`"
+              >{{ badges[item.id] }}</span
+            >
           </RouterLink>
         </li>
       </ul>
@@ -212,6 +228,19 @@ watch(
   border-radius: 2px;
   background: var(--color-accent);
   transform: translateY(-50%);
+}
+
+.nav-badge {
+  min-width: 1.25rem;
+  margin-left: auto;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25rem;
+  text-align: center;
 }
 
 .pane-bottom {

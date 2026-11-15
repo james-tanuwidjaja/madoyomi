@@ -8,7 +8,8 @@ import type { MediaKind } from "../api/types";
 import { useMediaKindStore } from "../stores/mediaKind";
 
 /** The sidebar items (src/components/AppShell.vue). */
-export type NavItem = "library" | "history" | "browse" | "extensions" | "downloads" | "settings";
+export type NavItem =
+  "library" | "updates" | "history" | "browse" | "extensions" | "downloads" | "settings";
 
 declare module "vue-router" {
   interface RouteMeta {
@@ -33,7 +34,8 @@ declare module "vue-router" {
 /**
  * Phase 3 step 10's routes, plus `/downloads` (the sidebar's placeholder), a not-found page, since Phase 5 the
  * reader (`/manga/:id/read/:chapterId?page=N`, without the shell), and since Phase 6 Stage 2 `/history` (the kind's
- * history; `/anime/:id?play=<episodeId>` opens an episode's picker, History's resume).
+ * history; `/anime/:id?play=<episodeId>` opens an episode's picker, History's resume), and since Stage 3 `/updates`
+ * (the kind's new episodes or chapters, the library update check).
  */
 export const routes: RouteRecordRaw[] = [
   { path: "/", redirect: "/library" },
@@ -42,6 +44,12 @@ export const routes: RouteRecordRaw[] = [
     name: "library",
     component: () => import("../views/LibraryView.vue"),
     meta: { title: "Library", nav: "library" },
+  },
+  {
+    path: "/updates",
+    name: "updates",
+    component: () => import("../views/UpdatesView.vue"),
+    meta: { title: "Updates", nav: "updates" },
   },
   {
     path: "/history",

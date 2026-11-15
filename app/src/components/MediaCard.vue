@@ -13,7 +13,8 @@ import type { EntrySummary } from "../api/types";
 /**
  * `hideLibraryBadge`: for the Library itself, where every card is in it. `selectable` (the Library's selection, Phase 6):
  * the card is a toggle button instead of a link, `selected` marks it, and a click emits `select` with the event (for
- * Shift+click ranges). `count` (Phase 6 Stage 2): the unwatched/unread badge, shown above 0.
+ * Shift+click ranges). `count` (Phase 6 Stage 2): the unwatched/unread badge, shown above 0. `newCount` (Stage 3):
+ * the "N new" mark of an entry a library update check found new items in, until it is opened.
  */
 const props = defineProps<{
   entry: EntrySummary;
@@ -21,6 +22,7 @@ const props = defineProps<{
   selectable?: boolean;
   selected?: boolean;
   count?: number;
+  newCount?: number;
 }>();
 const emit = defineEmits<{ select: [event: MouseEvent] }>();
 
@@ -76,6 +78,13 @@ const countLabel = computed(() => {
         :title="countLabel"
         :aria-label="countLabel"
         >{{ count!.toLocaleString("en-US") }}</span
+      >
+      <span
+        v-if="(newCount ?? 0) > 0"
+        class="new"
+        data-testid="new-count"
+        :title="`${newCount!.toLocaleString('en-US')} new since you last opened it`"
+        >{{ newCount!.toLocaleString("en-US") }} new</span
       >
       <span v-if="selectable" class="check" :class="{ on: selected }" aria-hidden="true">{{
         selected ? "✓" : ""
@@ -175,6 +184,20 @@ button.card:hover {
   font-weight: var(--font-weight-semibold);
   line-height: 1.5rem;
   text-align: center;
+}
+
+.new {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  box-shadow: 0 0 0 1px var(--color-accent);
+  color: var(--color-text);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5rem;
 }
 
 .in-library {

@@ -186,4 +186,32 @@ describe("CategoriesDialog", () => {
     expect(ops.deleteCategory).toHaveBeenCalledWith("anime", 2);
     expect(names()).toEqual(["Watching"]);
   });
+
+  it("has the Updates and Downloads flags, Default's too, off as EXCLUDE and on as UNSET (Phase 6 Stage 3)", async () => {
+    list[2] = { ...list[2]!, includeInUpdate: "EXCLUDE", includeInDownload: "INCLUDE" };
+    await open();
+
+    const checked = (id: string) =>
+      qa<HTMLInputElement>(`[data-testid="${id}"]`).map((c) => c.checked);
+    expect(checked("category-updates")).toEqual([true, false]);
+    expect(checked("category-downloads")).toEqual([true, true]);
+    expect(q('[data-testid="default-category-row"]')!.textContent).toContain(
+      "entries in no category",
+    );
+    expect(checked("default-updates")).toEqual([true]);
+
+    qa<HTMLInputElement>('[data-testid="category-updates"]')[0]!.click();
+    await flushPromises();
+    expect(ops.updateCategory).toHaveBeenLastCalledWith("anime", 1, { includeInUpdate: "EXCLUDE" });
+    qa<HTMLInputElement>('[data-testid="category-updates"]')[1]!.click();
+    await flushPromises();
+    expect(ops.updateCategory).toHaveBeenLastCalledWith("anime", 2, { includeInUpdate: "UNSET" });
+    q<HTMLInputElement>('[data-testid="default-downloads"]')!.click();
+    await flushPromises();
+    expect(ops.updateCategory).toHaveBeenLastCalledWith("anime", 0, {
+      includeInDownload: "EXCLUDE",
+    });
+    expect(checked("category-updates")).toEqual([false, true]);
+    expect(checked("default-downloads")).toEqual([false]);
+  });
 });

@@ -5,12 +5,20 @@ import type { QueryClient } from "@tanstack/vue-query";
 
 import { createQueryClient } from "../../api/realtime";
 import { ApiError } from "../../api/client";
-import type { MpvCheck, PageCache, PlayerSettings, ReaderSettings, Source } from "../../api/types";
+import type {
+  LibraryUpdateSettings,
+  MpvCheck,
+  PageCache,
+  PlayerSettings,
+  ReaderSettings,
+  Source,
+} from "../../api/types";
+import { DEFAULT_LIBRARY_UPDATE_SETTINGS } from "../../composables/useLibraryUpdates";
 import { DEFAULT_PLAYER_SETTINGS } from "../../composables/usePlayerSettings";
 import { useBackendStore } from "../../stores/backend";
 import { AUTO_PLAY_NEXT_KEY } from "../../stores/playerPrefs";
 import { THEME_KEY } from "../../stores/theme";
-import { makeSource } from "../../test/fixtures";
+import { makeLibraryCheck, makeSource } from "../../test/fixtures";
 import { mountView, setBackendReady } from "../../test/mountView";
 
 const shell = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -26,6 +34,9 @@ const ops = vi.hoisted(() => ({
   setReaderSettings: vi.fn(),
   fetchPageCache: vi.fn(),
   clearPageCache: vi.fn(),
+  fetchLibraryUpdateSettings: vi.fn(),
+  setLibraryUpdateSettings: vi.fn(),
+  fetchLibraryCheck: vi.fn(),
 }));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -50,6 +61,7 @@ let sources: Source[];
 let player: PlayerSettings;
 let reader: ReaderSettings;
 let cache: PageCache;
+let updateSettings: LibraryUpdateSettings;
 
 function mpvFound(path: string | null): MpvCheck {
   return {
@@ -109,6 +121,13 @@ beforeEach(() => {
     cache = { ...cache, bytes: "0", files: 0 };
     return cache;
   });
+  updateSettings = { ...DEFAULT_LIBRARY_UPDATE_SETTINGS };
+  ops.fetchLibraryUpdateSettings.mockImplementation(async () => updateSettings);
+  ops.setLibraryUpdateSettings.mockImplementation(
+    async (patch: Partial<LibraryUpdateSettings>) =>
+      (updateSettings = { ...updateSettings, ...patch }),
+  );
+  ops.fetchLibraryCheck.mockResolvedValue(makeLibraryCheck());
   setBackendReady();
   useBackendStore().mode = "tauri";
 });
@@ -410,5 +429,48 @@ describe("SettingsView: Reader settings on this device (Phase 5 Stage 5)", () =>
     expect(prefs.find('[data-pref="stripWidth"] option:checked').text()).toBe("Window width");
     // the backend's cache settings are still beside them
     expect(wrapper.find('[data-testid="cache-limit-select"]').exists()).toBe(true);
+  });
+});
+
+describe("SettingsView: Updates (Phase 6 Stage 3)", () => {
+  const el = <T extends HTMLElement>(id: string) =>
+    wrapper.find(`[data-testid="${id}"]`).element as T;
+  async function choose(id: string, value: string) {
+    await wrapper.find(`[data-testid="${id}"]`).setValue(value);
+    await flushPromises();
+  }
+
+  it("shows the update settings, off and on by the defaults, and saves each change (Phase 6 Stage 3)", async () => {
+    await mountSettings();
+    const section = wrapper.find('[data-testid="update-settings"]');
+    expect(el<HTMLSelectElement>("interval-select").value).toBe("0");
+    expect(section.findAll('[data-testid="interval-select"] option').map((o) => o.text())).toEqual([
+      "Off",
+      "Every 6 hours",
+      "Every 12 hours",
+      "Every 24 hours",
+    ]);
+    const state = (id: string) => wrapper.find(`[data-testid="${id}"]`).attributes("data-state");
+    expect(state("skip-completed-switch")).toBe("checked");
+    expect(state("skip-unseen-switch")).toBe("unchecked");
+    expect(state("skip-not-started-switch")).toBe("unchecked");
+    expect(state("notify-switch")).toBe("unchecked");
+
+    ops.fetchLibraryCheck.mockResolvedValue(
+      makeLibraryCheck({ nextScheduledAt: String(new Date().setHours(18, 0, 0, 0)) }),
+    );
+    await choose("interval-select", "12");
+    expect(ops.setLibraryUpdateSettings).toHaveBeenLastCalledWith({ intervalHours: 12 });
+    await flushPromises();
+    expect(section.text()).toContain("Next check at 6:00 PM.");
+
+    await wrapper.find('[data-testid="notify-switch"]').trigger("click");
+    await flushPromises();
+    expect(ops.setLibraryUpdateSettings).toHaveBeenLastCalledWith({ notify: true });
+    await wrapper.find('[data-testid="skip-completed-switch"]').trigger("click");
+    await flushPromises();
+    expect(ops.setLibraryUpdateSettings).toHaveBeenLastCalledWith({ skipCompleted: false });
+    expect(updateSettings).toMatchObject({ intervalHours: 12, notify: true, skipCompleted: false });
+    expect(state("notify-switch")).toBe("checked");
   });
 });

@@ -41,4 +41,10 @@ export const queryKeys = {
     kind ? (["api", "library", kind] as const) : (["api", "library"] as const),
   history: (kind?: MediaKind) =>
     kind ? (["api", "history", kind] as const) : (["api", "history"] as const),
+  libraryCheck: () => ["api", "libraryCheck"] as const,
+  libraryUpdateSettings: () => ["api", "libraryUpdateSettings"] as const,
+  updates: (kind?: MediaKind) =>
+    kind ? (["api", "updates", kind] as const) : (["api", "updates"] as const),
+  updateMarks: (kind?: MediaKind) =>
+    kind ? (["api", "updateMarks", kind] as const) : (["api", "updateMarks"] as const),
 };
