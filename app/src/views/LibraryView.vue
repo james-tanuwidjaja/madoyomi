@@ -10,7 +10,12 @@ import {
 import { useLibrary } from "../composables/useEntries";
 import { useBackendStore } from "../stores/backend";
 import { useLibraryCategoryStore } from "../stores/libraryCategory";
-import { sortLibrary, useLibrarySortStore, type LibrarySortKey } from "../stores/librarySort";
+import {
+  naturalDesc,
+  sortLibrary,
+  useLibrarySortStore,
+  type LibrarySortKey,
+} from "../stores/librarySort";
 import { useMediaKindStore } from "../stores/mediaKind";
 import { categorySort, entriesIn, libraryTabs, pickTab } from "../utils/categories";
 import { formatCount } from "../utils/format";
@@ -32,6 +37,9 @@ import VirtualGrid from "../components/VirtualGrid.vue";
  *   category without one uses the kind's last chosen sort (on this device), which is all there is without tabs;
  * - "Categories" opens the management dialog; "Select" picks entries (a click, Shift+click for a range, Select all)
  *   for "Set categories" and "Remove from library"; Esc or Done ends it.
+ *
+ * Phase 6 Stage 2: each card shows its unwatched/unread count (from the library query, fetched again when progress
+ * changes), and the sort has "Unwatched/Unread" and "Last watched/read".
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -76,8 +84,8 @@ function setSort(by: LibrarySortKey, desc: boolean) {
 }
 const sortBy = computed({
   get: () => sort.value.by,
-  // a new key starts in its natural direction: titles A to Z, additions newest first
-  set: (by: LibrarySortKey) => setSort(by, by === "added"),
+  // a new key starts in its natural direction: titles A to Z, the others the most or the newest first
+  set: (by: LibrarySortKey) => setSort(by, naturalDesc(by)),
 });
 function toggleDirection() {
   setSort(sort.value.by, !sort.value.desc);
@@ -95,14 +103,16 @@ const subtitle = computed(() =>
 const resetKey = computed(() =>
   JSON.stringify([kind.value, current.value?.category.id ?? null, sort.value]),
 );
-const directionLabel = computed(() =>
-  sort.value.by === "title"
-    ? sort.value.desc
-      ? "Z to A"
-      : "A to Z"
-    : sort.value.desc
-      ? "Newest first"
-      : "Oldest first",
+const directionLabel = computed(() => {
+  const desc = sort.value.desc;
+  if (sort.value.by === "title") return desc ? "Z to A" : "A to Z";
+  if (sort.value.by === "unread") return desc ? "Most first" : "Fewest first";
+  return desc ? "Newest first" : "Oldest first";
+});
+const verbs = computed(() =>
+  kind.value === "anime"
+    ? { unread: "Unwatched", last: "Last watched" }
+    : { unread: "Unread", last: "Last read" },
 );
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -237,6 +247,8 @@ function onKeydown(event: KeyboardEvent) {
           <select v-model="sortBy" class="field" data-testid="library-sort">
             <option value="added">Date added</option>
             <option value="title">Title</option>
+            <option value="unread">{{ verbs.unread }}</option>
+            <option value="lastRead">{{ verbs.last }}</option>
           </select>
         </label>
         <button type="button" class="btn" data-action="library-direction" @click="toggleDirection">
@@ -316,6 +328,7 @@ function onKeydown(event: KeyboardEvent) {
           <MediaCard
             :entry="item"
             hide-library-badge
+            :count="item.unreadCount"
             :selectable="selecting"
             :selected="selectedSet.has(item.id)"
             @select="onCardClick($event, item.id)"

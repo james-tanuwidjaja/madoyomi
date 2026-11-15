@@ -149,9 +149,14 @@ describe("realtime", () => {
       queryClient.setQueryData(queryKeys.episodes(12), makeEpisodes(2));
     });
 
+    const progressKeys = [queryKeys.library("anime"), queryKeys.history("anime")];
+
     it("keeps the live session in the playback store, without refetching on PROGRESS", () => {
       const spy = vi.spyOn(queryClient, "invalidateQueries");
       send("STARTED", { positionSeconds: null });
+      // a session writes the watch history (Phase 6 Stage 2): the library's counts and History follow
+      expect(invalidatedKeys(spy)).toEqual(progressKeys);
+      spy.mockClear();
       send("PROGRESS", { positionSeconds: 61.5 });
 
       expect(usePlaybackStore().session).toMatchObject({ episodeId: 1001, positionSeconds: 61.5 });
@@ -165,7 +170,7 @@ describe("realtime", () => {
       send("WATCHED");
 
       expect(cached().map((e) => e.isWatched)).toEqual([true, false]);
-      expect(invalidatedKeys(spy)).toEqual([queryKeys.episodes(12)]);
+      expect(invalidatedKeys(spy)).toEqual([...progressKeys, queryKeys.episodes(12)]);
     });
 
     it("writes the last position into the cached list on CLOSED, clears the store and refetches", () => {
@@ -176,7 +181,7 @@ describe("realtime", () => {
       expect(cached()[0]).toMatchObject({ lastSecondSeen: "752044", totalSeconds: "1500125" });
       expect(cached()[1]!.lastSecondSeen).toBe("0");
       expect(usePlaybackStore().session).toBeNull();
-      expect(invalidatedKeys(spy)).toEqual([queryKeys.episodes(12)]);
+      expect(invalidatedKeys(spy)).toEqual([...progressKeys, queryKeys.episodes(12)]);
     });
 
     it("forgets a session it was following after a reconnect (its CLOSED may be lost)", async () => {

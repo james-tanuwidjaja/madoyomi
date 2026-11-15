@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { isApiError } from "../api/client";
 import { useBackendStore } from "../stores/backend";
 import type { EntrySummary } from "../api/types";
@@ -18,6 +18,9 @@ import VirtualGrid from "../components/VirtualGrid.vue";
  * An anime's details (Phase 3 step 15): the stored entry with its episodes, or, for a `Seasons` entry, its seasons
  * (entries of their own, linking to their details). Refreshed from the source by the button, and by itself the first
  * time an entry that was never fetched is opened; a source's failure is shown above the stored data, which stays.
+ *
+ * `?play=<episodeId>` (Phase 6 Stage 2, History's Resume) opens that episode's picker once the list has it, and is then
+ * dropped from the URL so a reload doesn't open it again.
  */
 const props = defineProps<{ id: number }>();
 const backend = useBackendStore();
@@ -35,6 +38,18 @@ const page = useDetailsPage({
   entry,
   refresh: useRefreshAnime(),
 });
+
+const route = useRoute();
+const router = useRouter();
+const playOnOpen = computed(() => {
+  const v = Number(route.query.play);
+  return Number.isInteger(v) && v > 0 ? v : null;
+});
+function onPlayOpened() {
+  const query = { ...route.query };
+  delete query.play;
+  void router.replace({ query });
+}
 
 const notStored = computed(
   () => isApiError(anime.error.value) && anime.error.value.code === "NOT_FOUND",
@@ -198,6 +213,8 @@ const seasonCards = computed<EntrySummary[]>(() =>
           :episodes="episodes.data.value ?? []"
           :source-id="entry.sourceId"
           :source-name="page.sourceName.value"
+          :play-on-open="playOnOpen"
+          @play-opened="onPlayOpened"
         />
       </section>
     </template>

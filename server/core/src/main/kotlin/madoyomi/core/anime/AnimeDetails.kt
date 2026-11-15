@@ -12,6 +12,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import madoyomi.core.anime.model.table.AnimeTable
 import madoyomi.core.anime.model.table.EpisodeTable
+import madoyomi.core.library.AnimeHistory
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
@@ -137,6 +138,8 @@ object AnimeDetails {
         val bookmark: Boolean,
         val lastSecondSeen: Long,
         val totalSeconds: Long,
+        /** Its watch history (`ANIME_HISTORY.last_seen`), 0 for none. */
+        val lastSeen: Long,
     )
 
     /**
@@ -144,8 +147,8 @@ object AnimeDetails {
      * `Chapter.updateChapterListDatabase`:
      * - by url (the list is deduplicated, episodes without a url are left out);
      * - `source_order` counts from the oldest (1) to the newest, as upstream numbers chapters;
-     * - an episode the list no longer has is deleted (its history goes with it), and its watch state moves to a
-     *   new episode with the same number (≥ 0), as upstream carries read state over;
+     * - an episode the list no longer has is deleted, and its watch state and history move to a new episode with the
+     *   same number (≥ 0), as upstream carries the read state and `last_read_at` over;
      * - an update never touches the watch state (`watched`, `bookmark`, `last_second_seen`, `total_seconds`) or
      *   `fetched_at`; a `date_upload` of 0 keeps the stored date, and a new episode without one gets the newest date
      *   of the older episodes in the list (or now), as upstream does;
@@ -166,6 +169,7 @@ object AnimeDetails {
             val urls = episodes.map { it.first }.toSet()
 
             val gone = inDb.values.filter { it[EpisodeTable.url] !in urls }
+            val goneSeen = AnimeHistory.lastSeenOf(gone.map { it[EpisodeTable.id].value })
             val carried =
                 gone
                     .filter { it[EpisodeTable.episodeNumber] >= 0f }
@@ -176,6 +180,7 @@ object AnimeDetails {
                                 it[EpisodeTable.bookmark],
                                 it[EpisodeTable.lastSecondSeen],
                                 it[EpisodeTable.totalSeconds],
+                                goneSeen[it[EpisodeTable.id].value] ?: 0L,
                             )
                     }
             if (gone.isNotEmpty()) {
@@ -183,6 +188,7 @@ object AnimeDetails {
             }
 
             val ids = HashMap<String, Int>()
+            val seen = HashMap<Int, Long>()
             var newestDate = 0L
             // oldest first, so source_order counts up and a new episode without a date inherits an older one's
             episodes.asReversed().forEachIndexed { index, (url, episode) ->
@@ -234,8 +240,10 @@ object AnimeDetails {
                                     it[EpisodeTable.totalSeconds] = state.totalSeconds
                                 }
                             }.value
+                    if (state != null && state.lastSeen > 0) seen[ids.getValue(url)] = state.lastSeen
                 }
             }
+            seen.forEach { (id, at) -> AnimeHistory.stamp(id, at) }
             episodes.map { ids.getValue(it.first) }
         }
     }

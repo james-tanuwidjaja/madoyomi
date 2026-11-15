@@ -86,6 +86,11 @@ export function startRealtime(options: RealtimeOptions): {
     );
   const invalidateEpisodes = (session: PlaybackSession) =>
     void queryClient.invalidateQueries({ queryKey: queryKeys.episodes(session.animeId) });
+  // Phase 6 Stage 2: a session writes the watch history and changes the library's counts
+  const invalidateProgress = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.library("anime") });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.history("anime") });
+  };
 
   const invalidateExtensions = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.extensionStores() });
@@ -147,6 +152,8 @@ export function startRealtime(options: RealtimeOptions): {
     {
       next: ({ playbackEvents: e }) => {
         playback.apply(e);
+        if (e.type === "STARTED" || e.type === "WATCHED" || e.type === "CLOSED")
+          invalidateProgress();
         if (e.type === "WATCHED") {
           patchEpisode(e.session, (ep) => ({ ...ep, isWatched: true }));
           invalidateEpisodes(e.session);

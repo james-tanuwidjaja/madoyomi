@@ -61,6 +61,7 @@ describe("routes", () => {
 
   it.each([
     ["/library", "Library", "library"],
+    ["/history", "History", "history"],
     ["/browse", "Browse", "browse"],
     ["/browse/2499283573021220255", "Source", "browse"],
     ["/anime/12", "Anime", "library"],

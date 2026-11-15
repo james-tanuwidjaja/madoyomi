@@ -13,13 +13,14 @@ import type { EntrySummary } from "../api/types";
 /**
  * `hideLibraryBadge`: for the Library itself, where every card is in it. `selectable` (the Library's selection, Phase 6):
  * the card is a toggle button instead of a link, `selected` marks it, and a click emits `select` with the event (for
- * Shift+click ranges).
+ * Shift+click ranges). `count` (Phase 6 Stage 2): the unwatched/unread badge, shown above 0.
  */
 const props = defineProps<{
   entry: EntrySummary;
   hideLibraryBadge?: boolean;
   selectable?: boolean;
   selected?: boolean;
+  count?: number;
 }>();
 const emit = defineEmits<{ select: [event: MouseEvent] }>();
 
@@ -29,6 +30,11 @@ const failed = ref(false);
 watch(cover, () => (failed.value = false));
 
 const initial = computed(() => props.entry.title.trim().charAt(0).toUpperCase() || "?");
+const countLabel = computed(() => {
+  const n = props.count ?? 0;
+  const what = props.entry.kind === "anime" ? "unwatched" : "unread";
+  return `${n.toLocaleString("en-US")} ${what}`;
+});
 </script>
 
 <template>
@@ -63,6 +69,14 @@ const initial = computed(() => props.entry.title.trim().charAt(0).toUpperCase() 
       >
         In library
       </span>
+      <span
+        v-if="(count ?? 0) > 0"
+        class="count"
+        data-testid="unread-count"
+        :title="countLabel"
+        :aria-label="countLabel"
+        >{{ count!.toLocaleString("en-US") }}</span
+      >
       <span v-if="selectable" class="check" :class="{ on: selected }" aria-hidden="true">{{
         selected ? "✓" : ""
       }}</span>
@@ -146,6 +160,21 @@ button.card:hover {
   color: var(--color-text-tertiary);
   font-family: var(--font-family-display);
   font-size: var(--font-size-title);
+}
+
+.count {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  min-width: 1.5rem;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5rem;
+  text-align: center;
 }
 
 .in-library {

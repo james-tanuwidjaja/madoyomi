@@ -274,6 +274,8 @@ export const LIBRARY_ANIME_QUERY = /* GraphQL */ `
         categories {
           id
         }
+        unwatchedCount
+        lastSeenAt
       }
     }
   }
@@ -288,6 +290,10 @@ export const LIBRARY_MANGA_QUERY = /* GraphQL */ `
           nodes {
             id
           }
+        }
+        unreadCount
+        lastReadChapter {
+          lastReadAt
         }
       }
     }
@@ -439,10 +445,19 @@ export async function updateChapters(ids: number[], patch: ChapterPatch): Promis
   ).updateChapters.chapters;
 }
 
-type LibraryNode = Omit<LibraryEntry, "kind" | "inLibraryAt" | "categoryIds"> & {
+type LibraryNode = Omit<
+  LibraryEntry,
+  "kind" | "inLibraryAt" | "categoryIds" | "unreadCount" | "lastReadAt"
+> & {
   inLibraryAt: string;
   /** `[{id}]` for anime, `{nodes: [{id}]}` for manga (upstream's node list). */
   categories: { id: number }[] | { nodes: { id: number }[] };
+  /** Anime (Phase 6 Stage 2): Madoyomi's counts. */
+  unwatchedCount?: number;
+  lastSeenAt?: string;
+  /** Manga: upstream's. */
+  unreadCount?: number;
+  lastReadChapter?: { lastReadAt: string } | null;
 };
 
 /** The entries of `kind` in the library (unsorted; the view sorts them). */
@@ -453,12 +468,16 @@ export async function fetchLibrary(kind: MediaKind, signal?: AbortSignal): Promi
           .animes.nodes
       : (await api.gql<{ mangas: { nodes: LibraryNode[] } }>(LIBRARY_MANGA_QUERY, {}, { signal }))
           .mangas.nodes;
-  return nodes.map(({ categories, ...n }) => ({
-    ...n,
-    kind,
-    inLibraryAt: Number(n.inLibraryAt),
-    categoryIds: (Array.isArray(categories) ? categories : categories.nodes).map((c) => c.id),
-  }));
+  return nodes.map(
+    ({ categories, unwatchedCount, lastSeenAt, unreadCount, lastReadChapter, ...n }) => ({
+      ...n,
+      kind,
+      inLibraryAt: Number(n.inLibraryAt),
+      categoryIds: (Array.isArray(categories) ? categories : categories.nodes).map((c) => c.id),
+      unreadCount: (kind === "anime" ? unwatchedCount : unreadCount) ?? 0,
+      lastReadAt: Number((kind === "anime" ? lastSeenAt : lastReadChapter?.lastReadAt) ?? 0),
+    }),
+  );
 }
 
 /** Puts several entries of one kind into the library or out of it (removed ones keep their categories). */

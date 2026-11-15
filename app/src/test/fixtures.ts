@@ -279,6 +279,8 @@ export function makeLibraryEntry(overrides: Partial<LibraryEntry> = {}): Library
     inLibrary: true,
     inLibraryAt: 0,
     categoryIds: [],
+    unreadCount: 0,
+    lastReadAt: 0,
     ...overrides,
   };
 }

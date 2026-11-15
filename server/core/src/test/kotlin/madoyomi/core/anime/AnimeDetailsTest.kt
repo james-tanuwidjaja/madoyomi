@@ -145,7 +145,7 @@ class AnimeDetailsTest {
     }
 
     @Test
-    fun `an update keeps the watch state, and a re-listed episode with the same number inherits it`() {
+    fun `an update keeps the watch state, and a re-listed episode with the same number inherits it and its history`() {
         val id = browsed(anime("/a"))
         source.episodes = { listOf(episode("/e2", 2f), episode("/e1", 1f)) }
         refresh(id)
@@ -173,6 +173,9 @@ class AnimeDetailsTest {
         assertTrue(moved[EpisodeTable.watched], "carried over by episode number")
         assertEquals(1400L, moved[EpisodeTable.totalSeconds])
         assertEquals(0L, dbTransaction { AnimeHistoryTable.selectAll().where { AnimeHistoryTable.episode eq e1 }.count() })
+        // its watch history moved with it (Phase 6 Stage 2)
+        val history = dbTransaction { AnimeHistoryTable.selectAll().where { AnimeHistoryTable.episode eq moved[EpisodeTable.id] }.single() }
+        assertEquals(1L, history[AnimeHistoryTable.lastSeen])
     }
 
     @Test

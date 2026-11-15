@@ -114,6 +114,8 @@ describe("fetchLibrary", () => {
             inLibrary: true,
             inLibraryAt: "1700",
             categories: { nodes: [{ id: 4 }, { id: 2 }] },
+            unreadCount: 7,
+            lastReadChapter: { lastReadAt: "1800" },
           },
         ],
       },
@@ -128,6 +130,8 @@ describe("fetchLibrary", () => {
         inLibrary: true,
         inLibraryAt: 1700,
         categoryIds: [4, 2],
+        unreadCount: 7,
+        lastReadAt: 1800,
       },
     ]);
   });
@@ -143,12 +147,40 @@ describe("fetchLibrary", () => {
             inLibrary: true,
             inLibraryAt: "9",
             categories: [],
+            unwatchedCount: 3,
+            lastSeenAt: "0",
           },
         ],
       },
     });
 
-    expect((await fetchLibrary("anime"))[0]).toMatchObject({ kind: "anime", categoryIds: [] });
+    expect((await fetchLibrary("anime"))[0]).toMatchObject({
+      kind: "anime",
+      categoryIds: [],
+      unreadCount: 3,
+      lastReadAt: 0,
+    });
+  });
+
+  it("reads a manga never read as last read 0 (Phase 6 Stage 2)", async () => {
+    client.gql.mockResolvedValue({
+      mangas: {
+        nodes: [
+          {
+            id: 6,
+            title: "C",
+            thumbnailUrl: null,
+            inLibrary: true,
+            inLibraryAt: "9",
+            categories: { nodes: [] },
+            unreadCount: 0,
+            lastReadChapter: null,
+          },
+        ],
+      },
+    });
+
+    expect((await fetchLibrary("manga"))[0]).toMatchObject({ unreadCount: 0, lastReadAt: 0 });
   });
 });
 

@@ -316,12 +316,13 @@ Details: [phase-6-library-features.md](phases/phase-6-library-features.md)
 Milestones:
 - [x] Categories
 - [ ] Scheduled update checker + Updates view + badges
-- [ ] History
+- [x] History
 - [ ] Download queue (manga CBZ, anime incl. HLS)
 - [ ] Backup / restore round-trip
 
-**Phase 6 in progress: Stage 1 of 7 done (2026-11-15).** The stage plan (agreed at the end of Phase 5) and the phase's decisions are in phase-6 §8–§9:
+**Phase 6 in progress: Stage 2 of 7 done (2026-11-15).** The stage plan (agreed at the end of Phase 5) and the phase's decisions are in phase-6 §8–§9:
 - **categories: one list per kind** (the user's): each kind's Library has its own categories, as in Aniyomi;
+- **History follows the anime/manga switch** (the user's, Stage 2), as every other section;
 - **the anime download tool** (the user's): ffmpeg for HLS (as Aniyomi), yt-dlp as the fallback when it fails, both bundled in Phase 7; direct files are downloaded by the backend with the source's headers;
 - **the backup format** (the user's): gzipped protobuf, `.madoyomi-backup`, upstream's manga backup reused and extended, the field numbers kept compatible for the Aniyomi/Mihon import.
 
@@ -330,6 +331,11 @@ Stage 1 added the categories:
 - the Library: a tab per category with its count once there is one (Default's only while it holds entries), the open tab remembered per kind, a sort per category in its meta, the Categories dialog (create, rename, move, the new-entries flag, delete with a confirm), and Select with Set categories (tri-state boxes) and Remove from library;
 - a Categories button on both details pages, with the same picker;
 - tests: 13 new on the server (807), 27 in the app (605 + 12), the live spec 12/12 with 69 documents (it also checks the new-entry flag of each kind); checked live through the API and in `pnpm tauri dev`, after an app restart too (phase-6 §10).
+
+Stage 2 added history and the badges:
+- manga history is upstream's `CHAPTER_USER.last_read_at` (no table; upstream's backup already carries it), with one edit: "Mark unread" no longer stamps it (`ChapterMutation.updateChapters`). Anime history is `ANIME_HISTORY` (M0070's stub, one row per episode, no migration), stamped by the player's saves and by `updateEpisode(s)` given a position, and moved with a re-listed episode. `animeHistory`/`mangaHistory` (one item per entry, newest first, with a `resume` target), `delete…History` and `clear…History` (the marks and positions stay), `AnimeType.unwatchedCount`/`lastSeenAt` (upstream's `unreadCount` for manga);
+- the History view (a route and a sidebar entry): by day, Resume (the reader at the page, or the episode's picker with its resume point; the next one when finished), Remove, Clear all; the library cards' unwatched/unread badge and the sorts by that count and by last watched/read, kept current after marks, reader saves and playback;
+- tests: 6 new on the server (813), 20 in the app (625 + 13), the live spec 13/13 with 75 documents; checked live in `pnpm tauri dev` after playing an episode in mpv and reading chapters (phase-6 §10). The "badges" milestone stays open for Stage 3's "new" badges and Updates view.
 
 ### Phase 7 — Packaging & release
 Details: [phase-7-packaging-release.md](phases/phase-7-packaging-release.md)
@@ -427,7 +433,7 @@ These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) 
 
 [Phase 5](phases/phase-5-manga-reader.md) (the manga reader) is done too (2026-11-14, six stages). Stage 1 agreed the stage plan and the two decisions (the default reader mode: the manga's own, else webtoon by its genres, else paged RTL; the page cache: 1 GB, in the data dir), and added the image pipeline around upstream's page route: one fetch per page, the retry with expired URLs got anew, `SOURCE_FAILED`, the cache's cap with LRU eviction, `prefetchChapterPages`, and Settings → Reader. Stage 2 added the reader with the paged LTR/RTL mode, progress and resume, and reading from the chapter list. Stage 3 added the webtoon mode (virtualized, heights from each page's ratio, a pixel load window, the mode switch and the page gap) with the first measurement on a 100+ page chapter. Stage 4 added the double-page mode (spread detection, "shift by one"), zoom and pan in the paged modes, and the seamless next-chapter transition in every mode. Stage 5 added the reader settings: the mode and direction per manga in its meta, the default mode by genre or by a webtoon source's name, and on this device the defaults, the page fit, the strip width, the page gap, the background and the preload count. Stage 6, the exit run, passed every exit criterion from a fresh data dir (the scroll measured on the dev desktop, by the user's decision), with a fix round for blank frames at chapter crossings, a pan kept across a fit change and a double-page place that moved forward on a reopen.
 
-**[Phase 6](phases/phase-6-library-features.md) (library features) is in progress: Stage 1 of 7 is done (2026-11-15).** Its stage plan is in phase-6 §8: 1. Categories, with the two §8 decisions (done: one category list per kind; ffmpeg for anime downloads with yt-dlp as the fallback; gzipped protobuf backups as `.madoyomi-backup`); 2. History and the unread/unwatched badges; 3. the update checker and the Updates view; 4. manga downloads (CBZ, the reader reads them); 5. anime downloads (direct files and HLS, subtitles, mpv plays them); 6. backup and restore; 7. the exit run. **Next: Stage 2, History and badges** (history from the watched and read progress, a History view with resume, delete and clear, and the unread/unwatched counts on the library cards).
+**[Phase 6](phases/phase-6-library-features.md) (library features) is in progress: Stages 1–2 of 7 are done (2026-11-15).** Its stage plan is in phase-6 §8: 1. Categories, with the two §8 decisions (done: one category list per kind; ffmpeg for anime downloads with yt-dlp as the fallback; gzipped protobuf backups as `.madoyomi-backup`); 2. History and the unread/unwatched badges (done: history from the watched and read progress, the History view following the anime/manga switch with resume, delete and clear, the counts on the library cards and two new sorts); 3. the update checker and the Updates view; 4. manga downloads (CBZ, the reader reads them); 5. anime downloads (direct files and HLS, subtitles, mpv plays them); 6. backup and restore; 7. the exit run. **Next: Stage 3, the update checker** (scheduled and manual, per category, rate-limit aware, new items inserted and marked, the Updates view, the WS `library.updates` event and an optional Windows toast).
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

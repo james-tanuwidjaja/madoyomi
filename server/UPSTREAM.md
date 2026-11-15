@@ -478,6 +478,30 @@ Tests: `api/src/test/kotlin/madoyomi/api/AnimeCategoryApiTest.kt` (9), `Migratio
 
 Not changed: upstream's `includeInUpdate`/`includeInDownload` are stored for anime too, for Stage 3 (the update checker) and Stage 4 (downloads); nothing reads them yet. Upstream's `CATEGORY.flags` (Tachiyomi's sort bitmask, for sync) isn't used: the sort is in the meta.
 
+### History and badges (Phase 6)
+
+Phase 6 doc §9 "Stage 2". **Manga history is upstream's `CHAPTER_USER.last_read_at`**, with no table of Madoyomi's: upstream's `updateChapter(s)` stamps it whenever `lastPageRead` is saved (the reader does on opening a chapter and on every page), its data loaders read it (`lastReadChapter`) and its backup carries it (`BackupHistory`, `BackupMangaHandler`), so Stage 6's restore brings it back. One edit:
+
+| File | Change |
+|---|---|
+| `core/.../graphql/mutations/ChapterMutation.kt` (`updateChapters`, so `updateChapter` too) | **Stage 2:** a patch with `isRead: false` saves `lastPageRead` without stamping `last_read_at` (one `// Madoyomi:` comment). The chapter list's "Mark unread" sends `isRead: false, lastPageRead: 0`, so upstream stamped every chapter marked unread as just read and the History listed them first. A read mark alone (`isRead: true`) didn't stamp before and doesn't now (upstream's rule); a page saved with `isRead: true` or without `isRead` still stamps. Mihon's rule: marking unread doesn't touch the history. |
+
+**Anime history is `ANIME_HISTORY`** (M0070's stub, `madoyomi.core.anime.model.table.AnimeHistoryTable`: one row per episode, unique, `last_seen` in epoch seconds as upstream's `last_read_at`; Aniyomi's `animehistory` is one row per episode too). No migration: the stub's shape is what Stage 2 needs. `madoyomi.core.library.AnimeHistory`:
+- `stamp` (an upsert per episode), called by `EpisodeProgress.save` (the player's saves: on load, every 5 s while playing, on close) and by `AnimeMutation.updateEpisodes` when the patch gives `lastSecondSeen` and doesn't mark unwatched. A watched mark alone, bulk or from the player, doesn't stamp: upstream's rule for `isRead`;
+- `AnimeDetails.reconcileEpisodes` moves an episode's `last_seen` with its watch state to the new episode with the same number when a refresh replaces it (upstream carries `last_read_at` over the same way, `Chapter.kt`). Before, the row went with the old episode (cascade);
+- `page` (one item per anime: its latest episode, newest first, limit and offset, and the resume target), `delete` (by anime), `clear`, `stats` (the library counts).
+
+`madoyomi.core.library.MangaHistory` reads and changes upstream's column the same way: `page`, `delete` (by manga: `last_read_at` back to 0 for its chapters), `clear`. Neither touches the read or watched marks or the positions.
+
+GraphQL (`madoyomi.api.graphql.HistoryGraphQL`):
+- `animeHistory(limit, offset)` → `{ hasMore, items { anime, episode, lastSeenAt, resume } }` and `mangaHistory(limit, offset)` → `{ hasMore, items { manga, chapter, lastReadAt, resume } }` (upstream's `MangaType` and `ChapterType`, with the user's data). `resume` is the item itself, or when it is watched/read the first unwatched/unread one after it in the source's order, else the item again (Mihon's history resume opens the next chapter);
+- `deleteAnimeHistory(input: {animeIds})`, `deleteMangaHistory(input: {mangaIds})`, `clearAnimeHistory`, `clearMangaHistory` → `{ removed }`;
+- `AnimeType.unwatchedCount` and `AnimeType.lastSeenAt` through `AnimeStatsDataLoader` (two grouped queries for a whole list; a Seasons entry counts its seasons' episodes), the counterparts of upstream's `MangaType.unreadCount` and `lastReadChapter.lastReadAt`, which the app uses as they are.
+
+Tests: `api/src/test/kotlin/madoyomi/api/HistoryApiTest.kt` (6: what stamps either history and what doesn't, the "Mark unread" edit, both lists with their resume targets and paging, delete and clear keeping the marks, the counts with seasons, upstream's `unreadCount`), and `AnimeDetailsTest` (the history moved with a re-listed episode).
+
+Not changed: upstream's REST `Chapter.kt` paths that stamp `last_read_at` (the app doesn't use them); `CHAPTER_USER` has no index on `last_read_at` (an upstream table: the history query groups the user's rows by manga, fine at a desktop library's size; measure in a large library before adding one).
+
 ### New Madoyomi code
 
 | Path | What |
@@ -546,6 +570,7 @@ Not changed: upstream's `includeInUpdate`/`includeInDownload` are stored for ani
 | `core/src/main/kotlin/madoyomi/core/player/{PlayerSettings,PlayerLanguages,TrackSelection,VideoPreferences}.kt`, `api/src/main/kotlin/madoyomi/api/graphql/PlayerSettingsGraphQL.kt` (Phase 4 Stage 5) | the player settings and their file, the track languages and the track choice, the video order by the preferred server and quality, and their GraphQL (see "Playback (Phase 4)", "Player settings") |
 | `core/src/test/kotlin/madoyomi/core/player/{PlayerSettingsTest,PlayerLanguagesTest,TrackSelectionTest,VideoPreferencesTest}.kt`, `api/src/test/kotlin/madoyomi/api/PlayerSettingsApiTest.kt` (Phase 4 Stage 5) | their tests |
 | `core/src/main/kotlin/madoyomi/core/anime/AnimeCategories.kt`, `core/src/main/kotlin/madoyomi/core/anime/model/table/AnimeCategoryTable.kt` (`AnimeCategoryTable`, `AnimeCategoryAnimeTable`), `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0072_AnimeCategories.kt`, `api/src/main/kotlin/madoyomi/api/graphql/AnimeCategoryGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/AnimeCategoryApiTest.kt` (Phase 6 Stage 1) | the anime library's categories: the tables (the stub `AnimeCategoryTable` became the list), the rules, the migration, the GraphQL and the data loader, and their tests (see "Library categories (Phase 6)"). `AnimeMutation.updateAnimes` and `AnimeType.categories` call them |
+| `core/src/main/kotlin/madoyomi/core/library/{AnimeHistory,MangaHistory}.kt`, `api/src/main/kotlin/madoyomi/api/graphql/HistoryGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/HistoryApiTest.kt` (Phase 6 Stage 2) | the watch history in `ANIME_HISTORY` and the reading history in upstream's `CHAPTER_USER.last_read_at`: the stamps, the lists with the resume targets, delete and clear, the library counts (`AnimeStatsDataLoader`), and their test (see "History and badges (Phase 6)"). `EpisodeProgress.save`, `AnimeMutation.updateEpisodes`, `AnimeDetails.reconcileEpisodes` and `AnimeType` call them |
 | `core/src/main/kotlin/madoyomi/core/library/MangaNewEntryCategories.kt`, `api/src/test/kotlin/madoyomi/api/MangaNewEntryCategoriesApiTest.kt` (Phase 6 Stage 1) | manga added to the library through upstream's GraphQL go into the categories flagged for new entries, called from upstream's `MangaMutation.updateMangas` (see "Library categories (Phase 6)"), and its test |
 | `core/src/main/kotlin/madoyomi/core/reader/{ReaderSettings,PageCache,PageImages}.kt`, `api/src/main/kotlin/madoyomi/api/graphql/ReaderGraphQL.kt` (Phase 5 Stage 1) | the reader settings and their file, the chapter-page cache (single-flight, retry, errors, cap and eviction), the page fetch with the expired-URL retry and the prefetch, and their GraphQL (see "Manga reader (Phase 5)") |
 | `core/src/test/kotlin/madoyomi/core/reader/{PageCacheTest,ReaderSettingsTest}.kt`, `api/src/test/kotlin/madoyomi/api/PageImagesApiTest.kt` (Phase 5 Stage 1) | their tests |

@@ -854,6 +854,113 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.info(report.join("\n"));
   }, 60_000);
 
+  // History and the library counts (Phase 6 Stage 2), for each kind: a stored episode or chapter (any, the database
+  // only) gets its own position saved again through updateEpisode/updateChapter, which stamps its history; the
+  // history's first item is then its entry with it, the library's lists carry the counts, and deleting the entry's
+  // history takes it out of the list and leaves the marks and positions as they were. The entry's history is gone
+  // afterwards (the data dir's), the rest of the history is left alone: clearAll isn't run here (server tests).
+  it("records history from saved progress, lists it and deletes it, with the library's counts", async (ctx) => {
+    const report: string[] = [];
+    type Ep = { id: number; animeId: number; lastSecondSeen: string; isWatched: boolean };
+    type Ch = { id: number; mangaId: number; lastPageRead: number; isRead: boolean };
+    type Ref = { id: number };
+    type HistoryNode = {
+      anime?: Ref;
+      manga?: Ref;
+      episode?: Ref;
+      chapter?: Ref;
+      lastSeenAt?: string;
+      lastReadAt?: string;
+    };
+    const episode = (
+      await client.gql<{ episodes: { nodes: Ep[] } }>(
+        "{ episodes(first: 1) { nodes { id animeId lastSecondSeen isWatched } } }",
+      )
+    ).episodes.nodes[0];
+    const chapter = (
+      await client.gql<{ chapters: { nodes: Ch[] } }>(
+        "{ chapters(first: 1) { nodes { id mangaId lastPageRead isRead } } }",
+      )
+    ).chapters.nodes[0];
+    if (!episode && !chapter) return ctx.skip();
+
+    for (const kind of ["anime", "manga"] as const) {
+      const target = kind === "anime" ? episode : chapter;
+      if (!target) {
+        report.push(`${kind}: nothing stored, skipped`);
+        continue;
+      }
+      const entryId = kind === "anime" ? episode!.animeId : chapter!.mangaId;
+      if (kind === "anime") {
+        await client.gql(operations.UPDATE_EPISODES_MUTATION, {
+          ids: [episode!.id],
+          patch: { lastSecondSeen: episode!.lastSecondSeen },
+        });
+      } else {
+        await client.gql(operations.UPDATE_CHAPTER_MUTATION, {
+          id: chapter!.id,
+          patch: { lastPageRead: chapter!.lastPageRead },
+        });
+      }
+      const listed = await client
+        .gql<Record<string, { items: HistoryNode[] }>>(
+          kind === "anime" ? operations.ANIME_HISTORY_QUERY : operations.MANGA_HISTORY_QUERY,
+          { limit: 50, offset: 0 },
+        )
+        .then((d) => d[kind === "anime" ? "animeHistory" : "mangaHistory"]!.items);
+      const first = listed[0]!;
+      expect((kind === "anime" ? first.anime : first.manga)!.id).toBe(entryId);
+      expect((kind === "anime" ? first.episode : first.chapter)!.id).toBe(target.id);
+      const at = Number(kind === "anime" ? first.lastSeenAt : first.lastReadAt);
+      expect(Math.abs(at - Date.now() / 1000)).toBeLessThan(120);
+
+      const library = await client.gql<Record<string, { nodes: Record<string, unknown>[] }>>(
+        kind === "anime" ? operations.LIBRARY_ANIME_QUERY : operations.LIBRARY_MANGA_QUERY,
+      );
+      const nodes = library[kind === "anime" ? "animes" : "mangas"]!.nodes;
+      const counted = nodes.filter(
+        (n) => typeof (kind === "anime" ? n.unwatchedCount : n.unreadCount) === "number",
+      ).length;
+      expect(counted).toBe(nodes.length);
+
+      const removed = (
+        await client.gql<Record<string, { removed: number }>>(
+          kind === "anime"
+            ? operations.DELETE_ANIME_HISTORY_MUTATION
+            : operations.DELETE_MANGA_HISTORY_MUTATION,
+          { ids: [entryId] },
+        )
+      )[kind === "anime" ? "deleteAnimeHistory" : "deleteMangaHistory"]!.removed;
+      expect(removed).toBeGreaterThanOrEqual(1);
+      const after = await client.gql<Record<string, { items: Record<string, { id: number }>[] }>>(
+        kind === "anime" ? operations.ANIME_HISTORY_QUERY : operations.MANGA_HISTORY_QUERY,
+        { limit: 500, offset: 0 },
+      );
+      const ids = after[kind === "anime" ? "animeHistory" : "mangaHistory"]!.items.map(
+        (i) => i[kind]!.id,
+      );
+      expect(ids).not.toContain(entryId);
+
+      const marks =
+        kind === "anime"
+          ? (
+              await client.gql<{ episodes: { nodes: Ep[] } }>(
+                `{ episodes(condition: { id: ${episode!.id} }) { nodes { id animeId lastSecondSeen isWatched } } }`,
+              )
+            ).episodes.nodes[0]!
+          : (
+              await client.gql<{ chapters: { nodes: Ch[] } }>(
+                `{ chapters(condition: { id: ${chapter!.id} }) { nodes { id mangaId lastPageRead isRead } } }`,
+              )
+            ).chapters.nodes[0]!;
+      expect(marks).toEqual(target);
+      report.push(
+        `${kind}: entry ${entryId} first in history (${listed.length} shown), ${nodes.length} library entries counted, deleted (${removed} rows), marks kept`,
+      );
+    }
+    console.info(report.join("\n"));
+  }, 60_000);
+
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];
     let onConnected!: () => void;

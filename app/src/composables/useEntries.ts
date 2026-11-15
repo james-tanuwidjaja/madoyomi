@@ -93,6 +93,19 @@ export function useChapters(mangaId: MaybeRefOrGetter<number | null>) {
   });
 }
 
+/**
+ * Progress changed (Phase 6 Stage 2): a watched or read mark, a reader save, a playback session. The library's counts
+ * and "last read" and the History of `kind` are fetched again (only the ones on screen right away; the others when
+ * they are next shown).
+ */
+export function invalidateProgress(
+  queryClient: ReturnType<typeof useQueryClient>,
+  kind: MediaKind,
+) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.library(kind) });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.history(kind) });
+}
+
 /** The library of `kind`, unsorted (the view sorts it). */
 export function useLibrary(kind: MaybeRefOrGetter<MediaKind>) {
   const backend = useBackendStore();
@@ -214,7 +227,8 @@ export interface UpdateEpisodesRequest {
 
 /**
  * Marks episodes watched or unwatched (`updateEpisodes`; unwatched also clears the position, as in Aniyomi). The
- * episodes as stored replace their rows in the anime's cached list, so the list isn't fetched again.
+ * episodes as stored replace their rows in the anime's cached list, so the list isn't fetched again; the library's
+ * counts and History follow (`invalidateProgress`).
  */
 export function useUpdateEpisodes(animeId: MaybeRefOrGetter<number>) {
   const queryClient = useQueryClient();
@@ -226,6 +240,7 @@ export function useUpdateEpisodes(animeId: MaybeRefOrGetter<number>) {
         queryKeys.episodes(toValue(animeId)),
         (list) => list && list.map((e) => byId.get(e.id) ?? e),
       );
+      invalidateProgress(queryClient, "anime");
     },
   });
 }
@@ -233,7 +248,10 @@ export function useUpdateEpisodes(animeId: MaybeRefOrGetter<number>) {
 // ---------------------------------------------------------------------------------------------------------------
 // Read marks and reading progress (Phase 5 Stage 2)
 
-/** The chapters as stored replace their rows in the manga's cached chapter list (no refetch). */
+/**
+ * The chapters as stored replace their rows in the manga's cached chapter list (no refetch); the library's counts and
+ * History follow (`invalidateProgress`).
+ */
 export function writeChapters(
   queryClient: ReturnType<typeof useQueryClient>,
   mangaId: number,
@@ -244,6 +262,7 @@ export function writeChapters(
     queryKeys.chapters(mangaId),
     (list) => list && list.map((c) => byId.get(c.id) ?? c),
   );
+  invalidateProgress(queryClient, "manga");
 }
 
 export interface UpdateChaptersRequest {
