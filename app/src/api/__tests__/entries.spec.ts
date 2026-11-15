@@ -16,8 +16,11 @@ import {
   MANGA_QUERY,
   refreshAnime,
   refreshManga,
+  setManyInLibrary,
+  UPDATE_ANIMES_MUTATION,
   UPDATE_CHAPTER_MUTATION,
   UPDATE_CHAPTERS_MUTATION,
+  UPDATE_MANGAS_MUTATION,
   updateChapter,
   updateChapters,
 } from "../operations/entries";
@@ -100,15 +103,65 @@ describe("refreshManga", () => {
 });
 
 describe("fetchLibrary", () => {
-  it("lists the kind's library with the added time as a number", async () => {
+  it("lists the kind's library with the added time as a number and the category ids", async () => {
     client.gql.mockResolvedValue({
       mangas: {
-        nodes: [{ id: 3, title: "A", thumbnailUrl: null, inLibrary: true, inLibraryAt: "1700" }],
+        nodes: [
+          {
+            id: 3,
+            title: "A",
+            thumbnailUrl: null,
+            inLibrary: true,
+            inLibraryAt: "1700",
+            categories: { nodes: [{ id: 4 }, { id: 2 }] },
+          },
+        ],
       },
     });
 
     expect(await fetchLibrary("manga")).toEqual([
-      { kind: "manga", id: 3, title: "A", thumbnailUrl: null, inLibrary: true, inLibraryAt: 1700 },
+      {
+        kind: "manga",
+        id: 3,
+        title: "A",
+        thumbnailUrl: null,
+        inLibrary: true,
+        inLibraryAt: 1700,
+        categoryIds: [4, 2],
+      },
+    ]);
+  });
+
+  it("reads an anime's categories as a plain list (Phase 6)", async () => {
+    client.gql.mockResolvedValue({
+      animes: {
+        nodes: [
+          {
+            id: 5,
+            title: "B",
+            thumbnailUrl: null,
+            inLibrary: true,
+            inLibraryAt: "9",
+            categories: [],
+          },
+        ],
+      },
+    });
+
+    expect((await fetchLibrary("anime"))[0]).toMatchObject({ kind: "anime", categoryIds: [] });
+  });
+});
+
+describe("setManyInLibrary (Phase 6)", () => {
+  it("takes several entries out of the kind's library at once", async () => {
+    client.gql.mockResolvedValue({});
+
+    await setManyInLibrary("anime", [1, 2], false);
+    await setManyInLibrary("manga", [3], false);
+
+    expect(client.gql.mock.calls).toEqual([
+      [UPDATE_ANIMES_MUTATION, { ids: [1, 2], inLibrary: false }],
+      [UPDATE_MANGAS_MUTATION, { ids: [3], inLibrary: false }],
     ]);
   });
 });

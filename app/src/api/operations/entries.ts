@@ -271,6 +271,9 @@ export const LIBRARY_ANIME_QUERY = /* GraphQL */ `
     animes(condition: { inLibrary: true }) {
       nodes {
         ${LIBRARY_FIELDS}
+        categories {
+          id
+        }
       }
     }
   }
@@ -281,6 +284,34 @@ export const LIBRARY_MANGA_QUERY = /* GraphQL */ `
     mangas(condition: { inLibrary: true }) {
       nodes {
         ${LIBRARY_FIELDS}
+        categories {
+          nodes {
+            id
+          }
+        }
+      }
+    }
+  }
+`;
+
+/** Several entries in or out of the library at once (the Library's bulk removal, Phase 6). */
+export const UPDATE_ANIMES_MUTATION = /* GraphQL */ `
+  mutation UpdateAnimes($ids: [Int!]!, $inLibrary: Boolean!) {
+    updateAnimes(input: { ids: $ids, patch: { inLibrary: $inLibrary } }) {
+      animes {
+        id
+        inLibrary
+      }
+    }
+  }
+`;
+
+export const UPDATE_MANGAS_MUTATION = /* GraphQL */ `
+  mutation UpdateMangas($ids: [Int!]!, $inLibrary: Boolean!) {
+    updateMangas(input: { ids: $ids, patch: { inLibrary: $inLibrary } }) {
+      mangas {
+        id
+        inLibrary
       }
     }
   }
@@ -408,7 +439,11 @@ export async function updateChapters(ids: number[], patch: ChapterPatch): Promis
   ).updateChapters.chapters;
 }
 
-type LibraryNode = Omit<LibraryEntry, "kind" | "inLibraryAt"> & { inLibraryAt: string };
+type LibraryNode = Omit<LibraryEntry, "kind" | "inLibraryAt" | "categoryIds"> & {
+  inLibraryAt: string;
+  /** `[{id}]` for anime, `{nodes: [{id}]}` for manga (upstream's node list). */
+  categories: { id: number }[] | { nodes: { id: number }[] };
+};
 
 /** The entries of `kind` in the library (unsorted; the view sorts them). */
 export async function fetchLibrary(kind: MediaKind, signal?: AbortSignal): Promise<LibraryEntry[]> {
@@ -418,7 +453,24 @@ export async function fetchLibrary(kind: MediaKind, signal?: AbortSignal): Promi
           .animes.nodes
       : (await api.gql<{ mangas: { nodes: LibraryNode[] } }>(LIBRARY_MANGA_QUERY, {}, { signal }))
           .mangas.nodes;
-  return nodes.map((n) => ({ ...n, kind, inLibraryAt: Number(n.inLibraryAt) }));
+  return nodes.map(({ categories, ...n }) => ({
+    ...n,
+    kind,
+    inLibraryAt: Number(n.inLibraryAt),
+    categoryIds: (Array.isArray(categories) ? categories : categories.nodes).map((c) => c.id),
+  }));
+}
+
+/** Puts several entries of one kind into the library or out of it (removed ones keep their categories). */
+export async function setManyInLibrary(
+  kind: MediaKind,
+  ids: number[],
+  inLibrary: boolean,
+): Promise<void> {
+  await api.gql(kind === "anime" ? UPDATE_ANIMES_MUTATION : UPDATE_MANGAS_MUTATION, {
+    ids,
+    inLibrary,
+  });
 }
 
 function noData() {

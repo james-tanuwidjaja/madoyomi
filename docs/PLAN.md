@@ -314,11 +314,22 @@ Details: [phase-6-library-features.md](phases/phase-6-library-features.md)
 - Backup/restore. Stretch: import Aniyomi/Mihon backup files.
 
 Milestones:
-- [ ] Categories
+- [x] Categories
 - [ ] Scheduled update checker + Updates view + badges
 - [ ] History
 - [ ] Download queue (manga CBZ, anime incl. HLS)
 - [ ] Backup / restore round-trip
+
+**Phase 6 in progress: Stage 1 of 7 done (2026-11-15).** The stage plan (agreed at the end of Phase 5) and the phase's decisions are in phase-6 §8–§9:
+- **categories: one list per kind** (the user's): each kind's Library has its own categories, as in Aniyomi;
+- **the anime download tool** (the user's): ffmpeg for HLS (as Aniyomi), yt-dlp as the fallback when it fails, both bundled in Phase 7; direct files are downloaded by the backend with the source's headers;
+- **the backup format** (the user's): gzipped protobuf, `.madoyomi-backup`, upstream's manga backup reused and extended, the field numbers kept compatible for the Aniyomi/Mihon import.
+
+Stage 1 added the categories:
+- manga categories are upstream's, with one edit: its GraphQL `updateManga(s)` now puts a newly added manga into the categories flagged for new entries, which only its REST path did (`madoyomi.core.library.MangaNewEntryCategories`, a `// Madoyomi:` call in `MangaMutation.updateMangas`). Anime has Madoyomi's own: `M0072_AnimeCategories` replaces the Phase 1 stub with `ANIME_CATEGORY` (with its Default row) and `ANIME_CATEGORY_ANIME`, `madoyomi.core.anime.AnimeCategories` has upstream's rules (names unique ignoring case, Default protected, new entries into the flagged categories), and the GraphQL mirrors upstream's (`animeCategories`, `createAnimeCategory`, `updateAnimeCategory`, `updateAnimeCategoryOrder`, `deleteAnimeCategory`, `updateAnimeCategories`, `updateAnimesCategories`, `setAnimeCategoryMeta`, `AnimeType.categories`);
+- the Library: a tab per category with its count once there is one (Default's only while it holds entries), the open tab remembered per kind, a sort per category in its meta, the Categories dialog (create, rename, move, the new-entries flag, delete with a confirm), and Select with Set categories (tri-state boxes) and Remove from library;
+- a Categories button on both details pages, with the same picker;
+- tests: 13 new on the server (807), 27 in the app (605 + 12), the live spec 12/12 with 69 documents (it also checks the new-entry flag of each kind); checked live through the API and in `pnpm tauri dev`, after an app restart too (phase-6 §10).
 
 ### Phase 7 — Packaging & release
 Details: [phase-7-packaging-release.md](phases/phase-7-packaging-release.md)
@@ -401,6 +412,9 @@ WS     /ws                                downloads, updates, playback progress 
 - [x] One JVM process for both extension types, or isolated processes? **One JVM** (shared network/DI/stub layer). Crash isolation is deferred: an in-process extension can't be contained without a separate JVM anyway, so the trust gate is the containment. Revisit if Phase 2's compat harness shows hard crashes (phase-1 §8, §9). **Verdict (Phase 2 Stage 6): one JVM stays.** Two harness runs of the top 20 in one JVM had no abort, bounded heap and threads. The class loaders kept after uninstall went from 15 to 1 (a connection reanime keeps open; phase-1 §8, phase-2 §10).
 - [x] UI components and theme? **Headless primitives (Reka UI) with our own styles; dark and light themes that follow Windows; Fluent-like tokens** (phase-3 §9, Stage 1). The window keeps the **native Windows title bar** (Snap Layouts, caption buttons; phase-3 §9, Stage 2).
 - [x] Name: Madoyomi · License: MPL-2.0
+- [x] Library categories: one list for both kinds, or one per kind? **One per kind**, as in Aniyomi: upstream's manga categories (their new-entry flag now honoured through GraphQL too), Madoyomi's own for anime (phase-6 §9, Stage 1).
+- [x] Anime downloads: ffmpeg, yt-dlp or both? **Both, ffmpeg the default**, yt-dlp as the fallback (phase-6 §8–§9, Stage 1).
+- [x] Backup format? **Gzipped protobuf, `.madoyomi-backup`** (phase-6 §8–§9, Stage 1).
 - [ ] Windows-only, or keep macOS/Linux possible (the architecture already allows it)?
 
 ---
@@ -413,7 +427,7 @@ These are the Phase 0 spikes; see [phase-0-spikes.md](phases/phase-0-spikes.md) 
 
 [Phase 5](phases/phase-5-manga-reader.md) (the manga reader) is done too (2026-11-14, six stages). Stage 1 agreed the stage plan and the two decisions (the default reader mode: the manga's own, else webtoon by its genres, else paged RTL; the page cache: 1 GB, in the data dir), and added the image pipeline around upstream's page route: one fetch per page, the retry with expired URLs got anew, `SOURCE_FAILED`, the cache's cap with LRU eviction, `prefetchChapterPages`, and Settings → Reader. Stage 2 added the reader with the paged LTR/RTL mode, progress and resume, and reading from the chapter list. Stage 3 added the webtoon mode (virtualized, heights from each page's ratio, a pixel load window, the mode switch and the page gap) with the first measurement on a 100+ page chapter. Stage 4 added the double-page mode (spread detection, "shift by one"), zoom and pan in the paged modes, and the seamless next-chapter transition in every mode. Stage 5 added the reader settings: the mode and direction per manga in its meta, the default mode by genre or by a webtoon source's name, and on this device the defaults, the page fit, the strip width, the page gap, the background and the preload count. Stage 6, the exit run, passed every exit criterion from a fresh data dir (the scroll measured on the dev desktop, by the user's decision), with a fix round for blank frames at chapter crossings, a pan kept across a fit change and a double-page place that moved forward on a reopen.
 
-**[Phase 6](phases/phase-6-library-features.md) (library features) is next.** Its stage plan, agreed with the user at the end of Phase 5 (phase-5 §9 "Stage 6"), is: 1. Categories, with the two §8 decisions (the anime download tool, the backup format); 2. History and the unread/unwatched badges; 3. the update checker and the Updates view; 4. manga downloads (CBZ, the reader reads them); 5. anime downloads (direct files and HLS, subtitles, mpv plays them); 6. backup and restore; 7. the exit run. Stage 1 writes the plan into phase-6 §8 and starts with Categories.
+**[Phase 6](phases/phase-6-library-features.md) (library features) is in progress: Stage 1 of 7 is done (2026-11-15).** Its stage plan is in phase-6 §8: 1. Categories, with the two §8 decisions (done: one category list per kind; ffmpeg for anime downloads with yt-dlp as the fallback; gzipped protobuf backups as `.madoyomi-backup`); 2. History and the unread/unwatched badges; 3. the update checker and the Updates view; 4. manga downloads (CBZ, the reader reads them); 5. anime downloads (direct files and HLS, subtitles, mpv plays them); 6. backup and restore; 7. the exit run. **Next: Stage 2, History and badges** (history from the watched and read progress, a History view with resume, delete and clear, and the unread/unwatched counts on the library cards).
 
 1. Clone Suwayomi-Server, run it, add the Keiyoushi repo, and confirm manga works.
 2. Download one yuzono APK, dex2jar it, and inspect which `extensions-lib` classes it references.

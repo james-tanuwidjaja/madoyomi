@@ -445,9 +445,46 @@ export interface EntrySummary {
   inLibrary: boolean;
 }
 
-/** A library card: a summary with the time it was added (epoch seconds). */
+/**
+ * A library card: a summary with the time it was added (epoch seconds) and the categories it is in (Phase 6: their ids,
+ * never the Default category's; none means it is in Default).
+ */
 export interface LibraryEntry extends EntrySummary {
   inLibraryAt: number;
+  categoryIds: number[];
+}
+
+/** Upstream's `IncludeOrExclude` (a category's update and download flags; UNSET follows the global setting). */
+export type IncludeOrExclude = "INCLUDE" | "EXCLUDE" | "UNSET";
+
+/**
+ * A library category (Phase 6 Stage 1): upstream's `CategoryType` for manga, Madoyomi's `AnimeCategoryType` for anime,
+ * the same fields. One list per kind. The Default category (`isDefaultCategory`) holds the entries in no other one.
+ */
+export interface LibraryCategory {
+  id: number;
+  /** 0 for Default, then 1, 2, … */
+  order: number;
+  name: string;
+  /** New library entries go into it. */
+  default: boolean;
+  isDefaultCategory: boolean;
+  includeInUpdate: IncludeOrExclude;
+  includeInDownload: IncludeOrExclude;
+  meta: { key: string; value: string }[];
+}
+
+/** A change to a category: a field left out stays. */
+export interface CategoryPatch {
+  name?: string;
+  default?: boolean;
+}
+
+/** A change to entries' categories, as upstream's `UpdateMangaCategoriesPatch`. */
+export interface EntryCategoriesPatch {
+  clearCategories?: boolean;
+  addToCategories?: number[];
+  removeFromCategories?: number[];
 }
 
 /** A season of a `Seasons` anime: an entry of its own, shown as a card. */

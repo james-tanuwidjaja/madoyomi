@@ -7,6 +7,7 @@ import com.expediagroup.graphql.generator.annotations.GraphQLIgnore
 import com.expediagroup.graphql.server.extensions.toGraphQLError
 import graphql.execution.DataFetcherResult
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.core.library.MangaNewEntryCategories
 import org.jetbrains.exposed.v1.core.LikePattern
 import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.and
@@ -78,6 +79,9 @@ class MangaMutation {
         patch: UpdateMangaPatch,
     ) {
         transaction {
+            // Madoyomi: entries added to the library go into the categories flagged for new entries, as upstream's
+            // REST Library.addMangaToLibrary does (phase-6 §9 "Stage 1"; server/UPSTREAM.md "Library categories")
+            val added = if (patch.inLibrary == true) MangaNewEntryCategories.notInLibrary(userId, ids) else emptyList()
             if (patch.inLibrary != null) {
                 val now = Instant.now().epochSecond
                 MangaUserTable.batchUpsert(ids, MangaUserTable.user, MangaUserTable.manga) { mangaId ->
@@ -89,6 +93,8 @@ class MangaMutation {
                     }
                 }
             }
+            // Madoyomi: see above
+            MangaNewEntryCategories.addedToLibrary(userId, added)
         }.apply {
             if (patch.inLibrary != null) {
                 transaction {

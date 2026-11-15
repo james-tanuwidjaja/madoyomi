@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import madoyomi.core.anime.model.table.AnimeCategoryAnimeTable
 import madoyomi.core.anime.model.table.AnimeCategoryTable
 import madoyomi.core.anime.model.table.AnimeHistoryTable
 import madoyomi.core.anime.model.table.AnimeSourceTable
@@ -37,7 +38,6 @@ import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import suwayomi.tachidesk.graphql.types.DatabaseType
-import suwayomi.tachidesk.manga.model.table.CategoryTable
 import suwayomi.tachidesk.manga.model.table.ExtensionStoreTable
 import suwayomi.tachidesk.manga.model.table.ExtensionTable
 import suwayomi.tachidesk.server.ServerConfig
@@ -112,7 +112,18 @@ class MigrationsFromEmptyDbTest {
                         "MEMO",
                     ),
                 "ANIME_HISTORY" to setOf("ID", "EPISODE", "LAST_SEEN"),
-                "ANIME_CATEGORY" to setOf("ID", "CATEGORY", "ANIME"),
+                "ANIME_CATEGORY" to
+                    setOf(
+                        "ID",
+                        "NAME",
+                        "SORT_ORDER",
+                        "IS_DEFAULT",
+                        "IS_DEFAULT_CATEGORY",
+                        "INCLUDE_IN_UPDATE",
+                        "INCLUDE_IN_DOWNLOAD",
+                        "META",
+                    ),
+                "ANIME_CATEGORY_ANIME" to setOf("ID", "CATEGORY", "ANIME"),
             )
 
         /** Foreign keys of the new tables: table -> column -> (referenced table, ON DELETE rule or null if unspecified). */
@@ -123,7 +134,8 @@ class MigrationsFromEmptyDbTest {
                 "ANIME" to mapOf("PARENT_ID" to ("ANIME" to "SET NULL")),
                 "EPISODE" to mapOf("ANIME" to ("ANIME" to "CASCADE")),
                 "ANIME_HISTORY" to mapOf("EPISODE" to ("EPISODE" to "CASCADE")),
-                "ANIME_CATEGORY" to mapOf("CATEGORY" to ("CATEGORY" to "CASCADE"), "ANIME" to ("ANIME" to "CASCADE")),
+                "ANIME_CATEGORY_ANIME" to
+                    mapOf("CATEGORY" to ("ANIME_CATEGORY" to "CASCADE"), "ANIME" to ("ANIME" to "CASCADE")),
             )
 
         @BeforeAll
@@ -154,7 +166,7 @@ class MigrationsFromEmptyDbTest {
         val migrations = loadMigrations()
         val versions = migrations.map { it.version }.sorted()
         assertEquals((1..migrations.size).toList(), versions, "migration versions must be consecutive from 1")
-        assertTrue(migrations.size >= 71, "expected at least M0069 to M0071, found ${migrations.size} migrations")
+        assertTrue(migrations.size >= 72, "expected at least M0069 to M0072, found ${migrations.size} migrations")
 
         val madoyomiVersions = migrations.filter { it is MadoyomiMigration }.map { it.version }.sorted()
         assertEquals(
@@ -351,8 +363,14 @@ class MigrationsFromEmptyDbTest {
                     it[episode] = episodeId
                     it[lastSeen] = 1_700_000_000
                 }
-                val categoryId = CategoryTable.selectAll().first()[CategoryTable.id]
-                AnimeCategoryTable.insert {
+                val categoryId =
+                    AnimeCategoryTable.insertAndGetId {
+                        it[name] = "Watching"
+                        it[order] = 1
+                        it[isDefault] = true
+                        it[meta] = buildJsonObject { put("madoyomi.library.sort", "title:asc") }
+                    }
+                AnimeCategoryAnimeTable.insert {
                     it[category] = categoryId
                     it[anime] = animeId
                 }
@@ -375,7 +393,11 @@ class MigrationsFromEmptyDbTest {
                 assertTrue(episode[EpisodeTable.fillermark])
                 assertEquals("A summary", episode[EpisodeTable.summary])
                 assertEquals(buildJsonObject { put("n", 1) }, episode[EpisodeTable.memo])
-                assertEquals(1L, AnimeCategoryTable.selectAll().count())
+                assertEquals(1L, AnimeCategoryAnimeTable.selectAll().count())
+                val category = AnimeCategoryTable.selectAll().where { AnimeCategoryTable.id eq categoryId }.single()
+                assertEquals(buildJsonObject { put("madoyomi.library.sort", "title:asc") }, category[AnimeCategoryTable.meta])
+                assertTrue(category[AnimeCategoryTable.isDefault])
+                assertEquals(-1, category[AnimeCategoryTable.includeInUpdate])
                 val anime = AnimeTable.selectAll().where { AnimeTable.id eq animeId }.single()
                 assertEquals(AnimeUpdateStrategy.ONLY_FETCH_ONCE, anime[AnimeTable.updateStrategy])
                 assertEquals(FetchType.Seasons, anime[AnimeTable.fetchType])
@@ -392,7 +414,8 @@ class MigrationsFromEmptyDbTest {
                 assertNull(AnimeTable.selectAll().where { AnimeTable.id eq seasonId }.single()[AnimeTable.parentId])
                 assertEquals(0L, EpisodeTable.selectAll().count())
                 assertEquals(0L, AnimeHistoryTable.selectAll().count())
-                assertEquals(0L, AnimeCategoryTable.selectAll().count())
+                assertEquals(0L, AnimeCategoryAnimeTable.selectAll().count())
+                AnimeCategoryTable.deleteWhere { AnimeCategoryTable.id eq categoryId }
                 ExtensionStoreTable.deleteWhere { ExtensionStoreTable.id eq storeId }
                 assertEquals(0L, TrustedSignatureTable.selectAll().count())
             }
@@ -445,6 +468,61 @@ class MigrationsFromEmptyDbTest {
                         it[anime] = animeId
                     }
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `M0072 replaces the anime category stub, with one Default category, and keeps categories on a rerun`() {
+        val migrations = loadMigrations()
+        withScratchDatabase { db ->
+            runMigrations(migrations.filter { it.version < 72 }, db)
+            transaction(db) {
+                assertEquals(setOf("ID", "CATEGORY", "ANIME"), columns("ANIME_CATEGORY"), "M0070's stub")
+                assertEquals("CATEGORY", foreignKeys("ANIME_CATEGORY")["CATEGORY"]?.first)
+            }
+
+            runMigrations(migrations, db)
+
+            val watching =
+                transaction(db) {
+                    assertEquals(NEW_COLUMNS.getValue("ANIME_CATEGORY"), columns("ANIME_CATEGORY"))
+                    val default = AnimeCategoryTable.selectAll().single()
+                    assertEquals("Default", default[AnimeCategoryTable.name])
+                    assertTrue(default[AnimeCategoryTable.isDefaultCategory])
+                    assertFalse(default[AnimeCategoryTable.isDefault])
+                    assertEquals(0, default[AnimeCategoryTable.order])
+                    assertEquals("{}", default[AnimeCategoryTable.meta].toString())
+                    val animeId =
+                        AnimeTable.insertAndGetId {
+                            it[url] = "/a"
+                            it[title] = "A"
+                            it[sourceReference] = 1L
+                        }
+                    val id =
+                        AnimeCategoryTable.insertAndGetId {
+                            it[name] = "Watching"
+                            it[order] = 1
+                        }
+                    AnimeCategoryAnimeTable.insert {
+                        it[category] = id
+                        it[anime] = animeId
+                    }
+                    assertFailsWith<ExposedSQLException> {
+                        AnimeCategoryAnimeTable.insert {
+                            it[category] = id
+                            it[anime] = animeId
+                        }
+                    }
+                    id
+                }
+
+            val m0072 = migrations.single { it.version == 72 }
+            transaction(db) { m0072.run() }
+
+            transaction(db) {
+                assertEquals(listOf("Default", "Watching"), AnimeCategoryTable.selectAll().map { it[AnimeCategoryTable.name] }.sorted())
+                assertEquals(watching, AnimeCategoryAnimeTable.selectAll().single()[AnimeCategoryAnimeTable.category])
             }
         }
     }

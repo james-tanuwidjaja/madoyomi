@@ -10,8 +10,18 @@ import type { EntrySummary } from "../api/types";
  * `?token=` added by `useAssetUrl`, so it follows a backend restart. Without a cover, or when it fails, the card
  * shows the title's first letter.
  */
-/** `hideLibraryBadge`: for the Library itself, where every card is in it. */
-const props = defineProps<{ entry: EntrySummary; hideLibraryBadge?: boolean }>();
+/**
+ * `hideLibraryBadge`: for the Library itself, where every card is in it. `selectable` (the Library's selection, Phase 6):
+ * the card is a toggle button instead of a link, `selected` marks it, and a click emits `select` with the event (for
+ * Shift+click ranges).
+ */
+const props = defineProps<{
+  entry: EntrySummary;
+  hideLibraryBadge?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+}>();
+const emit = defineEmits<{ select: [event: MouseEvent] }>();
 
 const cover = useAssetUrl(() => props.entry.thumbnailUrl);
 const failed = ref(false);
@@ -22,12 +32,19 @@ const initial = computed(() => props.entry.title.trim().charAt(0).toUpperCase() 
 </script>
 
 <template>
-  <RouterLink
-    :to="`/${entry.kind}/${entry.id}`"
+  <component
+    :is="selectable ? 'button' : RouterLink"
+    v-bind="
+      selectable
+        ? { type: 'button', 'aria-pressed': !!selected }
+        : { to: `/${entry.kind}/${entry.id}` }
+    "
     class="card"
+    :class="{ selectable, selected }"
     data-testid="media-card"
     :data-id="entry.id"
     :title="entry.title"
+    @click="selectable && emit('select', $event)"
   >
     <span class="cover">
       <img
@@ -46,9 +63,12 @@ const initial = computed(() => props.entry.title.trim().charAt(0).toUpperCase() 
       >
         In library
       </span>
+      <span v-if="selectable" class="check" :class="{ on: selected }" aria-hidden="true">{{
+        selected ? "✓" : ""
+      }}</span>
     </span>
     <span class="title">{{ entry.title }}</span>
-  </RouterLink>
+  </component>
 </template>
 
 <style scoped>
@@ -63,6 +83,44 @@ const initial = computed(() => props.entry.title.trim().charAt(0).toUpperCase() 
 
 .card:hover {
   background: var(--color-surface-hover);
+}
+
+button.card {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+button.card:hover {
+  background: var(--color-surface-hover);
+}
+
+.card.selected .cover {
+  outline: 3px solid var(--color-accent);
+  outline-offset: -3px;
+}
+
+.check {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 50%;
+  background: var(--color-surface);
+  font-weight: var(--font-weight-semibold);
+}
+
+.check.on {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
 .cover {

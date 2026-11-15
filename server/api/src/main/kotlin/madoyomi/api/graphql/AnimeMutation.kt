@@ -9,6 +9,7 @@ import com.expediagroup.graphql.generator.annotations.GraphQLDescription
 import graphql.execution.DataFetcherResult
 import graphql.schema.DataFetchingEnvironment
 import madoyomi.core.anime.AnimeBrowse
+import madoyomi.core.anime.AnimeCategories
 import madoyomi.core.anime.AnimeDetails
 import madoyomi.core.anime.AnimeEntries
 import madoyomi.core.anime.AnimeSourcePreferences
@@ -17,8 +18,10 @@ import madoyomi.core.anime.model.table.AnimeTable
 import madoyomi.core.anime.model.table.EpisodeTable
 import madoyomi.core.graphql.MadoyomiGraphQLErrors
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import suwayomi.tachidesk.graphql.directives.RequireAuth
@@ -240,9 +243,11 @@ class AnimeMutation {
 
     /**
      * Upstream's `updateMangas` for anime: `inLibrary` sets `in_library`, and adding sets `added_at` (`inLibraryAt`) to
-     * now, while removing keeps it, as upstream does. Every id must exist (`NOT_FOUND` otherwise, before anything is
-     * written). Upstream also queues uninitialized entries for a library update and moves the thumbnail out of the
-     * cache; anime library updates and downloads are Phase 6, and the UI refreshes an uninitialized entry on open.
+     * now, while removing keeps it, as upstream does. An entry added puts itself into the categories flagged for new
+     * entries unless it is in a category already (Phase 6; upstream's `Library.addMangaToLibrary`), and a removed one
+     * keeps its categories. Every id must exist (`NOT_FOUND` otherwise, before anything is written). Upstream also
+     * queues uninitialized entries for a library update and moves the thumbnail out of the cache; anime library
+     * updates and downloads are Phase 6, and the UI refreshes an uninitialized entry on open.
      */
     private fun updateAnimes(
         ids: List<Int>,
@@ -252,10 +257,20 @@ class AnimeMutation {
             ids.distinct().forEach(AnimeEntries::animeRow)
             val inLibrary = patch.inLibrary ?: return@dbTransaction
             val now = Instant.now().epochSecond
+            val added =
+                if (inLibrary) {
+                    AnimeTable
+                        .select(AnimeTable.id)
+                        .where { (AnimeTable.id inList ids) and (AnimeTable.inLibrary eq false) }
+                        .map { it[AnimeTable.id].value }
+                } else {
+                    emptyList()
+                }
             AnimeTable.update({ AnimeTable.id inList ids }) {
                 it[AnimeTable.inLibrary] = inLibrary
                 if (inLibrary) it[AnimeTable.addedAt] = now
             }
+            AnimeCategories.addedToLibrary(added)
         }
     }
 
