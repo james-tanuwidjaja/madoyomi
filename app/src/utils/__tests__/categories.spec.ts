@@ -64,7 +64,10 @@ describe("a category's sort", () => {
   it("is read from and written to its meta", () => {
     expect(parseSort("title:asc")).toEqual({ by: "title", desc: false });
     expect(parseSort("added:desc")).toEqual({ by: "added", desc: true });
-    for (const bad of [null, undefined, "", "title", "unread:asc", "title:up"]) {
+    // Phase 6 Stage 2
+    expect(parseSort("unread:desc")).toEqual({ by: "unread", desc: true });
+    expect(parseSort("lastRead:asc")).toEqual({ by: "lastRead", desc: false });
+    for (const bad of [null, undefined, "", "title", "unseen:asc", "title:up"]) {
       expect(parseSort(bad)).toBeNull();
     }
     expect(formatSort({ by: "added", desc: false })).toBe("added:asc");

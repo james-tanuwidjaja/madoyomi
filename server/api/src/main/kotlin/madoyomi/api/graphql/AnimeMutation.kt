@@ -17,6 +17,7 @@ import madoyomi.core.anime.AnimeVideos
 import madoyomi.core.anime.model.table.AnimeTable
 import madoyomi.core.anime.model.table.EpisodeTable
 import madoyomi.core.graphql.MadoyomiGraphQLErrors
+import madoyomi.core.library.AnimeHistory
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -326,7 +327,8 @@ class AnimeMutation {
      * Upstream's `updateChapters` for episodes (Phase 4 Stage 3): `isWatched`, `isBookmarked` and `lastSecondSeen`
      * (milliseconds, as the player stores it). Marking unwatched also clears the position, as the Aniyomi app's
      * `SetSeenStatus` does, unless the patch sets one; marking watched keeps it. The duration is never changed here.
-     * Every id must exist (`NOT_FOUND` otherwise, before anything is written).
+     * Every id must exist (`NOT_FOUND` otherwise, before anything is written). A position stamps the episodes' watch
+     * history (`AnimeHistory`).
      */
     private fun updateEpisodes(
         ids: List<Int>,
@@ -347,6 +349,9 @@ class AnimeMutation {
                     }
                 }
             }
+            // A position given is progress: it stamps the watch history (Phase 6 Stage 2), as upstream's lastPageRead
+            // stamps last_read_at; a watched mark alone, and marking unwatched, don't.
+            if (patch.lastSecondSeen != null && patch.isWatched != false) AnimeHistory.stamp(rows.map { it[EpisodeTable.id].value })
         }
     }
 

@@ -7,3 +7,4 @@ export * from "./playback";
 export * from "./player";
 export * from "./reader";
 export * from "./categories";
+export * from "./history";

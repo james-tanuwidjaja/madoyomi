@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.animesource.model.FetchType
 import graphql.schema.DataFetchingEnvironment
 import madoyomi.core.anime.model.table.AnimeTable
 import madoyomi.core.anime.model.table.EpisodeTable
+import madoyomi.core.library.AnimeHistory
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -110,6 +111,16 @@ class AnimeType(
     @GraphQLDescription("The categories it is in, by position; empty when it is in Default (Phase 6)")
     fun categories(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<List<AnimeCategoryType>> =
         dataFetchingEnvironment.getValueFromDataLoader("CategoriesForAnimeDataLoader", id)
+
+    @GraphQLDescription(
+        "Episodes not watched (a Seasons entry: its seasons'), for the library's badge; as upstream's MangaType.unreadCount (Phase 6)",
+    )
+    fun unwatchedCount(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Int> =
+        dataFetchingEnvironment.getValueFromDataLoader<Int, AnimeHistory.Stats>("AnimeStatsDataLoader", id).thenApply { it.unwatchedCount }
+
+    @GraphQLDescription("Epoch seconds when an episode (a Seasons entry: of its seasons) was last played, 0 if never (Phase 6)")
+    fun lastSeenAt(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Long> =
+        dataFetchingEnvironment.getValueFromDataLoader<Int, AnimeHistory.Stats>("AnimeStatsDataLoader", id).thenApply { it.lastSeenAt }
 
     fun parent(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<AnimeType?> =
         parentId?.let { dataFetchingEnvironment.getValueFromDataLoader("AnimeDataLoader", it) }

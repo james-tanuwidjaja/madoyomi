@@ -19,6 +19,7 @@ const mediaKind = useMediaKindStore();
 
 const items: { id: NavItem; label: string; to: string }[] = [
   { id: "library", label: "Library", to: "/library" },
+  { id: "history", label: "History", to: "/history" },
   { id: "browse", label: "Browse", to: "/browse" },
   { id: "extensions", label: "Extensions", to: "/extensions" },
   { id: "downloads", label: "Downloads", to: "/downloads" },

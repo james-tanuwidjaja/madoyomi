@@ -1,12 +1,12 @@
 import type { LibraryCategory, LibraryEntry } from "../api/types";
-import type { LibrarySort, LibrarySortKey } from "../stores/librarySort";
+import { LIBRARY_SORT_KEYS, type LibrarySort, type LibrarySortKey } from "../stores/librarySort";
 
 /*
  * The Library's categories (Phase 6 Stage 1), pure: the tabs, which entries a tab shows, a category's own sort (in its
  * meta), the name rules, and the tri-state of the assign dialog.
  */
 
-/** The meta key of a category's sort ("title:asc", "added:desc"). */
+/** The meta key of a category's sort ("title:asc", "added:desc", since Stage 2 "unread:desc", "lastRead:desc"). */
 export const CATEGORY_SORT_KEY = "madoyomi.library.sort";
 
 /** The most characters a category's name has (upstream's column). */
@@ -50,12 +50,11 @@ export function pickTab(
   return tabs.find((t) => t.category.id === remembered) ?? tabs[0] ?? null;
 }
 
-const SORT_KEYS: readonly LibrarySortKey[] = ["title", "added"];
-
 /** A stored sort ("title:asc"), or null when it isn't one. */
 export function parseSort(value: string | null | undefined): LibrarySort | null {
   const [by, dir] = (value ?? "").split(":");
-  if (!SORT_KEYS.includes(by as LibrarySortKey) || (dir !== "asc" && dir !== "desc")) return null;
+  if (!LIBRARY_SORT_KEYS.includes(by as LibrarySortKey) || (dir !== "asc" && dir !== "desc"))
+    return null;
   return { by: by as LibrarySortKey, desc: dir === "desc" };
 }
 

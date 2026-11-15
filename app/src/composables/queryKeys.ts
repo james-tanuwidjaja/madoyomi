@@ -39,4 +39,6 @@ export const queryKeys = {
   categories: (kind: MediaKind) => ["api", "categories", kind] as const,
   library: (kind?: MediaKind) =>
     kind ? (["api", "library", kind] as const) : (["api", "library"] as const),
+  history: (kind?: MediaKind) =>
+    kind ? (["api", "history", kind] as const) : (["api", "history"] as const),
 };

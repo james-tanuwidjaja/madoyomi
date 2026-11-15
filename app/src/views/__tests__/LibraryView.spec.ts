@@ -34,6 +34,8 @@ const entry = (
   title: string,
   inLibraryAt: number,
   categoryIds: number[] = [],
+  unreadCount = 0,
+  lastReadAt = 0,
 ): LibraryEntry => ({
   kind,
   id,
@@ -42,6 +44,8 @@ const entry = (
   inLibrary: true,
   inLibraryAt,
   categoryIds,
+  unreadCount,
+  lastReadAt,
 });
 
 const libraries: Record<MediaKind, LibraryEntry[]> = { anime: [], manga: [] };
@@ -117,6 +121,59 @@ describe("LibraryView", () => {
       by: "added",
       desc: false,
     });
+  });
+
+  it("shows the unwatched/unread count on the cards above 0 (Phase 6 Stage 2)", async () => {
+    libraries.anime = [entry("anime", 1, "A", 1, [], 12), entry("anime", 2, "B", 2, [], 0)];
+    libraries.manga = [entry("manga", 9, "M", 1, [], 1)];
+    await mountLibrary();
+
+    const counts = () =>
+      wrapper.findAll('[data-testid="media-card"]').map((c) => {
+        const badge = c.find('[data-testid="unread-count"]');
+        return badge.exists() ? [badge.text(), badge.attributes("aria-label")] : null;
+      });
+    expect(counts()).toEqual([null, ["12", "12 unwatched"]]);
+
+    useMediaKindStore().set("manga");
+    await flushPromises();
+    expect(counts()).toEqual([["1", "1 unread"]]);
+  });
+
+  it("sorts by the unwatched count and by last watched, never-watched last (Phase 6 Stage 2)", async () => {
+    libraries.anime = [
+      entry("anime", 1, "A", 1, [], 3, 500),
+      entry("anime", 2, "B", 2, [], 9, 0),
+      entry("anime", 3, "C", 3, [], 0, 900),
+    ];
+    await mountLibrary();
+    const sortSelect = wrapper.find('[data-testid="library-sort"]');
+    expect(sortSelect.findAll("option").map((o) => o.text())).toEqual([
+      "Date added",
+      "Title",
+      "Unwatched",
+      "Last watched",
+    ]);
+
+    await sortSelect.setValue("unread");
+    expect(titles()).toEqual(["B", "A", "C"]);
+    expect(wrapper.find('[data-action="library-direction"]').text()).toBe("Most first");
+    await wrapper.find('[data-action="library-direction"]').trigger("click");
+    expect(titles()).toEqual(["C", "A", "B"]);
+
+    await sortSelect.setValue("lastRead");
+    expect(titles()).toEqual(["C", "A", "B"]);
+    await wrapper.find('[data-action="library-direction"]').trigger("click");
+    expect(titles()).toEqual(["A", "C", "B"]);
+    expect(JSON.parse(localStorage.getItem(LIBRARY_SORT_KEY)!).anime).toEqual({
+      by: "lastRead",
+      desc: false,
+    });
+
+    useMediaKindStore().set("manga");
+    await flushPromises();
+    const options = wrapper.find('[data-testid="library-sort"]').findAll("option");
+    expect(options.map((o) => o.text()).slice(2)).toEqual(["Unread", "Last read"]);
   });
 
   it("shows the other kind's library after the switch", async () => {

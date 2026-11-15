@@ -6,6 +6,7 @@ package madoyomi.core.player
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import madoyomi.core.anime.model.table.EpisodeTable
+import madoyomi.core.library.AnimeHistory
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -18,7 +19,8 @@ import suwayomi.tachidesk.server.database.dbTransaction
 /**
  * Playback progress in the existing `EPISODE` columns (Phase 4 §9): `last_second_seen` and `total_seconds` hold
  * **milliseconds**, despite their names, as the Aniyomi app stores them (its player writes `position * 1000`), so
- * backups and history agree with Aniyomi's; `watched` is the watched flag.
+ * backups and history agree with Aniyomi's; `watched` is the watched flag. Every save also stamps the episode's watch
+ * history (`ANIME_HISTORY`, Phase 6 Stage 2), so an episode played even for a moment is in History.
  */
 object EpisodeProgress {
     fun save(
@@ -27,11 +29,13 @@ object EpisodeProgress {
         durationMillis: Long,
     ) {
         dbTransaction {
-            EpisodeTable.update({ EpisodeTable.id eq episodeId }) {
-                it[lastSecondSeen] = positionMillis
-                // keep a known duration when mpv doesn't know it (yet)
-                if (durationMillis > 0) it[totalSeconds] = durationMillis
-            }
+            val saved =
+                EpisodeTable.update({ EpisodeTable.id eq episodeId }) {
+                    it[lastSecondSeen] = positionMillis
+                    // keep a known duration when mpv doesn't know it (yet)
+                    if (durationMillis > 0) it[totalSeconds] = durationMillis
+                }
+            if (saved > 0) AnimeHistory.stamp(episodeId)
         }
     }
 

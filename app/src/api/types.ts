@@ -452,6 +452,42 @@ export interface EntrySummary {
 export interface LibraryEntry extends EntrySummary {
   inLibraryAt: number;
   categoryIds: number[];
+  /**
+   * Phase 6 Stage 2, the card's badge: episodes not watched (`AnimeType.unwatchedCount`, a Seasons entry's seasons
+   * included) or chapters not read (upstream's `MangaType.unreadCount`).
+   */
+  unreadCount: number;
+  /** When an episode was last played or a chapter last read, epoch seconds (0: never); the "Last watched/read" sort. */
+  lastReadAt: number;
+}
+
+/**
+ * A History row (Phase 6 Stage 2): an entry with its episode or chapter played or read last. `item` is that episode
+ * or chapter, `resume` what Resume opens: the item itself, or when it is finished the first unfinished one after it.
+ */
+export interface HistoryItem {
+  kind: MediaKind;
+  entry: EntrySummary;
+  item: HistoryTarget;
+  resume: HistoryTarget;
+  /** Epoch seconds. */
+  at: number;
+}
+
+/** An episode or chapter as a History row shows it. */
+export interface HistoryTarget {
+  id: number;
+  name: string;
+  done: boolean;
+  /** Manga: the page reading stopped at (from 0) and the chapter's page count (-1 or 0 while unknown). */
+  pages?: { lastPageRead: number; pageCount: number };
+  /** Anime: the position and duration in milliseconds (0 while unknown). */
+  progress?: { positionMs: number; durationMs: number };
+}
+
+export interface HistoryPage {
+  items: HistoryItem[];
+  hasMore: boolean;
 }
 
 /** Upstream's `IncludeOrExclude` (a category's update and download flags; UNSET follows the global setting). */

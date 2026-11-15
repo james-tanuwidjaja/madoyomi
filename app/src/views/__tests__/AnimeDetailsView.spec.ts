@@ -27,7 +27,7 @@ import {
 import { usePlaybackStore } from "../../stores/playback";
 import { usePlayerPrefsStore } from "../../stores/playerPrefs";
 import { useVideoChoicesStore } from "../../stores/videoChoices";
-import { mountView, setBackendReady } from "../../test/mountView";
+import { createTestRouter, mountView, setBackendReady } from "../../test/mountView";
 
 const ops = vi.hoisted(() => ({
   fetchSources: vi.fn(),
@@ -377,6 +377,23 @@ describe("AnimeDetailsView", () => {
     expect(ops.playEpisode).toHaveBeenCalledWith(
       expect.objectContaining({ episodeId: 1002, startSeconds: 752.043 }),
     );
+  });
+
+  it("opens the picker of ?play= (History's Resume) once, with its resume point, and drops it from the URL", async () => {
+    episodes = makeEpisodes(3).map((e) =>
+      e.id === 1002 ? { ...e, lastSecondSeen: "752043", totalSeconds: "1500125" } : e,
+    );
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster()]);
+    const router = createTestRouter();
+    await router.push("/anime/12?play=1002");
+    wrapper = mountView(AnimeDetailsView, { pinia, queryClient, router }, { id: 12 });
+    await flushPromises();
+
+    expect(ops.fetchEpisodeVideos).toHaveBeenCalledWith(1002);
+    const picker = document.body.querySelector('[data-testid="video-picker"]')!;
+    expect(picker.querySelector(".dialog-title")!.textContent).toBe("Episode 2");
+    expect(picker.querySelector('[data-action="resume"]')!.textContent).toContain("12:32");
+    expect(router.currentRoute.value.query.play).toBeUndefined();
   });
 
   it("marks selected episodes watched and unwatched, updating the rows from what is stored", async () => {
