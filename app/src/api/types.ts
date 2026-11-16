@@ -924,3 +924,134 @@ export interface DownloadTool {
   version: string | null;
   message: string | null;
 }
+
+/* --- Phase 6 Stage 6: backups (`.madoyomi-backup`) --- */
+
+/** Madoyomi's own backup, or a Mihon/Suwayomi/Aniyomi `.tachibk` (its manga part only). */
+export type BackupFormat = "MADOYOMI" | "TACHIYOMI";
+
+/** A file in the backups folder. */
+export interface BackupFile {
+  name: string;
+  /** Its full path, for Show in Explorer. */
+  path: string;
+  /** Bytes. */
+  size: number;
+  /** Epoch milliseconds. */
+  modifiedAt: number;
+  /** Made by the schedule (`Madoyomi_auto_…`); only those are pruned. */
+  automatic: boolean;
+  format: BackupFormat;
+}
+
+/** Settings → Backup's schedule. */
+export interface BackupSettings {
+  /** 0 (off, the default), 24 (daily) or 168 (weekly). */
+  intervalHours: number;
+  /** How many scheduled backups are kept (1 to 50). */
+  keep: number;
+  /** Epoch milliseconds of the next scheduled backup, null while off. */
+  nextScheduledAt: number | null;
+  folder: string;
+  lastError: string | null;
+}
+
+export interface BackupRepoReport {
+  indexUrl: string;
+  kind: ExtensionKind;
+  name: string;
+  signingKey: string;
+  /** Already added here. */
+  added: boolean;
+}
+
+export interface BackupCertificateReport {
+  hash: string;
+  trusted: boolean;
+}
+
+export interface BackupExtensionReport {
+  pkgName: string;
+  kind: ExtensionKind;
+  name: string;
+  versionName: string;
+  repoUrl: string | null;
+  signatureHash: string | null;
+  installed: boolean;
+  /** A repo here or in the backup lists it: it can be reinstalled. */
+  inRepo: boolean;
+  /** Its certificate is trusted here, or will be by the backup's repos or certificates. */
+  trustedAfterRestore: boolean;
+}
+
+export interface BackupSourceReport {
+  id: LongString;
+  kind: ExtensionKind;
+  name: string;
+  entries: number;
+  /** The backup's extension that provides it, if any. */
+  extension: string | null;
+}
+
+/** What a backup file holds, checked against this install (`validateMadoyomiBackup`). */
+export interface BackupReport {
+  name: string;
+  format: BackupFormat;
+  createdAt: number | null;
+  appVersion: string | null;
+  automatic: boolean;
+  anime: number;
+  seasons: number;
+  episodes: number;
+  watchedEpisodes: number;
+  animeHistory: number;
+  animeCategories: number;
+  manga: number;
+  chapters: number;
+  readChapters: number;
+  mangaHistory: number;
+  mangaCategories: number;
+  repos: BackupRepoReport[];
+  certificates: BackupCertificateReport[];
+  extensions: BackupExtensionReport[];
+  missingSources: BackupSourceReport[];
+  settingsFiles: string[];
+  sourcePreferences: number;
+}
+
+export type RestoreMode = "MERGE" | "REPLACE";
+export type RestoreState = "IDLE" | "RUNNING" | "SUCCESS" | "FAILURE";
+export type RestoreStep =
+  | "SETTINGS"
+  | "REPOS"
+  | "CERTIFICATES"
+  | "EXTENSIONS"
+  | "SOURCE_PREFERENCES"
+  | "CATEGORIES"
+  | "ANIME"
+  | "MANGA";
+
+/** The restore that runs, else the last one (`madoyomiRestoreStatus`, and its subscription). */
+export interface RestoreStatus {
+  state: RestoreState;
+  name: string | null;
+  mode: RestoreMode | null;
+  step: RestoreStep | null;
+  current: number;
+  total: number;
+  title: string | null;
+  problems: string[];
+  startedAt: number;
+  finishedAt: number;
+}
+
+/** What to restore; only the repos, certificates and extensions listed are added, trusted or installed. */
+export interface RestoreRequest {
+  name: string;
+  mode: RestoreMode;
+  library: boolean;
+  settings: boolean;
+  repos: string[];
+  certificates: string[];
+  extensions: string[];
+}

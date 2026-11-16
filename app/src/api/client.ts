@@ -58,6 +58,13 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/** `method`/`body`: a `POST` of a file to a REST route (Phase 6 Stage 6: a backup the user picked). */
+export interface AssetOptions extends RequestOptions {
+  reload?: boolean;
+  method?: "GET" | "POST";
+  body?: Blob;
+}
+
 export interface ApiClient {
   /** Runs an operation; throws the first error as an {@link ApiError}. */
   gql<T>(query: string, variables?: Record<string, unknown>, options?: RequestOptions): Promise<T>;
@@ -77,7 +84,7 @@ export interface ApiClient {
    * it never appears in a URL. A JSON error body (`SOURCE_FAILED` with `details.httpCode`, `NOT_FOUND`) becomes an
    * {@link ApiError}. `reload` skips the webview's HTTP cache (a retry after a failure).
    */
-  fetchAsset(path: string, options?: RequestOptions & { reload?: boolean }): Promise<Blob>;
+  fetchAsset(path: string, options?: AssetOptions): Promise<Blob>;
   /** `ws://…/api/graphql?token=…` for subscriptions, null while not ready. */
   subscriptionUrl(): string | null;
 }
@@ -202,10 +209,7 @@ export function createApiClient(getInfo: () => BackendInfo | null): ApiClient {
     return `${info.baseUrl}${rel}${sep}token=${encodeURIComponent(info.token)}`;
   }
 
-  async function fetchAsset(
-    path: string,
-    options?: RequestOptions & { reload?: boolean },
-  ): Promise<Blob> {
+  async function fetchAsset(path: string, options?: AssetOptions): Promise<Blob> {
     const info = getInfo();
     if (!info) {
       throw new ApiError({
@@ -218,9 +222,11 @@ export function createApiClient(getInfo: () => BackendInfo | null): ApiClient {
     let res: Response;
     try {
       res = await fetch(`${info.baseUrl}${rel}`, {
+        method: options?.method ?? "GET",
         headers: { Authorization: `Bearer ${info.token}` },
+        body: options?.body,
         signal: options?.signal,
-        cache: options?.reload ? "reload" : "default",
+        cache: options?.method === "POST" ? "no-store" : options?.reload ? "reload" : "default",
       });
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") throw e;

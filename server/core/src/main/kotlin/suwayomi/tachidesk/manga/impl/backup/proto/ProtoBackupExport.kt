@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import madoyomi.core.MadoyomiFeatures
 import okio.Buffer
 import okio.Sink
 import okio.buffer
@@ -63,6 +64,9 @@ object ProtoBackupExport : ProtoBackupBase() {
     @OptIn(DelicateCoroutinesApi::class)
     fun scheduleAutomatedBackupTask() {
         HAScheduler.descheduleCron(backupSchedulerJobId)
+
+        // Madoyomi: upstream's manga-only schedule stays off; madoyomi.core.backup.BackupScheduler makes Madoyomi's own
+        if (!MadoyomiFeatures.upstreamAutomatedBackupEnabled) return
 
         val areAutomatedBackupsDisabled = serverConfig.backupInterval.value == 0
         if (areAutomatedBackupsDisabled) {

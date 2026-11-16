@@ -14,7 +14,7 @@ import { queryKeys } from "../../composables/queryKeys";
 import { backendStatus, healthyStatus } from "../../test/backendStatus";
 import { fakeSocketFactory } from "../../test/fakeSocket";
 import { makeLibraryCheck } from "../../test/fixtures";
-import type { DownloadQueue, LibraryCheck } from "../types";
+import type { DownloadQueue, LibraryCheck, RestoreStatus } from "../types";
 
 const toast = vi.hoisted(() => ({ showToast: vi.fn(), windowFocused: vi.fn() }));
 vi.mock("../../utils/toast", () => toast);
@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 describe("realtime", () => {
-  it("connects to the backend's WebSocket with the token, and subscribes to the five event streams", () => {
+  it("connects to the backend's WebSocket with the token, and subscribes to the six event streams", () => {
     expect(sockets.last.url).toBe(`ws://127.0.0.1:50266/api/graphql?token=${TOKEN}`);
     sockets.last.open();
     sockets.last.ack();
@@ -75,7 +75,8 @@ describe("realtime", () => {
     const queries = sockets.last
       .sentOfType("subscribe")
       .map((m) => (m.payload as { query: string }).query);
-    expect(queries).toHaveLength(5);
+    expect(queries).toHaveLength(6);
+    expect(queries.some((q) => q.includes("madoyomiRestoreStatusChanged"))).toBe(true);
     expect(queries.some((q) => q.includes("libraryUpdates"))).toBe(true);
     expect(queries.some((q) => q.includes("downloadsChanged"))).toBe(true);
     expect(queries.some((q) => q.includes("extensionInstallProgress"))).toBe(true);
@@ -172,6 +173,54 @@ describe("realtime", () => {
         queryKeys.library("manga"),
         queryKeys.completedDownloads("manga"),
       ]);
+    });
+  });
+
+  describe("restore status (Phase 6 Stage 6)", () => {
+    const status = (state: string, finishedAt = "0", step: string | null = "ANIME") => ({
+      state,
+      name: "Madoyomi_2026-11-16_21-00-00.madoyomi-backup",
+      mode: "MERGE",
+      step,
+      current: 2,
+      total: 5,
+      title: "Oshi no Ko",
+      problems: [],
+      startedAt: "1700000000000",
+      finishedAt,
+    });
+    const send = (s: ReturnType<typeof status>) =>
+      sockets.last.receive({
+        id: opId("madoyomiRestoreStatusChanged"),
+        type: "next",
+        payload: { data: { madoyomiRestoreStatusChanged: s } },
+      });
+
+    beforeEach(() => {
+      sockets.last.open();
+      sockets.last.ack();
+    });
+
+    it("keeps the cached status current, and refetches every backend query but the backups' once it ends", () => {
+      queryClient.setQueryData(queryKeys.library("anime"), []);
+      queryClient.setQueryData(queryKeys.backupFiles(), []);
+      const spy = vi.spyOn(queryClient, "invalidateQueries");
+      send(status("RUNNING"));
+      expect(queryClient.getQueryData<RestoreStatus>(queryKeys.restoreStatus())).toMatchObject({
+        state: "RUNNING",
+        current: 2,
+        startedAt: 1700000000000,
+      });
+      expect(spy).not.toHaveBeenCalled();
+
+      send(status("SUCCESS", "1700000009000", null));
+      expect(spy).toHaveBeenCalledTimes(2);
+      const predicate = (
+        spy.mock.calls[0][0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }
+      ).predicate;
+      expect(predicate({ queryKey: [...queryKeys.library("anime")] })).toBe(true);
+      expect(predicate({ queryKey: [...queryKeys.backupFiles()] })).toBe(false);
+      expect(spy.mock.calls[1][0]).toEqual({ queryKey: queryKeys.backupSettings() });
     });
   });
 
@@ -448,7 +497,7 @@ describe("realtime", () => {
 
     sockets.last.open();
     sockets.last.ack();
-    expect(sockets.last.sentOfType("subscribe")).toHaveLength(5);
+    expect(sockets.last.sentOfType("subscribe")).toHaveLength(6);
     // a reconnect may have missed events: the lists are fetched again
     expect(invalidatedKeys(invalidate)).toEqual([
       queryKeys.extensionStores(),
