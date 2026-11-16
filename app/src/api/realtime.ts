@@ -18,6 +18,11 @@ import {
   PLAYBACK_EVENTS_SUBSCRIPTION,
 } from "./operations/subscriptions";
 import { toDownloadQueue, type DownloadQueueNode } from "./operations/downloads";
+import {
+  MADOYOMI_RESTORE_STATUS_SUBSCRIPTION,
+  toRestoreStatus,
+  type RestoreStatusNode,
+} from "./operations/backups";
 import { fetchLibraryUpdateSettings } from "./operations/updates";
 import type {
   DownloadQueue,
@@ -28,6 +33,7 @@ import type {
   MediaKind,
   PlaybackEvent,
   PlaybackSession,
+  RestoreStatus,
 } from "./types";
 import { mediaKindOf } from "./types";
 import { foundSignature, toastText } from "../utils/updates";
@@ -81,7 +87,10 @@ export interface RealtimeOptions {
  *   and if it found something, the toast setting is on and the window isn't focused, a Windows toast says what;
  * - subscribes to `downloadsChanged` (Phase 6 Stage 4, the WS "downloads" event): each queue replaces the cached
  *   `downloadQueue`; when items leave it (done, cancelled) or one finishes, their entries' episode or chapter lists
- *   (the downloaded marks), the kind's library (its download counts) and its completed list are fetched again.
+ *   (the downloaded marks), the kind's library (its download counts) and its completed list are fetched again;
+ * - subscribes to `madoyomiRestoreStatusChanged` (Phase 6 Stage 6): each status replaces the cached restore status, and
+ *   when a restore ends every backend query but the backups' own is fetched again (the library, categories, repos,
+ *   extensions and settings may all have changed).
  *
  * Call after Pinia is installed. Returns a function that stops all of it.
  */
@@ -268,6 +277,28 @@ export function startRealtime(options: RealtimeOptions): {
         }
       },
       error: (e) => console.warn("downloadsChanged subscription failed:", e.code, e.message),
+    },
+  );
+
+  // Phase 6 Stage 6: a restore's progress; once it ends, everything it may have changed is fetched again
+  client.subscribe<{ madoyomiRestoreStatusChanged: RestoreStatusNode }>(
+    MADOYOMI_RESTORE_STATUS_SUBSCRIPTION,
+    {},
+    {
+      next: ({ madoyomiRestoreStatusChanged }) => {
+        const status = toRestoreStatus(madoyomiRestoreStatusChanged);
+        const previous = queryClient.getQueryData<RestoreStatus>(queryKeys.restoreStatus());
+        queryClient.setQueryData(queryKeys.restoreStatus(), status);
+        const ended = status.state === "SUCCESS" || status.state === "FAILURE";
+        if (ended && previous && previous.finishedAt !== status.finishedAt) {
+          void queryClient.invalidateQueries({
+            predicate: (q) => q.queryKey[0] === "api" && q.queryKey[1] !== "backups",
+          });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.backupSettings() });
+        }
+      },
+      error: (e) =>
+        console.warn("madoyomiRestoreStatusChanged subscription failed:", e.code, e.message),
     },
   );
 

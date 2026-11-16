@@ -54,4 +54,8 @@ export const queryKeys = {
       ? (["api", "downloads", "completed", kind] as const)
       : (["api", "downloads", "completed"] as const),
   downloadSettings: () => ["api", "downloads", "settings"] as const,
+  backups: () => ["api", "backups"] as const,
+  backupFiles: () => ["api", "backups", "files"] as const,
+  backupSettings: () => ["api", "backups", "settings"] as const,
+  restoreStatus: () => ["api", "backups", "restore"] as const,
 };

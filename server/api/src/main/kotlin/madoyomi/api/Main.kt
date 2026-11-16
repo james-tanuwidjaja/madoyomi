@@ -6,6 +6,7 @@ package madoyomi.api
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.core.backup.BackupScheduler
 import madoyomi.core.downloads.DownloadQueue
 import madoyomi.core.library.LibraryUpdateScheduler
 import madoyomi.core.player.PlaybackSessions
@@ -50,10 +51,12 @@ fun main(args: Array<String>) {
     reapPlaybackOrphans()
     scheduleLibraryUpdates()
     startDownloads()
+    scheduleBackups()
 
     javalinSetup { config ->
         SidecarHttp.install(config, token, startedAt)
         AnimeHttp.install(config)
+        BackupHttp.install(config)
     }
 
     val port = JavalinSetup.connector?.localPort ?: error("HTTP connector was not created")
@@ -132,6 +135,12 @@ private fun scheduleLibraryUpdates() {
 private fun startDownloads() {
     runCatching { DownloadQueue.start() }
         .onFailure { KotlinLogging.logger {}.warn(it) { "could not start the download queue" } }
+}
+
+/** The scheduled backup (Phase 6 Stage 6), from `<data dir>/backup-settings.json` (off by default). */
+private fun scheduleBackups() {
+    runCatching { BackupScheduler.start() }
+        .onFailure { KotlinLogging.logger {}.warn(it) { "could not schedule the backups" } }
 }
 
 /** When the parent goes away its end of our stdin closes and read() returns -1 (backup to the Windows job object). */

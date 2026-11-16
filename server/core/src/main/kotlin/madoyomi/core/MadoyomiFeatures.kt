@@ -36,6 +36,13 @@ object MadoyomiFeatures {
      */
     val upstreamAutoDownloadEnabled = false
 
+    /**
+     * Upstream's scheduled manga-only backup (`ProtoBackupExport.scheduleAutomatedBackupTask`, every `backupInterval`
+     * days into `.tachibk` files in `backups`). Madoyomi schedules its own `.madoyomi-backup` of both kinds instead
+     * (`madoyomi.core.backup.BackupScheduler`, Phase 6 Stage 6; off by default, the user's decision).
+     */
+    val upstreamAutomatedBackupEnabled = false
+
     /** Upstream's single-instance check, which probes the configured port. Tauri owns the lifecycle instead. */
     val appMutexEnabled = false
 

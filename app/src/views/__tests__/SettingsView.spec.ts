@@ -6,6 +6,8 @@ import type { QueryClient } from "@tanstack/vue-query";
 import { createQueryClient } from "../../api/realtime";
 import { ApiError } from "../../api/client";
 import type {
+  BackupFile,
+  BackupSettings,
   DownloadSettings,
   DownloadTool,
   LibraryUpdateSettings,
@@ -42,6 +44,14 @@ const ops = vi.hoisted(() => ({
   fetchDownloadSettings: vi.fn(),
   setDownloadSettings: vi.fn(),
   fetchDownloadTools: vi.fn(),
+  fetchBackups: vi.fn(),
+  fetchBackupSettings: vi.fn(),
+  setBackupSettings: vi.fn(),
+  createBackup: vi.fn(),
+  deleteBackup: vi.fn(),
+  fetchRestoreStatus: vi.fn(),
+  uploadBackup: vi.fn(),
+  validateBackup: vi.fn(),
 }));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -68,6 +78,16 @@ let reader: ReaderSettings;
 let cache: PageCache;
 let updateSettings: LibraryUpdateSettings;
 let downloadSettings: DownloadSettings;
+let backupFiles: BackupFile[];
+let backupSettings: BackupSettings;
+const manualBackup: BackupFile = {
+  name: "Madoyomi_2026-11-16_21-00-00.madoyomi-backup",
+  path: "D:\\data\\backups\\Madoyomi_2026-11-16_21-00-00.madoyomi-backup",
+  size: 86_016,
+  modifiedAt: 1_700_000_000_000,
+  automatic: false,
+  format: "MADOYOMI",
+};
 
 function toolFound(tool: DownloadTool["tool"], path?: string): DownloadTool {
   return {
@@ -159,6 +179,37 @@ beforeEach(() => {
       (downloadSettings = { ...downloadSettings, ...patch }),
   );
   ops.fetchDownloadTools.mockImplementation(async () => [toolFound("FFMPEG"), toolFound("YT_DLP")]);
+  backupFiles = [manualBackup];
+  backupSettings = {
+    intervalHours: 0,
+    keep: 7,
+    nextScheduledAt: null,
+    folder: "D:\\data\\backups",
+    lastError: null,
+  };
+  ops.fetchBackups.mockImplementation(async () => backupFiles);
+  ops.fetchBackupSettings.mockImplementation(async () => backupSettings);
+  ops.setBackupSettings.mockImplementation(
+    async (patch: Partial<BackupSettings>) =>
+      (backupSettings = {
+        ...backupSettings,
+        ...patch,
+        nextScheduledAt:
+          (patch.intervalHours ?? backupSettings.intervalHours) > 0 ? 1_700_086_400_000 : null,
+      }),
+  );
+  ops.fetchRestoreStatus.mockResolvedValue({
+    state: "IDLE",
+    name: null,
+    mode: null,
+    step: null,
+    current: 0,
+    total: 0,
+    title: null,
+    problems: [],
+    startedAt: 0,
+    finishedAt: 0,
+  });
   setBackendReady();
   useBackendStore().mode = "tauri";
 });
@@ -541,5 +592,109 @@ describe("SettingsView: the download tools (Phase 6 Stage 5)", () => {
     });
     expect(status("YT_DLP").classes()).toContain("danger");
     expect(status("YT_DLP").text()).toContain("Settings → Downloads");
+  });
+});
+
+describe("SettingsView: Backup (Phase 6 Stage 6)", () => {
+  const section = () => wrapper.find('[data-testid="backup-settings"]');
+
+  it("lists the backups, backs up now, and turns the schedule on with what to keep", async () => {
+    await mountSettings();
+    expect(section().text()).toContain("Only when you back up.");
+    expect(wrapper.find('[data-testid="backup-keep-select"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="backup-path"]').text()).toBe("D:\\data\\backups");
+    const row = wrapper.find(`[data-backup="${manualBackup.name}"]`);
+    expect(row.text()).toContain("84 KB · Manual");
+
+    const scheduled: BackupFile = { ...manualBackup, name: "Madoyomi_new.madoyomi-backup" };
+    ops.createBackup.mockResolvedValue(scheduled);
+    await wrapper.find('[data-action="backup-now"]').trigger("click");
+    await flushPromises();
+    expect(ops.createBackup).toHaveBeenCalledOnce();
+    expect(wrapper.find('[data-testid="backup-created"]').text()).toContain(
+      "Madoyomi_new.madoyomi-backup",
+    );
+    expect(wrapper.findAll("[data-backup]").map((r) => r.attributes("data-backup"))).toEqual([
+      "Madoyomi_new.madoyomi-backup",
+      manualBackup.name,
+    ]);
+
+    const interval = wrapper.find<HTMLSelectElement>('[data-testid="backup-interval-select"]');
+    interval.element.value = "24";
+    await interval.trigger("change");
+    await flushPromises();
+    expect(ops.setBackupSettings).toHaveBeenCalledWith({ intervalHours: 24 });
+    expect(section().text()).toContain("Next at");
+    const keep = wrapper.find<HTMLSelectElement>('[data-testid="backup-keep-select"]');
+    keep.element.value = "3";
+    await keep.trigger("change");
+    await flushPromises();
+    expect(ops.setBackupSettings).toHaveBeenLastCalledWith({ keep: 3 });
+  });
+
+  it("deletes a backup on the second click, and opens the restore dialog for one", async () => {
+    ops.deleteBackup.mockResolvedValue([]);
+    await mountSettings();
+    const del = () =>
+      wrapper.find(`[data-backup="${manualBackup.name}"] [data-action="delete-backup"]`);
+    await del().trigger("click");
+    expect(del().text()).toBe("Delete it?");
+    expect(ops.deleteBackup).not.toHaveBeenCalled();
+    await del().trigger("click");
+    await flushPromises();
+    expect(ops.deleteBackup).toHaveBeenCalledWith(manualBackup.name);
+    expect(wrapper.find('[data-testid="backup-empty"]').exists()).toBe(true);
+  });
+
+  it("fetches the list again when a delete finds the file gone (the schedule pruned it)", async () => {
+    await mountSettings();
+    expect(ops.fetchBackups).toHaveBeenCalledTimes(1);
+    backupFiles = [];
+    ops.deleteBackup.mockRejectedValue(
+      new ApiError({ kind: "graphql", code: "NOT_FOUND", message: "No backup named x" }),
+    );
+    const del = () =>
+      wrapper.find(`[data-backup="${manualBackup.name}"] [data-action="delete-backup"]`);
+    await del().trigger("click");
+    await del().trigger("click");
+    await flushPromises();
+    expect(ops.fetchBackups).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('[data-testid="backup-empty"]').exists()).toBe(true);
+    expect(section().element.parentElement!.textContent).toContain("No backup named x");
+  });
+
+  it("keeps a picked file in the folder, then opens it in the restore dialog", async () => {
+    ops.uploadBackup.mockResolvedValue("picked.madoyomi-backup");
+    ops.validateBackup.mockReturnValue(new Promise(() => {}));
+    await mountSettings();
+    const input = wrapper.find<HTMLInputElement>('[data-testid="backup-file-input"]');
+    const file = new File(["x"], "picked.madoyomi-backup");
+    Object.defineProperty(input.element, "files", { value: [file], configurable: true });
+    await input.trigger("change");
+    await flushPromises();
+    expect(ops.uploadBackup).toHaveBeenCalledWith(file, "picked.madoyomi-backup");
+    expect(ops.validateBackup).toHaveBeenCalledWith("picked.madoyomi-backup");
+    expect(document.body.querySelector('[data-testid="restore-dialog"]')).not.toBeNull();
+  });
+
+  it("shows a restore's progress and, once done, its problems", async () => {
+    ops.fetchRestoreStatus.mockResolvedValue({
+      state: "SUCCESS",
+      name: manualBackup.name,
+      mode: "MERGE",
+      step: "MANGA",
+      current: 7,
+      total: 7,
+      title: null,
+      problems: ["Repo Keiyoushi: no answer"],
+      startedAt: 1_700_000_000_000,
+      finishedAt: 1_700_000_009_000,
+    });
+    await mountSettings();
+    const status = wrapper.find('[data-testid="restore-status"]');
+    expect(status.text()).toContain("Restored, with 1 problem");
+    expect(wrapper.find('[data-testid="restore-problems"]').text()).toBe(
+      "Repo Keiyoushi: no answer",
+    );
   });
 });

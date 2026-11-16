@@ -1459,6 +1459,158 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.log(report.join("\n"));
   }, 1_900_000);
 
+  it("backs up, sends the file back as a picked one, restores it with merge over the WebSocket, and loses nothing", async () => {
+    type File = { name: string; size: string; automatic: boolean; format: string };
+    type Status = { state: string; step: string | null; problems: string[]; finishedAt: string };
+    const COUNTS = [
+      "anime",
+      "seasons",
+      "episodes",
+      "watchedEpisodes",
+      "animeHistory",
+      "animeCategories",
+      "manga",
+      "chapters",
+      "readChapters",
+      "mangaHistory",
+      "mangaCategories",
+    ] as const;
+    type Report = Record<(typeof COUNTS)[number], number> & {
+      format: string;
+      repos: { added: boolean }[];
+      certificates: { trusted: boolean }[];
+      extensions: { installed: boolean }[];
+      settingsFiles: string[];
+      missingSources: unknown[];
+    };
+    const report: string[] = [];
+    const made: string[] = [];
+    const backup = async () => {
+      const f = (
+        await client.gql<{ createMadoyomiBackup: { backup: File } }>(
+          operations.CREATE_MADOYOMI_BACKUP_MUTATION,
+        )
+      ).createMadoyomiBackup.backup;
+      made.push(f.name);
+      expect(f.name).toMatch(/^Madoyomi_.*\.madoyomi-backup$/);
+      expect(f.automatic).toBe(false);
+      return f;
+    };
+    const validate = async (name: string) =>
+      (
+        await client.gql<{ validateMadoyomiBackup: Report }>(
+          operations.VALIDATE_MADOYOMI_BACKUP_QUERY,
+          { name },
+        )
+      ).validateMadoyomiBackup;
+    const counts = (r: Report) => Object.fromEntries(COUNTS.map((k) => [k, r[k]]));
+
+    // the schedule round-trips unchanged
+    const settings = (
+      await client.gql<{ madoyomiBackupSettings: Record<string, unknown> }>(
+        operations.MADOYOMI_BACKUP_SETTINGS_QUERY,
+      )
+    ).madoyomiBackupSettings;
+    expect(String(settings.folder)).toMatch(/backups$/);
+    const same = await client.gql<{
+      setMadoyomiBackupSettings: { settings: Record<string, unknown> };
+    }>(operations.SET_MADOYOMI_BACKUP_SETTINGS_MUTATION, {
+      intervalHours: settings.intervalHours,
+      keep: settings.keep,
+    });
+    expect(same.setMadoyomiBackupSettings.settings).toEqual(settings);
+
+    const ws = createSubscriptionClient({});
+    try {
+      const first = await backup();
+      const listed = (
+        await client.gql<{ madoyomiBackups: File[] }>(operations.MADOYOMI_BACKUPS_QUERY)
+      ).madoyomiBackups;
+      expect(listed.map((f) => f.name)).toContain(first.name);
+      const before = await validate(first.name);
+      expect(before.format).toBe("MADOYOMI");
+      expect(before.repos.every((r) => r.added)).toBe(true);
+      expect(before.extensions.every((e) => e.installed)).toBe(true);
+      expect(before.settingsFiles.length).toBeGreaterThan(0);
+      report.push(`backup ${first.name}: ${first.size} bytes, ${JSON.stringify(counts(before))}`);
+
+      // the bytes over REST, sent back as a file the user picked; something else is refused
+      const bytes = await client.fetchAsset(
+        `/api/v1/madoyomi/backups/${encodeURIComponent(first.name)}`,
+        { reload: true },
+      );
+      expect(bytes.size).toBe(Number(first.size));
+      const picked = `live-${Date.now()}.madoyomi-backup`;
+      const kept = JSON.parse(
+        await (
+          await client.fetchAsset(`/api/v1/madoyomi/backups?name=${encodeURIComponent(picked)}`, {
+            method: "POST",
+            body: bytes,
+          })
+        ).text(),
+      ) as { name: string };
+      expect(kept.name).toBe(picked);
+      made.push(kept.name);
+      const refused = await client
+        .fetchAsset("/api/v1/madoyomi/backups?name=notes.madoyomi-backup", {
+          method: "POST",
+          body: new Blob(["not a backup"]),
+        })
+        .then(
+          () => null,
+          (e: unknown) => e,
+        );
+      expect(refused).toBeInstanceOf(ApiError);
+      expect((refused as ApiError).code).toBe("BAD_REQUEST");
+
+      // a merge of the backup over the same data, followed over the WebSocket
+      const statuses: Status[] = [];
+      let onConnected!: () => void;
+      const connected = new Promise<void>((resolve) => (onConnected = resolve));
+      ws.subscribe<{ madoyomiRestoreStatusChanged: Status }>(
+        operations.MADOYOMI_RESTORE_STATUS_SUBSCRIPTION,
+        {},
+        {
+          next: (d) => {
+            statuses.push(d.madoyomiRestoreStatusChanged);
+            onConnected();
+          },
+        },
+      );
+      ws.setEndpoint(client.subscriptionUrl());
+      await connected;
+      const started = Date.now();
+      const status = (
+        await client.gql<{ restoreMadoyomiBackup: { status: Status } }>(
+          operations.RESTORE_MADOYOMI_BACKUP_MUTATION,
+          { name: kept.name, mode: "MERGE", repos: [], certificates: [], extensions: [] },
+        )
+      ).restoreMadoyomiBackup.status;
+      expect(status.state).toBe("RUNNING");
+      await expect
+        .poll(() => statuses[statuses.length - 1]?.state, { timeout: 300_000, interval: 500 })
+        .toBe("SUCCESS");
+      expect(statuses[statuses.length - 1]!.problems).toEqual([]);
+      const steps = [...new Set(statuses.map((s) => s.step).filter(Boolean))];
+      report.push(`restore (merge) in ${Date.now() - started} ms, steps ${steps.join(", ")}`);
+      expect(steps).toContain("MANGA");
+
+      const after = await validate((await backup()).name);
+      expect(counts(after)).toEqual(counts(before));
+      expect(after.repos.length).toBe(before.repos.length);
+      expect(after.extensions.length).toBe(before.extensions.length);
+      expect(after.settingsFiles).toEqual(before.settingsFiles);
+    } finally {
+      ws.dispose();
+      for (const name of made) {
+        await client
+          .gql(operations.DELETE_MADOYOMI_BACKUP_MUTATION, { name })
+          .catch(() => undefined);
+      }
+    }
+    console.log(report.join("\n"));
+  }, 600_000);
+
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];
     let onConnected!: () => void;

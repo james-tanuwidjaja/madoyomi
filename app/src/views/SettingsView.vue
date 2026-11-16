@@ -44,6 +44,17 @@ import { THEME_CHOICES, useThemeStore, type ThemeChoice } from "../stores/theme"
 import { formatLang } from "../utils/format";
 import { canBrowse, sourceAccess } from "../utils/sources";
 import ReaderPrefsFields from "../components/reader/ReaderPrefsFields.vue";
+import BackupRestoreDialog from "../components/BackupRestoreDialog.vue";
+import {
+  useBackupFiles,
+  useBackupSettings,
+  useCreateBackup,
+  useDeleteBackup,
+  useRestoreStatus,
+  useSetBackupSettings,
+  useUploadBackup,
+} from "../composables/useBackups";
+import { BACKUP_INTERVALS, BACKUP_KEEP, backupFileText, restoreStatusText } from "../utils/backups";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import PageLayout from "../components/PageLayout.vue";
 
@@ -69,6 +80,11 @@ import PageLayout from "../components/PageLayout.vue";
  * flags say which categories), and the folder downloads are saved in (the data dir's, the user's decision), with
  * Show in Explorer. The backend keeps them, for both kinds. Stage 5: new episodes too, and the two programs anime
  * downloads use, ffmpeg (HLS) and yt-dlp (its fallback), each with its path (empty: looked for) and a check, as mpv's.
+ *
+ * Backup (Phase 6 Stage 6): Back up now, the schedule (off by default, the user's decision; daily or weekly, keeping
+ * the last N), the folder with Show in Explorer, the backup files (Restore…, Show, Delete with a second click), a file
+ * the user picks (kept in the folder, then restored), and the restore's progress and problems. BackupRestoreDialog
+ * shows what a file holds, merge (the default, the user's decision) or replace, and the trust prompt.
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -213,6 +229,65 @@ const QUALITY_LABELS: Record<VideoQualityPreference, string> = {
 
 function selectValue(e: Event): string {
   return (e.target as HTMLSelectElement).value;
+}
+
+// Backup (Phase 6 Stage 6)
+const backupFiles = useBackupFiles();
+const backupSettings = useBackupSettings();
+const setBackup = useSetBackupSettings();
+const createBackupNow = useCreateBackup();
+const deleteBackupFile = useDeleteBackup();
+const uploadBackupFile = useUploadBackup();
+const restoreStatus = useRestoreStatus();
+const backup = computed(() => backupSettings.data.value);
+const restoreName = ref<string | null>(null);
+const restoreOpen = ref(false);
+const armedDelete = ref<string | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+const restoreShown = computed(() => {
+  const s = restoreStatus.data.value;
+  return s && s.state !== "IDLE" ? s : null;
+});
+const backupError = computed(
+  () =>
+    createBackupNow.error.value ??
+    uploadBackupFile.error.value ??
+    deleteBackupFile.error.value ??
+    setBackup.error.value,
+);
+
+function openRestore(name: string) {
+  restoreName.value = name;
+  restoreOpen.value = true;
+}
+
+async function pickBackupFile(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  try {
+    openRestore(await uploadBackupFile.mutateAsync(file));
+  } catch {
+    // shown below, from backupError
+  }
+}
+
+function removeBackup(name: string) {
+  if (armedDelete.value !== name) {
+    armedDelete.value = name;
+    return;
+  }
+  armedDelete.value = null;
+  deleteBackupFile.mutate(name);
+}
+
+function saveBackupInterval(e: Event) {
+  setBackup.mutate({ intervalHours: Number(selectValue(e)) });
+}
+
+function saveBackupKeep(e: Event) {
+  setBackup.mutate({ keep: Number(selectValue(e)) });
 }
 
 function saveThreshold(e: Event) {
@@ -633,6 +708,185 @@ const unknown = computed(
         title="Couldn't save the change"
         :error="setDownloads.error.value"
       />
+    </section>
+
+    <section class="group" aria-labelledby="settings-backup">
+      <h2 id="settings-backup">Backup</h2>
+      <div class="card" data-testid="backup-settings">
+        <div class="row">
+          <div class="text">
+            <span>Back up now</span>
+            <span class="summary">
+              Both kinds' library, categories, progress and history, the repos, the certificates you
+              trusted, the extensions (not their files), the source settings and these settings. Not
+              the downloads.
+            </span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-accent"
+            data-action="backup-now"
+            :disabled="createBackupNow.isPending.value"
+            @click="createBackupNow.mutate()"
+          >
+            {{ createBackupNow.isPending.value ? "Backing up…" : "Back up now" }}
+          </button>
+        </div>
+        <p v-if="createBackupNow.data.value" class="row summary" data-testid="backup-created">
+          Saved {{ createBackupNow.data.value.name }} ({{
+            formatBytes(createBackupNow.data.value.size)
+          }}).
+        </p>
+        <template v-if="backup">
+          <div class="row">
+            <label class="text" for="settings-backup-interval">
+              <span>Automatic backups</span>
+              <span class="summary">
+                <template v-if="backup.intervalHours > 0 && backup.nextScheduledAt">
+                  Next at {{ clockTime(backup.nextScheduledAt) }}.
+                </template>
+                <template v-else>Only when you back up.</template>
+              </span>
+            </label>
+            <select
+              id="settings-backup-interval"
+              class="field"
+              data-testid="backup-interval-select"
+              :value="backup.intervalHours"
+              @change="saveBackupInterval"
+            >
+              <option v-for="c in BACKUP_INTERVALS" :key="c.value" :value="c.value">
+                {{ c.label }}
+              </option>
+            </select>
+          </div>
+          <div v-if="backup.intervalHours > 0" class="row">
+            <label class="text" for="settings-backup-keep">
+              <span>Keep the last</span>
+              <span class="summary">Older automatic backups are deleted; yours are kept.</span>
+            </label>
+            <select
+              id="settings-backup-keep"
+              class="field"
+              data-testid="backup-keep-select"
+              :value="backup.keep"
+              @change="saveBackupKeep"
+            >
+              <option v-for="n in BACKUP_KEEP" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
+          <p v-if="backup.lastError" class="row summary danger" data-testid="backup-last-error">
+            The last automatic backup failed: {{ backup.lastError }}
+          </p>
+          <div class="row">
+            <div class="text">
+              <span>Backup folder</span>
+              <span class="summary">.madoyomi-backup files: gzipped, readable by Madoyomi.</span>
+            </div>
+            <div class="path-actions">
+              <code class="path" data-testid="backup-path">{{ backup.folder }}</code>
+              <button
+                v-if="backend.mode === 'tauri'"
+                type="button"
+                class="btn"
+                data-action="open-backups"
+                @click="revealFolder(backup.folder)"
+              >
+                Show in Explorer
+              </button>
+            </div>
+          </div>
+        </template>
+        <ErrorNotice
+          v-else-if="backupSettings.isError.value"
+          class="row"
+          title="Couldn't load the backup settings"
+          :error="backupSettings.error.value"
+          @retry="backupSettings.refetch()"
+        />
+        <div class="row">
+          <div class="text">
+            <span>Restore</span>
+            <span class="summary">
+              From a backup below, or from a file: a .madoyomi-backup, or a Mihon or Aniyomi
+              .tachibk (its manga).
+            </span>
+          </div>
+          <input
+            ref="fileInput"
+            type="file"
+            class="hidden-input"
+            accept=".madoyomi-backup,.tachibk,.gz"
+            data-testid="backup-file-input"
+            @change="pickBackupFile"
+          />
+          <button
+            type="button"
+            class="btn"
+            data-action="restore-file"
+            :disabled="uploadBackupFile.isPending.value || restoreShown?.state === 'RUNNING'"
+            @click="fileInput?.click()"
+          >
+            {{ uploadBackupFile.isPending.value ? "Reading…" : "Restore from a file…" }}
+          </button>
+        </div>
+        <div v-if="restoreShown" class="row restore-status" data-testid="restore-status">
+          <div class="text">
+            <span>{{ restoreStatusText(restoreShown) }}</span>
+            <span class="summary">{{ restoreShown.name }}</span>
+            <progress
+              v-if="restoreShown.state === 'RUNNING' && restoreShown.total > 0"
+              :max="restoreShown.total"
+              :value="restoreShown.current"
+            />
+            <ul v-if="restoreShown.problems.length" class="problems" data-testid="restore-problems">
+              <li v-for="(p, i) in restoreShown.problems" :key="i">{{ p }}</li>
+            </ul>
+          </div>
+        </div>
+        <ul v-if="backupFiles.data.value?.length" class="backup-list" data-testid="backup-list">
+          <li v-for="f in backupFiles.data.value" :key="f.name" class="row" :data-backup="f.name">
+            <div class="text">
+              <span class="backup-name">{{ f.name }}</span>
+              <span class="summary">{{ backupFileText(f) }}</span>
+            </div>
+            <div class="path-actions">
+              <button
+                type="button"
+                class="btn"
+                data-action="restore-backup"
+                :disabled="restoreShown?.state === 'RUNNING'"
+                @click="openRestore(f.name)"
+              >
+                Restore…
+              </button>
+              <button
+                v-if="backend.mode === 'tauri'"
+                type="button"
+                class="btn"
+                data-action="show-backup"
+                @click="revealFolder(f.path)"
+              >
+                Show
+              </button>
+              <button
+                type="button"
+                class="btn"
+                :class="{ danger: armedDelete === f.name }"
+                data-action="delete-backup"
+                @click="removeBackup(f.name)"
+              >
+                {{ armedDelete === f.name ? "Delete it?" : "Delete" }}
+              </button>
+            </div>
+          </li>
+        </ul>
+        <p v-else-if="backupFiles.isSuccess.value" class="row muted" data-testid="backup-empty">
+          No backups yet.
+        </p>
+      </div>
+      <ErrorNotice v-if="backupError" title="Couldn't do that" :error="backupError" />
+      <BackupRestoreDialog v-model:open="restoreOpen" :name="restoreName" />
     </section>
 
     <section class="group" aria-labelledby="settings-player">
@@ -1081,6 +1335,31 @@ h2 {
   width: 340px;
   font-family: var(--font-family-mono);
   font-size: var(--font-size-caption);
+}
+
+.hidden-input {
+  display: none;
+}
+
+.backup-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.backup-name {
+  overflow-wrap: anywhere;
+}
+
+.restore-status progress {
+  width: 100%;
+  margin-top: var(--space-2);
+}
+
+.problems {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  color: var(--color-text-secondary);
 }
 
 .danger {
