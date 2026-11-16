@@ -29,6 +29,8 @@ export interface ListItem {
    * page count (0 or less: not known yet).
    */
   pages?: { lastPageRead: number; pageCount: number };
+  /** Phase 6 Stage 4: downloaded (a chapter's CBZ), shown as a badge. */
+  downloaded?: boolean;
   /**
    * Anime only: mpv is playing it now (or has it paused), or the backend is fetching its videos again after mpv
    * couldn't open the video (Stage 4).
@@ -76,6 +78,7 @@ export function fromChapter(c: Chapter): ListItem {
     bookmarked: c.isBookmarked,
     filler: false,
     pages: { lastPageRead: c.lastPageRead, pageCount: c.pageCount },
+    downloaded: c.isDownloaded ?? false,
   };
 }
 

@@ -6,9 +6,10 @@ import type { QueryClient } from "@tanstack/vue-query";
 import { createQueryClient } from "../../api/realtime";
 import type { MediaKind } from "../../api/types";
 import { useMediaKindStore } from "../../stores/mediaKind";
+import { makeDownloadItem, makeDownloadQueue } from "../../test/fixtures";
 import { mountView, setBackendReady } from "../../test/mountView";
 
-const ops = vi.hoisted(() => ({ fetchUpdateMarks: vi.fn() }));
+const ops = vi.hoisted(() => ({ fetchUpdateMarks: vi.fn(), fetchDownloadQueue: vi.fn() }));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   ...ops,
@@ -16,7 +17,10 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import AppShell from "../AppShell.vue";
 
-/* The sidebar's Updates entry (Phase 6 Stage 3): the kind's new items since its entries were opened. */
+/*
+ * The sidebar's Updates entry (Phase 6 Stage 3): the kind's new items since its entries were opened; Downloads
+ * (Stage 4): the kind's queued and downloading items.
+ */
 let pinia: Pinia;
 let queryClient: QueryClient;
 let wrapper: VueWrapper;
@@ -30,6 +34,7 @@ beforeEach(() => {
   setBackendReady();
   marks = { anime: { 1: 2, 3: 1 }, manga: {} };
   ops.fetchUpdateMarks.mockImplementation(async (kind: MediaKind) => marks[kind]);
+  ops.fetchDownloadQueue.mockResolvedValue(makeDownloadQueue());
 });
 
 afterEach(() => {
@@ -61,5 +66,23 @@ describe("AppShell", () => {
     await queryClient.invalidateQueries();
     await flushPromises();
     expect(wrapper.find('[data-testid="nav-badge-updates"]').text()).toBe("99+");
+  });
+
+  it("shows how many of the kind's downloads are queued or downloading", async () => {
+    ops.fetchDownloadQueue.mockResolvedValue(
+      makeDownloadQueue([
+        makeDownloadItem({ id: 1, state: "DOWNLOADING" }),
+        makeDownloadItem({ id: 2 }),
+        makeDownloadItem({ id: 3, state: "PAUSED" }),
+        makeDownloadItem({ id: 4, kind: "anime" }),
+      ]),
+    );
+    wrapper = mountView(AppShell, { pinia, queryClient });
+    await flushPromises();
+    // anime first (the store's default)
+    expect(wrapper.find('[data-testid="nav-badge-downloads"]').text()).toBe("1");
+    useMediaKindStore().set("manga");
+    await flushPromises();
+    expect(wrapper.find('[data-testid="nav-badge-downloads"]').text()).toBe("2");
   });
 });

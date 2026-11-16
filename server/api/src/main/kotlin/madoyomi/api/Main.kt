@@ -6,6 +6,7 @@ package madoyomi.api
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import madoyomi.core.downloads.DownloadQueue
 import madoyomi.core.library.LibraryUpdateScheduler
 import madoyomi.core.player.PlaybackSessions
 import suwayomi.tachidesk.graphql.server.GraphQLSchemaProvider
@@ -48,6 +49,7 @@ fun main(args: Array<String>) {
     forceAuthModeNone()
     reapPlaybackOrphans()
     scheduleLibraryUpdates()
+    startDownloads()
 
     javalinSetup { config ->
         SidecarHttp.install(config, token, startedAt)
@@ -124,6 +126,12 @@ private fun reapPlaybackOrphans() {
 private fun scheduleLibraryUpdates() {
     runCatching { LibraryUpdateScheduler.start() }
         .onFailure { KotlinLogging.logger {}.warn(it) { "could not schedule the library update check" } }
+}
+
+/** The download queue (Phase 6 Stage 4): what a stop cut off is queued again and the queue goes on. */
+private fun startDownloads() {
+    runCatching { DownloadQueue.start() }
+        .onFailure { KotlinLogging.logger {}.warn(it) { "could not start the download queue" } }
 }
 
 /** When the parent goes away its end of our stdin closes and read() returns -1 (backup to the Windows job object). */

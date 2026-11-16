@@ -126,6 +126,26 @@ class MigrationsFromEmptyDbTest {
                 "ANIME_CATEGORY_ANIME" to setOf("ID", "CATEGORY", "ANIME"),
                 "ANIME_UPDATE_MARK" to setOf("ID", "ANIME", "NEW_COUNT", "MARKED_AT"),
                 "MANGA_UPDATE_MARK" to setOf("ID", "MANGA", "USER_ID", "NEW_COUNT", "MARKED_AT"),
+                "DOWNLOAD" to
+                    setOf(
+                        "ID",
+                        "KIND",
+                        "MANGA",
+                        "CHAPTER",
+                        "ANIME",
+                        "EPISODE",
+                        "USER_ID",
+                        "SOURCE_ID",
+                        "STATE",
+                        "POSITION",
+                        "PROGRESS_DONE",
+                        "PROGRESS_TOTAL",
+                        "BYTES",
+                        "TRIES",
+                        "ERROR",
+                        "ADDED_AT",
+                        "FINISHED_AT",
+                    ),
             )
 
         /** Foreign keys of the new tables: table -> column -> (referenced table, ON DELETE rule or null if unspecified). */
@@ -140,6 +160,13 @@ class MigrationsFromEmptyDbTest {
                     mapOf("CATEGORY" to ("ANIME_CATEGORY" to "CASCADE"), "ANIME" to ("ANIME" to "CASCADE")),
                 "ANIME_UPDATE_MARK" to mapOf("ANIME" to ("ANIME" to "CASCADE")),
                 "MANGA_UPDATE_MARK" to mapOf("MANGA" to ("MANGA" to "CASCADE"), "USER_ID" to ("USERACCOUNT" to "CASCADE")),
+                "DOWNLOAD" to
+                    mapOf(
+                        "MANGA" to ("MANGA" to "CASCADE"),
+                        "CHAPTER" to ("CHAPTER" to "CASCADE"),
+                        "ANIME" to ("ANIME" to "CASCADE"),
+                        "EPISODE" to ("EPISODE" to "CASCADE"),
+                    ),
             )
 
         @BeforeAll
@@ -170,7 +197,7 @@ class MigrationsFromEmptyDbTest {
         val migrations = loadMigrations()
         val versions = migrations.map { it.version }.sorted()
         assertEquals((1..migrations.size).toList(), versions, "migration versions must be consecutive from 1")
-        assertTrue(migrations.size >= 73, "expected at least M0069 to M0073, found ${migrations.size} migrations")
+        assertTrue(migrations.size >= 74, "expected at least M0069 to M0074, found ${migrations.size} migrations")
 
         val madoyomiVersions = migrations.filter { it is MadoyomiMigration }.map { it.version }.sorted()
         assertEquals(

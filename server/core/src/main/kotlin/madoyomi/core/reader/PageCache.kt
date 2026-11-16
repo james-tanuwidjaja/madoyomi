@@ -122,6 +122,7 @@ object PageCache {
         saveDir: String,
         fileName: String,
         fetcher: PageFetcher,
+        counted: Boolean = true,
     ): Pair<InputStream, String> {
         repeat(MAX_ROUNDS) {
             open(saveDir, fileName)?.let { return it }
@@ -129,7 +130,7 @@ object PageCache {
             val flight =
                 flights.computeIfAbsent(key) { k ->
                     scope
-                        .async(start = CoroutineStart.LAZY) { download(saveDir, fileName, fetcher) }
+                        .async(start = CoroutineStart.LAZY) { download(saveDir, fileName, fetcher, counted) }
                         .also { d -> d.invokeOnCompletion { flights.remove(k, d) } }
                 }
             flight.start()
@@ -138,6 +139,12 @@ object PageCache {
         return open(saveDir, fileName)
             ?: throw MadoyomiException(ErrorCode.INTERNAL, "The page $fileName was fetched but isn't in the cache")
     }
+
+    /** The file `<saveDir>/<fileName>.<ext>` if it is there (without using it). */
+    fun cached(
+        saveDir: String,
+        fileName: String,
+    ): File? = cachedFile(saveDir, fileName)
 
     /** Whether `<saveDir>/<fileName>.<ext>` is cached (without using it). */
     fun contains(
@@ -192,6 +199,7 @@ object PageCache {
         saveDir: String,
         fileName: String,
         fetcher: PageFetcher,
+        counted: Boolean,
     ) {
         if (cachedFile(saveDir, fileName) != null) return
         File(saveDir).mkdirs()
@@ -203,7 +211,7 @@ object PageCache {
                     if (response.code != 200) throw HttpException(response.code)
                     val (saved, _) = ImageResponse.saveImage(base, response.body.byteStream(), response.header("Content-Type"))
                     File(saved).setLastModified(clock())
-                    added(File(saved).length())
+                    if (counted) added(File(saved).length())
                 }
                 return
             } catch (e: CancellationException) {

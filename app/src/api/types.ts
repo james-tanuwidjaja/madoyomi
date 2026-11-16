@@ -434,6 +434,8 @@ export interface Chapter {
   /** When `lastPageRead` was last saved, epoch seconds ("0": never). Phase 5: "Continue reading" follows it. */
   lastReadAt: LongString;
   pageCount: number;
+  /** Phase 6 Stage 4: downloaded as a CBZ (upstream's `isDownloaded`, the user's); the reader reads it offline. */
+  isDownloaded?: boolean;
 }
 
 /** A browse result card, the same for both kinds. */
@@ -459,6 +461,8 @@ export interface LibraryEntry extends EntrySummary {
   unreadCount: number;
   /** When an episode was last played or a chapter last read, epoch seconds (0: never); the "Last watched/read" sort. */
   lastReadAt: number;
+  /** Phase 6 Stage 4: chapters downloaded (upstream's `MangaType.downloadCount`); anime's come in Stage 5. */
+  downloadCount?: number;
 }
 
 /**
@@ -834,4 +838,61 @@ export interface UpdatesItem {
 export interface UpdatesPage {
   items: UpdatesItem[];
   hasMore: boolean;
+}
+
+/**
+ * Where a download is (Phase 6 Stage 4): waiting its turn, being downloaded, paused, failed after its retries, or done
+ * (in the completed list until it is cleared or its file deleted).
+ */
+export type DownloadItemState = "QUEUED" | "DOWNLOADING" | "PAUSED" | "FAILED" | "DONE";
+
+/** An episode or chapter in the download queue or the completed list. */
+export interface DownloadItem {
+  id: number;
+  kind: MediaKind;
+  state: DownloadItemState;
+  /** The manga or anime. */
+  entryId: number;
+  /** The chapter or episode. */
+  itemId: number;
+  entryTitle: string;
+  itemName: string;
+  /** Pages downloaded of `progressTotal` (0 before the page list is known). */
+  progressDone: number;
+  progressTotal: number;
+  /** Bytes written so far; the file's size once done. */
+  bytes: number;
+  /** Failed attempts since it was queued or retried. */
+  tries: number;
+  error: string | null;
+  /** Epoch milliseconds. */
+  addedAt: number;
+  /** Epoch milliseconds; 0 until done. */
+  finishedAt: number;
+}
+
+/** The queue: every unfinished item of both kinds in order, and how many of each kind are in the completed list. */
+export interface DownloadQueue {
+  items: DownloadItem[];
+  mangaDone: number;
+  animeDone: number;
+  /** Epoch milliseconds of the last item done (0: none in the completed list): the completed list is fetched again. */
+  lastFinishedAt: number;
+}
+
+export interface CompletedDownloadsPage {
+  items: DownloadItem[];
+  hasMore: boolean;
+}
+
+/** Settings → Downloads, kept by the backend for both kinds. */
+export interface DownloadSettings {
+  /** Downloads at once, all sources together (1 to 10). */
+  maxParallel: number;
+  /** Downloads at once from one source (1 to 3). */
+  perSource: number;
+  /** Queue the new chapters a library update finds in categories with Downloads on (off on a fresh install). */
+  autoDownload: boolean;
+  /** The folder downloads are saved in (read only). */
+  path: string;
 }

@@ -7,6 +7,8 @@ import type { MediaKind } from "../api/types";
 import type { NavItem } from "../router";
 import { useMediaKindStore } from "../stores/mediaKind";
 import { useUpdateMarks } from "../composables/useLibraryUpdates";
+import { useDownloadQueue } from "../composables/useDownloads";
+import { queueCounts } from "../utils/downloads";
 import NavIcon from "./NavIcon.vue";
 import ShellFooter from "./ShellFooter.vue";
 
@@ -29,10 +31,17 @@ const items: { id: NavItem; label: string; to: string }[] = [
 const settings = { id: "settings" as const, label: "Settings", to: "/settings" };
 
 // Phase 6 Stage 3: Updates shows how many new episodes or chapters the kind's entries got since they were opened
+// and (Stage 4) Downloads how many of the kind are queued or downloading
 const marks = useUpdateMarks(() => mediaKind.kind);
+const downloadQueue = useDownloadQueue();
 const badges = computed<Partial<Record<NavItem, string>>>(() => {
+  const label = (n: number) => (n > 99 ? "99+" : String(n));
   const n = marks.total.value;
-  return n > 0 ? { updates: n > 99 ? "99+" : String(n) } : {};
+  const active = queueCounts(downloadQueue.data.value, mediaKind.kind).active;
+  return {
+    ...(n > 0 ? { updates: label(n) } : {}),
+    ...(active > 0 ? { downloads: label(active) } : {}),
+  };
 });
 
 // The section of the last page that has one of its own. A details page opened from Browse keeps Browse marked rather
@@ -101,7 +110,11 @@ watch(
               v-if="badges[item.id]"
               class="nav-badge"
               :data-testid="`nav-badge-${item.id}`"
-              :aria-label="`${badges[item.id]} new`"
+              :aria-label="
+                item.id === 'downloads'
+                  ? `${badges[item.id]} downloading or queued`
+                  : `${badges[item.id]} new`
+              "
               >{{ badges[item.id] }}</span
             >
           </RouterLink>

@@ -1,5 +1,6 @@
 import { PLAYBACK_SESSION_FIELDS } from "./playback";
 import { LIBRARY_CHECK_FIELDS } from "./updates";
+import { DOWNLOAD_QUEUE_FIELDS } from "./downloads";
 
 /** Every install and update step, of every extension (no `pkgName` filter: the app follows all of them). */
 export const EXTENSION_INSTALL_PROGRESS_SUBSCRIPTION = /* GraphQL */ `
@@ -69,4 +70,17 @@ export const LIBRARY_UPDATES_SUBSCRIPTION = /* GraphQL */ `
     }
   }
   ${LIBRARY_CHECK_FIELDS}
+`;
+
+/**
+ * The download queue (Phase 6 Stage 4, the WS "downloads" event): at once on subscribing, then on every change (queued,
+ * started, a page, done, failed, moved, removed), at most every 250 ms. The latest one wins.
+ */
+export const DOWNLOADS_CHANGED_SUBSCRIPTION = /* GraphQL */ `
+  subscription DownloadsChanged {
+    downloadsChanged {
+      ...DownloadQueueFields
+    }
+  }
+  ${DOWNLOAD_QUEUE_FIELDS}
 `;

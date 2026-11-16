@@ -1113,6 +1113,190 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.log(report.join("\n"));
   }, 240_000);
 
+  it("downloads a chapter as a CBZ over the queue, follows it over the WebSocket, reads it and deletes it", async (ctx) => {
+    type Item = {
+      id: number;
+      itemId: number;
+      state: string;
+      progressDone: number;
+      progressTotal: number;
+    };
+    type Queue = { items: Item[]; mangaDone: number; lastFinishedAt: string };
+    const report: string[] = [];
+
+    // the settings round-trip unchanged
+    const settings = (
+      await client.gql<{ downloadSettings: Record<string, unknown> }>(
+        operations.DOWNLOAD_SETTINGS_QUERY,
+      )
+    ).downloadSettings;
+    const same = await client.gql<{ setDownloadSettings: { settings: Record<string, unknown> } }>(
+      operations.SET_DOWNLOAD_SETTINGS_MUTATION,
+      { autoDownload: settings.autoDownload },
+    );
+    expect(same.setDownloadSettings.settings).toEqual(settings);
+    expect(String(settings.path)).toMatch(/downloads$/);
+
+    const list = (
+      await client.gql<{ sources: { nodes: SourceBase[] } }>(operations.MANGA_SOURCES_QUERY)
+    ).sources.nodes;
+    const usable = list
+      .filter((s) => s.id !== "0" && s.extension.isTrusted && s.extension.isLoaded)
+      .sort((a, b) => Number(b.name === "MangaPill") - Number(a.name === "MangaPill"));
+    if (usable.length === 0) return ctx.skip();
+    let chapters: { id: number; name: string; sourceOrder: number }[] = [];
+    let mangaId = 0;
+    let sourceName = "";
+    for (const s of usable.slice(0, 5)) {
+      const input = { source: s.id, type: "POPULAR", page: 1, query: null, filters: null };
+      const mangas = (
+        await client.gql<{ fetchSourceManga: { mangas: { id: number }[] } }>(
+          operations.BROWSE_MANGA_MUTATION,
+          { input },
+        )
+      ).fetchSourceManga.mangas;
+      if (mangas.length === 0) continue;
+      const found = (
+        await client.gql<{
+          fetchChapters: { chapters: { id: number; name: string; sourceOrder: number }[] };
+        }>(operations.FETCH_CHAPTERS_MUTATION, { mangaId: mangas[0].id })
+      ).fetchChapters.chapters;
+      if (found.length < 2) continue;
+      chapters = [...found].sort((a, b) => a.sourceOrder - b.sourceOrder).slice(0, 2);
+      mangaId = mangas[0].id;
+      sourceName = s.name;
+      break;
+    }
+    if (chapters.length < 2) return ctx.skip();
+    const [first, second] = chapters as [(typeof chapters)[0], (typeof chapters)[0]];
+    // a download left from an earlier run goes first
+    await client.gql(operations.DELETE_DOWNLOADS_MUTATION, {
+      kind: "MANGA",
+      itemIds: [first.id, second.id],
+    });
+
+    const events: Queue[] = [];
+    let onConnected!: () => void;
+    const connected = new Promise<void>((resolve) => (onConnected = resolve));
+    const ws = createSubscriptionClient({ onConnected: () => onConnected() });
+    try {
+      ws.subscribe<{ downloadsChanged: Queue }>(
+        operations.DOWNLOADS_CHANGED_SUBSCRIPTION,
+        {},
+        { next: (d) => events.push(d.downloadsChanged) },
+      );
+      ws.setEndpoint(client.subscriptionUrl());
+      await connected;
+      await expect.poll(() => events.length, { timeout: 10_000 }).toBeGreaterThan(0);
+      const doneBefore = events[events.length - 1]!.mangaDone;
+
+      const queued = (
+        await client.gql<{ enqueueDownloads: { queued: number; downloadQueue: Queue } }>(
+          operations.ENQUEUE_DOWNLOADS_MUTATION,
+          { kind: "MANGA", itemIds: [first.id, second.id] },
+        )
+      ).enqueueDownloads;
+      expect(queued.queued).toBe(2);
+      const secondItem = queued.downloadQueue.items.find((i) => i.itemId === second.id)!;
+      expect(secondItem).toBeTruthy();
+
+      // the second waits behind the first (one per source): pause it, move it, resume it, cancel it
+      const paused = (
+        await client.gql<{ pauseDownloads: { changed: number; downloadQueue: Queue } }>(
+          operations.PAUSE_DOWNLOADS_MUTATION,
+          { ids: [secondItem.id] },
+        )
+      ).pauseDownloads;
+      expect(paused.changed).toBe(1);
+      expect(paused.downloadQueue.items.find((i) => i.id === secondItem.id)?.state).toBe("PAUSED");
+      const moved = (
+        await client.gql<{ reorderDownload: { downloadQueue: Queue } }>(
+          operations.REORDER_DOWNLOAD_MUTATION,
+          { id: secondItem.id, to: 0 },
+        )
+      ).reorderDownload.downloadQueue;
+      expect(
+        moved.items.filter((i) => i.itemId === first.id || i.itemId === second.id)[0]?.id,
+      ).toBe(secondItem.id);
+      await client.gql(operations.RESUME_DOWNLOADS_MUTATION, { ids: [secondItem.id] });
+      const cancelled = (
+        await client.gql<{ cancelDownloads: { changed: number; downloadQueue: Queue } }>(
+          operations.CANCEL_DOWNLOADS_MUTATION,
+          { ids: [secondItem.id] },
+        )
+      ).cancelDownloads;
+      expect(cancelled.changed).toBe(1);
+      expect(cancelled.downloadQueue.items.some((i) => i.id === secondItem.id)).toBe(false);
+      await client.gql(operations.RETRY_DOWNLOADS_MUTATION, { kind: "MANGA", ids: [] });
+
+      const t = performance.now();
+      await expect
+        .poll(
+          () =>
+            events.some(
+              (e) => e.mangaDone > doneBefore && !e.items.some((i) => i.itemId === first.id),
+            ),
+          {
+            timeout: 180_000,
+            interval: 500,
+          },
+        )
+        .toBe(true);
+      const seconds = ((performance.now() - t) / 1000).toFixed(1);
+      expect(
+        events.some((e) => e.items.some((i) => i.itemId === first.id && i.state === "DOWNLOADING")),
+      ).toBe(true);
+
+      const chapter = (
+        await client.gql<{ chapter: { isDownloaded: boolean; pageCount: number } }>(
+          `{ chapter(id: ${first.id}) { isDownloaded pageCount } }`,
+        )
+      ).chapter;
+      expect(chapter.isDownloaded).toBe(true);
+      const completed = (
+        await client.gql<{
+          completedDownloads: { items: { itemId: number; bytes: string; progressDone: number }[] };
+        }>(operations.COMPLETED_DOWNLOADS_QUERY, { kind: "MANGA", limit: 10, offset: 0 })
+      ).completedDownloads.items.find((i) => i.itemId === first.id);
+      expect(Number(completed?.bytes)).toBeGreaterThan(0);
+      expect(completed?.progressDone).toBe(chapter.pageCount);
+
+      // the reader's way: its pages come from the CBZ
+      const pages = (
+        await client.gql<{ fetchChapterPages: { pages: string[] } }>(
+          operations.FETCH_CHAPTER_PAGES_MUTATION,
+          { chapterId: first.id },
+        )
+      ).fetchChapterPages.pages;
+      expect(pages.length).toBe(chapter.pageCount);
+      const page = await fetch(client.assetUrl(pages[pages.length - 1]!)!);
+      expect(page.status).toBe(200);
+      expect(page.headers.get("content-type")).toMatch(/^image\//);
+      report.push(
+        `${sourceName} manga ${mangaId} '${first.name}': ${chapter.pageCount} pages, ${completed?.bytes} bytes as a CBZ in ${seconds} s`,
+      );
+
+      const deleted = (
+        await client.gql<{ deleteDownloads: { deleted: number } }>(
+          operations.DELETE_DOWNLOADS_MUTATION,
+          { kind: "MANGA", itemIds: [first.id] },
+        )
+      ).deleteDownloads;
+      expect(deleted.deleted).toBe(1);
+      expect(
+        (
+          await client.gql<{ chapter: { isDownloaded: boolean } }>(
+            `{ chapter(id: ${first.id}) { isDownloaded } }`,
+          )
+        ).chapter.isDownloaded,
+      ).toBe(false);
+      await client.gql(operations.CLEAR_COMPLETED_DOWNLOADS_MUTATION, { kind: "MANGA" });
+    } finally {
+      ws.dispose();
+    }
+    console.log(report.join("\n"));
+  }, 300_000);
+
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];
     let onConnected!: () => void;

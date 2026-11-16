@@ -14,7 +14,8 @@ import type { EntrySummary } from "../api/types";
  * `hideLibraryBadge`: for the Library itself, where every card is in it. `selectable` (the Library's selection, Phase 6):
  * the card is a toggle button instead of a link, `selected` marks it, and a click emits `select` with the event (for
  * Shift+click ranges). `count` (Phase 6 Stage 2): the unwatched/unread badge, shown above 0. `newCount` (Stage 3):
- * the "N new" mark of an entry a library update check found new items in, until it is opened.
+ * the "N new" mark of an entry a library update check found new items in, until it is opened. `downloaded` (Stage 4):
+ * how many of its chapters are downloaded, shown above 0.
  */
 const props = defineProps<{
   entry: EntrySummary;
@@ -23,6 +24,7 @@ const props = defineProps<{
   selected?: boolean;
   count?: number;
   newCount?: number;
+  downloaded?: number;
 }>();
 const emit = defineEmits<{ select: [event: MouseEvent] }>();
 
@@ -85,6 +87,14 @@ const countLabel = computed(() => {
         data-testid="new-count"
         :title="`${newCount!.toLocaleString('en-US')} new since you last opened it`"
         >{{ newCount!.toLocaleString("en-US") }} new</span
+      >
+      <span
+        v-if="(downloaded ?? 0) > 0"
+        class="downloaded"
+        data-testid="downloaded-count"
+        :title="`${downloaded!.toLocaleString('en-US')} downloaded`"
+        :aria-label="`${downloaded!.toLocaleString('en-US')} downloaded`"
+        >↓ {{ downloaded!.toLocaleString("en-US") }}</span
       >
       <span v-if="selectable" class="check" :class="{ on: selected }" aria-hidden="true">{{
         selected ? "✓" : ""
@@ -184,6 +194,19 @@ button.card:hover {
   font-weight: var(--font-weight-semibold);
   line-height: 1.5rem;
   text-align: center;
+}
+
+.downloaded {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5rem;
 }
 
 .new {

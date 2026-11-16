@@ -440,7 +440,7 @@ What `PageImages` and `PageCache` (`madoyomi.core.reader`, core) add:
 - **One fetch per page at a time.** Concurrent requests for a page wait for the same download and share its result or its error. Upstream let each fetch and write the same `.tmp` file, which a prefetch and the reader would have raced on. The download runs in a scope of its own, so a caller that goes away doesn't cancel it for the others.
 - **One retry.** A transient failure (an I/O error that isn't a Cloudflare challenge, HTTP 408, 425, 429, 5xx) is tried once more as it was. An HTTP 401, 403, 404 or 410 first gets the page's image URL anew, because a source's URLs may expire and upstream keeps the page list from the chapter's last `fetchChapterPages`. A page with its own URL is resolved again with `getImageUrl`, and `PAGE.image_url` is updated. Otherwise the chapter's page list is fetched again (`refreshChapterPageList`), once for all of a chapter's pages that fail together.
 - **`SOURCE_FAILED` (424)** with `details.httpCode` and `details.retried` for a source's HTTP error or I/O failure. Upstream answered a non-200 that wasn't thrown as `Exception("request error! …")`, which was `INTERNAL`.
-- **The cache's cap and LRU eviction** (`ReaderSettings.pageCacheLimitMb`, 1 GiB by default, 256 MiB to 10 GiB; the user's decision). A hit sets the file's modification time. Once the counted size passes the cap, a background trim removes the oldest files to 90 % of the cap, and the empty folders. Files used in the last 5 minutes stay even over the cap: they are the chapter being read, its prefetch, and upstream's downloader, which stages a chapter's pages in this same folder (`ChaptersFilesProvider`; Phase 6). A leftover `.tmp` is never a hit.
+- **The cache's cap and LRU eviction** (`ReaderSettings.pageCacheLimitMb`, 1 GiB by default, 256 MiB to 10 GiB; the user's decision). A hit sets the file's modification time. Once the counted size passes the cap, a background trim removes the oldest files to 90 % of the cap, and the empty folders. Files used in the last 5 minutes stay even over the cap: they are the chapter being read and its prefetch. (Upstream's downloader staged a chapter's pages in this same folder, `ChaptersFilesProvider`; since Phase 6 Stage 4 Madoyomi's queue stages them outside it, in `<downloads>/.partial`, uncounted: "Manga downloads (Phase 6)".) A leftover `.tmp` is never a hit.
 - **The prefetch** (`PageImages.prefetch`): pages `from` … `from + count - 1` (1 to 20) of a chapter through upstream's `getPageImage`, in the background, at most 2 requests at a time across chapters. A chapter whose page list was never fetched gets it first. A new prefetch of a chapter replaces the one still queued for it. Downloaded chapters and the Local source are skipped.
 
 Not changed: upstream's `clearCachedImages` mutation (`ImageMutation`) still clears the same folder; `PageCache`'s counted size then drifts until its next scan. The cache folders are named by the source, the manga title and the scanlator and chapter name (`getChapterCachePath` → `DirName.getChapterDir`), not by ids (see "Id-keyed caches in the data dir").
@@ -533,7 +533,66 @@ GraphQL (`madoyomi.api.graphql.LibraryUpdateGraphQL`), named apart from upstream
 
 Tests: `api/src/test/kotlin/madoyomi/api/LibraryUpdateApiTest.kt` (8: the anime diff through a fake source with the counts, the mark, the feed's first-fetch rule and a re-listed episode; a Seasons entry; the manga diff through upstream's code with a fake manga source and a failure; the category rule for both kinds and one category's check; the skip settings; one entry per source with the stagger and the parallel limit; stop, adding to a running check and the subscription; the settings file, their checks and a 400 ms real schedule), and `MigrationsFromEmptyDbTest` (M0073's tables and foreign keys).
 
-Not changed: upstream's per-user library update settings (`excludeUnreadChapters`, `excludeNotStarted`, `excludeCompleted`, `globalUpdateInterval`) stay in its config but nothing Madoyomi runs reads them. `CATEGORY.include_in_download` is shown in the app but used only from Stage 4.
+Not changed: upstream's per-user library update settings (`excludeUnreadChapters`, `excludeNotStarted`, `excludeCompleted`, `globalUpdateInterval`) stay in its config but nothing Madoyomi runs reads them. `CATEGORY.include_in_download` is used from Stage 4 ("Manga downloads (Phase 6)"): `LibraryUpdater.onNewItems` hands a manga's new chapter ids to the download queue.
+
+### Manga downloads (Phase 6)
+
+Phase 6 doc §9 "Stage 4". The download queue is Madoyomi's, for both kinds (anime joins it in Stage 5), in place of upstream's manga-only `DownloadManager`/`Downloader` (`suwayomi.tachidesk.manga.impl.download`). Upstream's kept its queue in memory and saved it only as an unordered set of chapter ids in SharedPreferences, so a restart lost the order, the failures and a pause. It paused only as a whole, retried at once with no stagger, and staged a chapter's pages in the reader's page cache folder, which Phase 5's cap trims. What Madoyomi reuses: upstream's page list for a download (`getChapterDownloadReadyById`), its CBZ path (`getChapterCbzPath`) and reader for downloaded chapters (`Page.getPageImage` → `ChapterDownloadHelper` → `ArchiveProvider`), its `ComicInfo.xml` (`createComicInfoFile`), its marks (`CHAPTER.is_downloaded`, `CHAPTER_USER.is_downloaded`/`is_download_requested`), its delete (`Chapter.deleteDownloadedChapters`) and its category rule (`Manga.isInIncludedDownloadCategory`). Three edits:
+
+| File | Change |
+|---|---|
+| `core/.../server/ServerSetup.kt` (`ApplicationDirs.mangaDownloadsRoot`) | **Stage 4:** `<downloads>/manga` (upstream: `<downloads>/mangas`), beside Stage 5's `<downloads>/anime` (one `// Madoyomi:` comment). Upstream's reader, delete and `InitialMigration` all go through this property. |
+| `core/.../manga/impl/Chapter.kt` (`downloadNewChapters`) | **Stage 4:** returns at once behind `MadoyomiFeatures.upstreamAutoDownloadEnabled` (false; one `// Madoyomi:` comment). Upstream queued new chapters into its own `DownloadManager` on every chapter list fetch (a details page opened too), when the user's `autoDownloadNewChapters` was on. Madoyomi queues them after a library update check only (`MangaDownloads.autoDownload`), so there is one queue and one rule. |
+| `core/.../manga/impl/download/fileProvider/impl/ArchiveProvider.kt` (`getImageInputStream`) | **Stage 4's live check:** the page's stream (`ZipEntryStream`, a `FilterInputStream`) owns its `ZipFile` and closes it on `close()` (two `// Madoyomi:` comments). Upstream opened a `ZipFile` per page and returned only the entry's stream, so the archive was unreachable at once: commons-compress's `ZipFile.finalize()` could close the channel while the page was still being sent (`ClosedChannelException`, seen once in the reader), and every page left a file handle open until GC. This is the reader's path for every downloaded chapter (`Page.getPageImage` → `ChapterDownloadHelper.getImage`). |
+
+`madoyomi.core.downloads`:
+- `DownloadTable` (M0074) and `DownloadItemState` (`QUEUED`, `DOWNLOADING`, `PAUSED`, `FAILED`, `DONE`).
+- `DownloadQueue`: the queue for both kinds, in the table, so it survives a restart. A row left `DOWNLOADING` by a stop is queued again at `start()` (from `madoyomi.api.Main`).
+  - **Limits:** at most `DownloadSettings.maxParallel` downloads at once (3), `perSource` of one source (1), and two starts of one source `staggerMs` (1 s) apart.
+  - **States:** a failure is retried after 5 s, then 30 s, then `FAILED` with its error. `pause`/`resume`/`retry`/`cancel` take ids or a whole kind; a cancelled item's staged parts are discarded.
+  - **Order:** `reorder` moves an item among its kind's unfinished ones, keeping the other kind's positions. Done rows are the completed list (`clearCompleted`; `forgetDone` when their files are deleted).
+  - **Changes:** `changes` (a counter) drives the subscription.
+- `ItemDownloader`, one per kind; `MangaChapterDownloader` for manga:
+  - the page list through upstream's `getChapterDownloadReadyById`;
+  - the pages staged in `<downloads>/.partial/manga/<chapterId>/` (outside the page cache), one at a time. A page staged by an earlier attempt is kept, and one in the reader's page cache is copied. The others go through `PageImages.get(…, counted = false)`: the source's client and rate limits, the expired-URL retry, `SOURCE_FAILED`, not counted towards the cache's cap;
+  - a `.page-count` file wipes what was staged for a page list of another length;
+  - then upstream's `ComicInfo.xml`, the CBZ, upstream's marks set as its downloader does, and the staging folder deleted.
+- `CbzWriter`: the staged files in name order, images stored and `ComicInfo.xml` deflated, one fixed entry time, written as `<name>.cbz.part` and moved over the target.
+- `MangaDownloads`:
+  - **`enqueue`:** in reading order. Downloaded chapters are only marked as the user's (upstream's rule); the Local source is left out.
+  - **`delete`:** cancels unfinished items, then upstream's `Chapter.deleteDownloadedChapters`.
+  - **`autoDownload`:** called through `LibraryUpdater.onNewItems` with the new chapter ids of a checked manga, when the setting is on and upstream's `includeInDownload` rule lets the entry in.
+- `DownloadSettings`/`DownloadSettingsStore`: `<data dir>/downloads.json` (`maxParallel` 1–10, `perSource` 1–3, `autoDownload` false).
+
+Madoyomi code changed with it:
+- `PageCache.image` and `PageImages.get` take `counted` (a download's staging isn't the cache's), and `PageCache.cached` gives a page's file;
+- `LibraryUpdater` gives the new chapter ids to `onNewItems` (`newItemIds`).
+
+GraphQL (`madoyomi.api.graphql.DownloadGraphQL`), named apart from upstream's:
+- queries: `downloadQueue` → `DownloadQueueType` (`items`: the unfinished `DownloadItemType`s of both kinds in order; `mangaDone`, `animeDone`, `lastFinishedAt`), `completedDownloads(kind, limit, offset)` → `{ items, hasMore }` (the last finished first) and `downloadSettings` → `{ maxParallel, perSource, autoDownload, path }`;
+- mutations: `enqueueDownloads(input: {kind, itemIds})` (an anime kind is `BAD_REQUEST` until Stage 5), `pauseDownloads`, `resumeDownloads`, `retryDownloads` and `cancelDownloads` (`input: {kind, ids}`, null ids: all of the kind), `reorderDownload(input: {id, to})`, `deleteDownloads(input: {kind, itemIds})`, `clearCompletedDownloads(input: {kind})`, `setDownloadSettings`;
+- the `downloadsChanged` subscription: the queue at once, then on every change, at most every 250 ms.
+
+Tests: `api/src/test/kotlin/madoyomi/api/DownloadQueueApiTest.kt` (9, with a fake downloader):
+- the order, the global and per-source limits and the stagger;
+- retries, `FAILED` and Retry; pause, resume and cancel;
+- reorder; the queue across a stop and start of the workers;
+- what enqueue keeps, requeues and skips (and the cascade);
+- the settings; the subscription;
+- the automatic downloads after a library update, by setting and category.
+
+`api/src/test/kotlin/madoyomi/api/MangaDownloadApiTest.kt` (3, the real downloader against a loopback image host):
+- the CBZ with `ComicInfo.xml` at upstream's path, staged outside the page cache, then read through upstream's reader path with the host refusing everything;
+- a page in the reader's cache not fetched again, and a retry going on from the staged pages;
+- delete and clear.
+
+`core/src/test/kotlin/madoyomi/core/downloads/CbzWriterTest.kt` (2). `core/src/test/kotlin/madoyomi/core/downloads/CbzPageStreamTest.kt` (1): a 4 MB stored page read through `ArchiveProvider` across forced GC and finalization (`ClosedChannelException` on upstream's code). `MigrationsFromEmptyDbTest` checks M0074's table and foreign keys.
+
+Not changed:
+- Upstream's `DownloadManager`, `Downloader` and their GraphQL (`enqueueChapterDownloads`, `dequeueChapterDownloads`, `startDownloader`, `stopDownloader`, `clearDownloader`, `reorderChapterDownload(s)`, `downloadStatus`, `downloadChanged`, `downloadStatusChanged`) stay, but the app doesn't use them. `DownloadManager.restoreAndResumeDownloads` still runs at startup, on its own empty queue.
+- Upstream's `deleteDownloadedChapter(s)` still works, but leaves Madoyomi's completed row (it shows until Clear list); the app uses `deleteDownloads`.
+- `serverConfig.downloadAsCbz`, `downloadConversions`, `downloadsPath` and the per-user `autoDownloadNewChapters`/`excludeEntryWithUnreadChapters`/`autoDownloadNewChaptersLimit` aren't read by Madoyomi's queue: it always writes CBZ, without conversions, in the data dir's `downloads` (the user's decision).
+- `Migration.kt`'s `InitialMigration` (`migrateMangaDownloadDir`) runs once per data dir, at its first start. It moves the folders of `downloads/` into `downloads/manga` only when that folder doesn't exist, so a fresh data dir is left alone; it is never run again for Stage 5's `downloads/anime`.
 
 ### New Madoyomi code
 
@@ -551,7 +610,7 @@ Not changed: upstream's per-user library update settings (`excludeUnreadChapters
 | `core/src/main/kotlin/madoyomi/core/extension/TrustedSignatureTable.kt` | `TRUSTED_SIGNATURE` table + `SignatureTrustOrigin { USER, STORE }` |
 | `core/src/main/kotlin/madoyomi/core/anime/model/table/*.kt` | `AnimeSourceTable`, `AnimeTable`, `EpisodeTable`, `AnimeHistoryTable`, `AnimeCategoryTable` (Stage 3: the M0071 columns and unique indexes; Phase 6: `AnimeCategoryTable` is the category list and `AnimeCategoryAnimeTable` the join, M0072) |
 | `core/src/main/kotlin/madoyomi/core/database/MadoyomiMigration.kt` | marker interface for Madoyomi migrations (see "Database migrations") |
-| `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0069_MadoyomiExtensionKinds.kt`, `M0070_AnimeTables.kt`, `M0071_AnimeBrowse.kt`, `M0072_AnimeCategories.kt`, `M0073_LibraryUpdateMarks.kt` | Madoyomi migrations. New files, but in upstream's migration package, because the runner only scans that package. |
+| `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0069_MadoyomiExtensionKinds.kt`, `M0070_AnimeTables.kt`, `M0071_AnimeBrowse.kt`, `M0072_AnimeCategories.kt`, `M0073_LibraryUpdateMarks.kt`, `M0074_Downloads.kt` | Madoyomi migrations. New files, but in upstream's migration package, because the runner only scans that package. |
 | `core/src/test/kotlin/madoyomi/core/database/MigrationsFromEmptyDbTest.kt` | the migration chain on empty and pre-Madoyomi H2 databases, re-runs, schema and Exposed-table checks |
 | `core/src/main/kotlin/madoyomi/core/repo/ExtensionListing.kt`, `RepoStoreMeta.kt` | the common listing model (`ExtensionListing`, `ListingSource`), repo metadata, `FetchedRepo`, signing-key normalisation, the pkg/kind check |
 | `core/src/main/kotlin/madoyomi/core/repo/RepoIndexParser.kt` | `RepoIndexParser` + `ParsedIndex` (v2 store, legacy `repo.json`, legacy `index.min.json`), gzip sniff (64 MiB cap) |
@@ -605,6 +664,7 @@ Not changed: upstream's per-user library update settings (`excludeUnreadChapters
 | `core/src/main/kotlin/madoyomi/core/anime/AnimeCategories.kt`, `core/src/main/kotlin/madoyomi/core/anime/model/table/AnimeCategoryTable.kt` (`AnimeCategoryTable`, `AnimeCategoryAnimeTable`), `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0072_AnimeCategories.kt`, `api/src/main/kotlin/madoyomi/api/graphql/AnimeCategoryGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/AnimeCategoryApiTest.kt` (Phase 6 Stage 1) | the anime library's categories: the tables (the stub `AnimeCategoryTable` became the list), the rules, the migration, the GraphQL and the data loader, and their tests (see "Library categories (Phase 6)"). `AnimeMutation.updateAnimes` and `AnimeType.categories` call them |
 | `core/src/main/kotlin/madoyomi/core/library/{AnimeHistory,MangaHistory}.kt`, `api/src/main/kotlin/madoyomi/api/graphql/HistoryGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/HistoryApiTest.kt` (Phase 6 Stage 2) | the watch history in `ANIME_HISTORY` and the reading history in upstream's `CHAPTER_USER.last_read_at`: the stamps, the lists with the resume targets, delete and clear, the library counts (`AnimeStatsDataLoader`), and their test (see "History and badges (Phase 6)"). `EpisodeProgress.save`, `AnimeMutation.updateEpisodes`, `AnimeDetails.reconcileEpisodes` and `AnimeType` call them |
 | `core/src/main/kotlin/madoyomi/core/library/{LibraryUpdater,LibraryUpdateScheduler,LibraryUpdateSettings,LibraryUpdateMarkTables,LibraryUpdatesFeed}.kt`, `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0073_LibraryUpdateMarks.kt`, `api/src/main/kotlin/madoyomi/api/graphql/LibraryUpdateGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/LibraryUpdateApiTest.kt` (Phase 6 Stage 3) | the library update check for both kinds, its schedule and settings, the "new" marks, the Updates feed, their GraphQL and test (see "Library updates (Phase 6)"). `madoyomi.api.Main` starts the scheduler; `MadoyomiFeatures.upstreamLibraryUpdateScheduleEnabled` turns upstream's schedule off |
+| `core/src/main/kotlin/madoyomi/core/downloads/{DownloadTable,DownloadQueue,DownloadSettings,CbzWriter,MangaDownloads}.kt`, `core/src/main/kotlin/suwayomi/tachidesk/server/database/migration/M0074_Downloads.kt`, `api/src/main/kotlin/madoyomi/api/graphql/DownloadGraphQL.kt`, `api/src/test/kotlin/madoyomi/api/{DownloadQueueApiTest,MangaDownloadApiTest}.kt`, `core/src/test/kotlin/madoyomi/core/downloads/CbzWriterTest.kt` (Phase 6 Stage 4) | the download queue for both kinds, the manga chapter downloader, the CBZ writer, the settings, the migration, their GraphQL and tests (see "Manga downloads (Phase 6)"). `madoyomi.api.Main` starts the queue; `MadoyomiFeatures.upstreamAutoDownloadEnabled` turns upstream's automatic downloads off |
 | `core/src/main/kotlin/madoyomi/core/library/MangaNewEntryCategories.kt`, `api/src/test/kotlin/madoyomi/api/MangaNewEntryCategoriesApiTest.kt` (Phase 6 Stage 1) | manga added to the library through upstream's GraphQL go into the categories flagged for new entries, called from upstream's `MangaMutation.updateMangas` (see "Library categories (Phase 6)"), and its test |
 | `core/src/main/kotlin/madoyomi/core/reader/{ReaderSettings,PageCache,PageImages}.kt`, `api/src/main/kotlin/madoyomi/api/graphql/ReaderGraphQL.kt` (Phase 5 Stage 1) | the reader settings and their file, the chapter-page cache (single-flight, retry, errors, cap and eviction), the page fetch with the expired-URL retry and the prefetch, and their GraphQL (see "Manga reader (Phase 5)") |
 | `core/src/test/kotlin/madoyomi/core/reader/{PageCacheTest,ReaderSettingsTest}.kt`, `api/src/test/kotlin/madoyomi/api/PageImagesApiTest.kt` (Phase 5 Stage 1) | their tests |
@@ -637,6 +697,7 @@ Rules for Madoyomi migrations:
 Sources are typed by table (manga in `SOURCE`, anime in `ANIME_SOURCE`), and repos and extensions by the `type` column. The reasoning is in the Phase 1 doc (`docs/phases/phase-1-backend-foundation.md`, step 6).
 
 | `M0073_LibraryUpdateMarks` (Phase 6 Stage 3) | Creates `ANIME_UPDATE_MARK` (`ANIME` → `ANIME`, `CASCADE`, unique; `NEW_COUNT` default 0; `MARKED_AT` epoch s, default 0) and `MANGA_UPDATE_MARK` (`MANGA` → `MANGA` and `USER_ID` → `USERACCOUNT`, both `CASCADE`, unique `(MANGA, USER_ID)`; `NEW_COUNT`, `MARKED_AT`). Idempotent: `SchemaUtils.create` skips existing tables |
+| `M0074_Downloads` (Phase 6 Stage 4) | Creates `DOWNLOAD`: `KIND` (`MANGA`/`ANIME`), `MANGA` → `MANGA`, `CHAPTER` → `CHAPTER` (unique), `ANIME` → `ANIME`, `EPISODE` → `EPISODE` (unique), all four nullable and `CASCADE`; `USER_ID` (default 1), `SOURCE_ID`, `STATE` (default `QUEUED`), `POSITION`, `PROGRESS_DONE`, `PROGRESS_TOTAL`, `BYTES`, `TRIES` (default 0), `ERROR` (nullable), `ADDED_AT`, `FINISHED_AT` (epoch ms, default 0). Idempotent: `SchemaUtils.create` skips an existing table |
 
 ### Numbering collisions on an upstream sync
 

@@ -13,11 +13,14 @@ import {
 import {
   EXTENSION_INSTALL_PROGRESS_SUBSCRIPTION,
   EXTENSION_STORE_REFRESHED_SUBSCRIPTION,
+  DOWNLOADS_CHANGED_SUBSCRIPTION,
   LIBRARY_UPDATES_SUBSCRIPTION,
   PLAYBACK_EVENTS_SUBSCRIPTION,
 } from "./operations/subscriptions";
+import { toDownloadQueue, type DownloadQueueNode } from "./operations/downloads";
 import { fetchLibraryUpdateSettings } from "./operations/updates";
 import type {
+  DownloadQueue,
   Episode,
   ExtensionInstallProgress,
   ExtensionStoreRefreshed,
@@ -75,7 +78,10 @@ export interface RealtimeOptions {
  * - subscribes to `libraryUpdates` (Phase 6 Stage 3, the WS "library.updates" event): each status replaces the cached
  *   `libraryCheck`; when a check finds new items in an entry, that kind's library (its counts), Updates and marks are
  *   fetched again, and so is the entry's episode or chapter list if it is cached; when a check ends, both kinds' are,
- *   and if it found something, the toast setting is on and the window isn't focused, a Windows toast says what.
+ *   and if it found something, the toast setting is on and the window isn't focused, a Windows toast says what;
+ * - subscribes to `downloadsChanged` (Phase 6 Stage 4, the WS "downloads" event): each queue replaces the cached
+ *   `downloadQueue`; when items leave it (done, cancelled) or one finishes, their entries' episode or chapter lists
+ *   (the downloaded marks), the kind's library (its download counts) and its completed list are fetched again.
  *
  * Call after Pinia is installed. Returns a function that stops all of it.
  */
@@ -120,6 +126,7 @@ export function startRealtime(options: RealtimeOptions): {
         invalidateExtensions();
         void queryClient.invalidateQueries({ queryKey: queryKeys.libraryCheck() });
         void queryClient.invalidateQueries({ queryKey: queryKeys.updateMarks() });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.downloads() });
         const stale = playback.session;
         if (stale) {
           playback.clear();
@@ -223,6 +230,44 @@ export function startRealtime(options: RealtimeOptions): {
         }
       },
       error: (e) => console.warn("libraryUpdates subscription failed:", e.code, e.message),
+    },
+  );
+
+  // Phase 6 Stage 4: what the download queue changes
+  client.subscribe<{ downloadsChanged: DownloadQueueNode }>(
+    DOWNLOADS_CHANGED_SUBSCRIPTION,
+    {},
+    {
+      next: ({ downloadsChanged }) => {
+        const queue = toDownloadQueue(downloadsChanged);
+        const previous = queryClient.getQueryData<DownloadQueue>(queryKeys.downloadQueue());
+        queryClient.setQueryData(queryKeys.downloadQueue(), queue);
+        if (!previous) return;
+        const still = new Set(queue.items.map((i) => i.id));
+        const gone = previous.items.filter((i) => !still.has(i.id));
+        const finished =
+          queue.lastFinishedAt !== previous.lastFinishedAt ||
+          queue.mangaDone !== previous.mangaDone ||
+          queue.animeDone !== previous.animeDone;
+        if (gone.length === 0 && !finished) return;
+        const kinds = new Set<MediaKind>(gone.map((i) => i.kind));
+        if (finished) {
+          if (queue.mangaDone !== previous.mangaDone) kinds.add("manga");
+          if (queue.animeDone !== previous.animeDone) kinds.add("anime");
+          if (kinds.size === 0) kinds.add("manga");
+        }
+        for (const i of gone) {
+          void queryClient.invalidateQueries({
+            queryKey:
+              i.kind === "anime" ? queryKeys.episodes(i.entryId) : queryKeys.chapters(i.entryId),
+          });
+        }
+        for (const kind of kinds) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.library(kind) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.completedDownloads(kind) });
+        }
+      },
+      error: (e) => console.warn("downloadsChanged subscription failed:", e.code, e.message),
     },
   );
 

@@ -25,6 +25,7 @@ class MadoyomiSchema : GraphQLSchemaContribution {
             ReaderQuery(),
             HistoryQuery(),
             LibraryUpdateQuery(),
+            DownloadQueueQuery(),
         )
     override val mutations: List<Any> =
         listOf(
@@ -36,7 +37,9 @@ class MadoyomiSchema : GraphQLSchemaContribution {
             ReaderMutation(),
             HistoryMutation(),
             LibraryUpdateMutation(),
+            DownloadQueueMutation(),
         )
-    override val subscriptions: List<Any> = listOf(ExtensionSubscription(), PlaybackSubscription(), LibraryUpdateSubscription())
+    override val subscriptions: List<Any> =
+        listOf(ExtensionSubscription(), PlaybackSubscription(), LibraryUpdateSubscription(), DownloadQueueSubscription())
     override val dataLoaders: List<KotlinDataLoader<*, *>> = animeDataLoaders
 }

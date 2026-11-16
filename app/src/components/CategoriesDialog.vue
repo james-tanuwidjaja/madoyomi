@@ -29,12 +29,19 @@ import ErrorNotice from "./ErrorNotice.vue";
  *
  * Phase 6 Stage 3: each category, Default too, has the "Updates" flag (its entries are checked by Update library and
  * the schedule: upstream's `includeInUpdate`, UNSET when on, EXCLUDE when off) and the "Downloads" flag
- * (`includeInDownload`, the same way, for the automatic downloads of new items).
+ * (`includeInDownload`, the same way: Stage 4 queues the new chapters a library update finds in its entries when
+ * Settings → Downloads turns the automatic downloads on).
  */
 const props = defineProps<{ kind: MediaKind; entries: readonly LibraryEntry[] }>();
 const open = defineModel<boolean>("open", { required: true });
 
 const categories = useCategories(() => props.kind);
+// Stage 4: what the Downloads flag does (anime's automatic downloads come with Stage 5)
+const downloadsTitle = computed(() =>
+  props.kind === "anime"
+    ? "New episodes a library update finds in its entries will be downloaded automatically (coming with episode downloads)"
+    : "New chapters a library update finds in its entries are downloaded, when Settings → Downloads → Download new chapters is on",
+);
 const create = useCreateCategory();
 const update = useUpdateCategory();
 const move = useMoveCategory();
@@ -268,10 +275,7 @@ async function confirmDelete(c: LibraryCategory) {
                 />
                 Updates
               </label>
-              <label
-                class="flag"
-                title="Its entries' new episodes and chapters can be downloaded automatically"
-              >
+              <label class="flag" :title="downloadsTitle">
                 <input
                   type="checkbox"
                   :checked="flagOn(c.includeInDownload)"
@@ -338,10 +342,7 @@ async function confirmDelete(c: LibraryCategory) {
             />
             Updates
           </label>
-          <label
-            class="flag"
-            title="Its entries' new episodes and chapters can be downloaded automatically"
-          >
+          <label class="flag" :title="downloadsTitle">
             <input
               type="checkbox"
               :checked="flagOn(defaultCategory.includeInDownload)"

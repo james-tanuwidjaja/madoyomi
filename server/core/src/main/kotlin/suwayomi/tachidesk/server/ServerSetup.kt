@@ -108,8 +108,10 @@ class ApplicationDirs(
 
     val thumbnailDownloadsRoot
         get() = "$downloadsRoot/thumbnails"
+
+    // Madoyomi: `downloads/manga`, beside Stage 5's `downloads/anime` (upstream: `$downloadsRoot/mangas`)
     val mangaDownloadsRoot
-        get() = "$downloadsRoot/mangas"
+        get() = "$downloadsRoot/manga"
 
     val cacheDir = "$dataRoot/cache" // Madoyomi: also holds the two id-keyed caches above
 }
