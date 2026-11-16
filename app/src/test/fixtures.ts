@@ -1,6 +1,8 @@
 import type {
   Anime,
   Chapter,
+  DownloadItem,
+  DownloadQueue,
   Episode,
   Extension,
   ExtensionStore,
@@ -305,4 +307,33 @@ export function makeLibraryCheck(overrides: Partial<LibraryCheck> = {}): Library
     nextScheduledAt: null,
     ...overrides,
   };
+}
+
+/** A download queue item as the app holds it (Phase 6 Stage 4): a queued chapter of manga 34 by default. */
+export function makeDownloadItem(overrides: Partial<DownloadItem> = {}): DownloadItem {
+  return {
+    id: 1,
+    kind: "manga",
+    state: "QUEUED",
+    entryId: 34,
+    itemId: 5001,
+    entryTitle: "Kingdom",
+    itemName: "Chapter 1",
+    progressDone: 0,
+    progressTotal: 0,
+    bytes: 0,
+    tries: 0,
+    error: null,
+    addedAt: 1_700_000_000_000,
+    finishedAt: 0,
+    ...overrides,
+  };
+}
+
+/** The download queue with `items` (empty by default) and nothing completed. */
+export function makeDownloadQueue(
+  items: DownloadItem[] = [],
+  overrides: Partial<DownloadQueue> = {},
+): DownloadQueue {
+  return { items, mangaDone: 0, animeDone: 0, lastFinishedAt: 0, ...overrides };
 }

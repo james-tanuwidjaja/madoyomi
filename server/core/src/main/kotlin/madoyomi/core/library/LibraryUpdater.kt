@@ -129,6 +129,13 @@ object LibraryUpdater {
     @Volatile
     var parallelSourcesOverride: Int? = null
 
+    /**
+     * Called with the ids of the new chapters a check found in a manga entry (Stage 4: the download queue's automatic
+     * downloads, [madoyomi.core.downloads.MangaDownloads.autoDownload]).
+     */
+    @Volatile
+    var onNewItems: ((Entry, List<Int>) -> Unit)? = null
+
     /** Tests: what checking an entry does (returns its new item count); null for the real fetch. */
     @Volatile
     var checkOverride: (suspend (Entry) -> Int)? = null
@@ -365,7 +372,12 @@ object LibraryUpdater {
         val since = System.currentTimeMillis() / 1000
         // upstream's Updater: the details too when the user's setting says so or the entry was never initialized
         Manga.updateMangaAndChapters(entry.id, updateManga = !initialized || userConfig.updateMangas.value(entry.userId))
-        return newItems(before, since, chapters(entry.id))
+        val ids = newItemIds(before, since, chapters(entry.id))
+        if (ids.isNotEmpty()) {
+            runCatching { onNewItems?.invoke(entry, ids) }
+                .onFailure { logger.warn(it) { "library update: what follows the new chapters of manga ${entry.id} failed" } }
+        }
+        return ids.size
     }
 
     // id -> fetched_at of a manga's chapters
@@ -385,7 +397,23 @@ object LibraryUpdater {
         before: Set<Int>,
         since: Long,
         after: Map<Int, Long>,
-    ): Int = if (before.isEmpty()) 0 else after.count { (id, fetchedAt) -> id !in before && fetchedAt >= since }
+    ): Int = newItemIds(before, since, after).size
+
+    /** The ids of the items [newItems] counts. */
+    internal fun newItemIds(
+        before: Set<Int>,
+        since: Long,
+        after: Map<Int, Long>,
+    ): List<Int> =
+        if (before.isEmpty()) {
+            emptyList()
+        } else {
+            after
+                .filter { (id, fetchedAt) ->
+                    id !in before && fetchedAt >= since
+                }.keys
+                .toList()
+        }
 
     /** The entries of [target] to check, and how many of its library entries the settings or strategies leave out. */
     internal fun select(

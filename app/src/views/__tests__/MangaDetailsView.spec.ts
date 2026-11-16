@@ -18,6 +18,7 @@ const ops = vi.hoisted(() => ({
   refreshManga: vi.fn(),
   setInLibrary: vi.fn(),
   clearUpdateMarks: vi.fn(),
+  fetchDownloadQueue: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -58,6 +59,12 @@ beforeEach(() => {
   stored = makeManga();
   chapters = makeChapters(3);
   ops.fetchSources.mockResolvedValue([mangapill]);
+  ops.fetchDownloadQueue.mockResolvedValue({
+    items: [],
+    mangaDone: 0,
+    animeDone: 0,
+    lastFinishedAt: 0,
+  });
   ops.fetchManga.mockImplementation(async () => stored);
   ops.fetchChapters.mockImplementation(async () => chapters);
   ops.refreshManga.mockImplementation(async () => refreshResult());

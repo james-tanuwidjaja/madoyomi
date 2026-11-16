@@ -339,6 +339,7 @@ function onKeydown(event: KeyboardEvent) {
             :entry="item"
             hide-library-badge
             :count="item.unreadCount"
+            :downloaded="item.downloadCount"
             :new-count="marks.data.value?.[item.id] ?? 0"
             :selectable="selecting"
             :selected="selectedSet.has(item.id)"

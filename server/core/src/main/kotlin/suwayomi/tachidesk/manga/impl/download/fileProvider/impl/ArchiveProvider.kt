@@ -20,6 +20,7 @@ import suwayomi.tachidesk.manga.model.table.ChapterTable
 import suwayomi.tachidesk.server.ApplicationDirs
 import uy.kohesive.injekt.injectLazy
 import java.io.File
+import java.io.FilterInputStream
 import java.io.InputStream
 import java.nio.file.NoSuchFileException
 import java.util.zip.Deflater
@@ -45,12 +46,36 @@ class ArchiveProvider(
         }
     }
 
-    override suspend fun getImageInputStream(image: FileType.ZipFile): InputStream =
-        ZipFile
-            .builder()
-            .setFile(getChapterCbzPath(mangaId, chapterId))
-            .get()
-            .getInputStream(image.entry)
+    // Madoyomi: the page's stream owns its ZipFile and closes it. Upstream returned only the entry's stream and dropped
+    // the ZipFile, so a page left a file handle open until GC, and ZipFile's finalizer could close the channel while
+    // the page was still being served (ClosedChannelException in the reader, phase-6 §10 "Stage 4").
+    override suspend fun getImageInputStream(image: FileType.ZipFile): InputStream {
+        val zipFile =
+            ZipFile
+                .builder()
+                .setFile(getChapterCbzPath(mangaId, chapterId))
+                .get()
+        return try {
+            ZipEntryStream(zipFile.getInputStream(image.entry), zipFile)
+        } catch (e: Throwable) {
+            zipFile.close()
+            throw e
+        }
+    }
+
+    // Madoyomi: an entry's stream that closes its archive with it, and keeps the archive reachable until then.
+    private class ZipEntryStream(
+        entry: InputStream,
+        private val zipFile: ZipFile,
+    ) : FilterInputStream(entry) {
+        override fun close() {
+            try {
+                super.close()
+            } finally {
+                zipFile.close()
+            }
+        }
+    }
 
     override suspend fun extractExistingDownload() {
         val outputFile = File(getChapterCbzPath(mangaId, chapterId))

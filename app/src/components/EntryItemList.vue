@@ -30,6 +30,8 @@ import VirtualList from "./VirtualList.vue";
  *
  * Phase 5 Stage 2: a chapter row with `pages` shows how far it was read ("Page 13 of 92" and a bar). With `openable`
  * (ChapterList), a click on a row (not on its checkbox or buttons) emits `open` with its id: it opens the reader.
+ *
+ * Phase 6 Stage 4: a row with `downloaded` has a "Downloaded" badge, and the `tools` slot adds controls to the toolbar.
  */
 const props = defineProps<{
   kind: MediaKind;
@@ -57,6 +59,8 @@ function onRowClick(event: MouseEvent, id: number) {
 const selected = defineModel<number[]>("selected", { default: () => [] });
 
 defineSlots<{
+  /** Phase 6 Stage 4: more controls at the end of the toolbar (ChapterList: "Download…"). */
+  tools(): unknown;
   notice(): unknown;
   actions(props: { item: ListItem }): unknown;
   "bulk-actions"(props: { ids: number[] }): unknown;
@@ -249,6 +253,7 @@ const countLine = computed(() => {
       >
         Clear filters
       </button>
+      <slot name="tools" />
     </div>
     <p class="muted meta">
       <span data-testid="item-count">{{ countLine }}</span>
@@ -334,6 +339,7 @@ const countLine = computed(() => {
             <span v-if="item.filler" class="badge warn">Filler</span>
             <span v-if="item.bookmarked" class="badge" data-testid="bookmarked">Bookmarked</span>
             <span v-if="item.done" class="badge ok">{{ doneLabels.done }}</span>
+            <span v-if="item.downloaded" class="badge" data-testid="downloaded">Downloaded</span>
             <slot name="actions" :item="item" />
           </span>
         </div>

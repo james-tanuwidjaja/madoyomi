@@ -116,6 +116,7 @@ describe("fetchLibrary", () => {
             categories: { nodes: [{ id: 4 }, { id: 2 }] },
             unreadCount: 7,
             lastReadChapter: { lastReadAt: "1800" },
+            downloadCount: 2,
           },
         ],
       },
@@ -132,6 +133,7 @@ describe("fetchLibrary", () => {
         categoryIds: [4, 2],
         unreadCount: 7,
         lastReadAt: 1800,
+        downloadCount: 2,
       },
     ]);
   });

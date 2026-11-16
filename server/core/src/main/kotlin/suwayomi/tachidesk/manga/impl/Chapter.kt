@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.util.chapter.ChapterRecognition
 import eu.kanade.tachiyomi.util.chapter.ChapterSanitizer.sanitize
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.Serializable
+import madoyomi.core.MadoyomiFeatures
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
@@ -466,6 +467,13 @@ object Chapter {
                     "autoDownloadIgnoreReUploads= ${userConfig.autoDownloadIgnoreReUploads.value(userId)}" +
                     ")",
             )
+
+        // Madoyomi: new chapters are queued by Madoyomi's download queue after a library update check
+        // (madoyomi.core.downloads.MangaDownloads.autoDownload; server/UPSTREAM.md "Manga downloads (Phase 6)"), not by
+        // upstream's on every chapter list fetch
+        if (!MadoyomiFeatures.upstreamAutoDownloadEnabled) {
+            return
+        }
 
         if (!userConfig.autoDownloadNewChapters.value(userId)) {
             log.debug { "automatic download is not configured" }

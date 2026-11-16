@@ -10,7 +10,13 @@ export default defineConfig({
 
   // The reader (Phase 5) is a lazy route that imports the window API: pre-bundled up front, so its first open in
   // `pnpm dev` doesn't make Vite optimize it and reload the page mid-navigation.
-  optimizeDeps: { include: ["@tauri-apps/api/window", "@tauri-apps/plugin-notification"] },
+  optimizeDeps: {
+    include: [
+      "@tauri-apps/api/window",
+      "@tauri-apps/plugin-notification",
+      "@tauri-apps/plugin-opener",
+    ],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

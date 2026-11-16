@@ -95,6 +95,7 @@ export const CHAPTER_FIELDS = /* GraphQL */ `
     lastPageRead
     lastReadAt
     pageCount
+    isDownloaded
   }
 `;
 
@@ -295,6 +296,7 @@ export const LIBRARY_MANGA_QUERY = /* GraphQL */ `
         lastReadChapter {
           lastReadAt
         }
+        downloadCount
       }
     }
   }
@@ -447,7 +449,7 @@ export async function updateChapters(ids: number[], patch: ChapterPatch): Promis
 
 type LibraryNode = Omit<
   LibraryEntry,
-  "kind" | "inLibraryAt" | "categoryIds" | "unreadCount" | "lastReadAt"
+  "kind" | "inLibraryAt" | "categoryIds" | "unreadCount" | "lastReadAt" | "downloadCount"
 > & {
   inLibraryAt: string;
   /** `[{id}]` for anime, `{nodes: [{id}]}` for manga (upstream's node list). */
@@ -458,6 +460,7 @@ type LibraryNode = Omit<
   /** Manga: upstream's. */
   unreadCount?: number;
   lastReadChapter?: { lastReadAt: string } | null;
+  downloadCount?: number;
 };
 
 /** The entries of `kind` in the library (unsorted; the view sorts them). */
@@ -469,9 +472,18 @@ export async function fetchLibrary(kind: MediaKind, signal?: AbortSignal): Promi
       : (await api.gql<{ mangas: { nodes: LibraryNode[] } }>(LIBRARY_MANGA_QUERY, {}, { signal }))
           .mangas.nodes;
   return nodes.map(
-    ({ categories, unwatchedCount, lastSeenAt, unreadCount, lastReadChapter, ...n }) => ({
+    ({
+      categories,
+      unwatchedCount,
+      lastSeenAt,
+      unreadCount,
+      lastReadChapter,
+      downloadCount,
+      ...n
+    }) => ({
       ...n,
       kind,
+      downloadCount: downloadCount ?? 0,
       inLibraryAt: Number(n.inLibraryAt),
       categoryIds: (Array.isArray(categories) ? categories : categories.nodes).map((c) => c.id),
       unreadCount: (kind === "anime" ? unwatchedCount : unreadCount) ?? 0,

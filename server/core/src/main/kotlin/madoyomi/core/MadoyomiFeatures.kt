@@ -29,6 +29,13 @@ object MadoyomiFeatures {
      */
     val upstreamLibraryUpdateScheduleEnabled = false
 
+    /**
+     * Upstream's automatic download of new chapters (`Chapter.downloadNewChapters`), run on every chapter list fetch
+     * into upstream's `DownloadManager`. Madoyomi's queue does it after a library update check instead
+     * (`madoyomi.core.downloads.MangaDownloads.autoDownload`, Phase 6 Stage 4).
+     */
+    val upstreamAutoDownloadEnabled = false
+
     /** Upstream's single-instance check, which probes the configured port. Tauri owns the lifecycle instead. */
     val appMutexEnabled = false
 

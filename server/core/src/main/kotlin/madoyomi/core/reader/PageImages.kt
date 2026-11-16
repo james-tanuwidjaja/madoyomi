@@ -67,7 +67,11 @@ object PageImages {
     private val prefetchJobs = ConcurrentHashMap<Int, Job>()
     private val pageListRefreshedAt = ConcurrentHashMap<Int, Long>()
 
-    /** The image of [page] (page [index] of chapter [chapterId]) from the cache folder [saveDir], else from [source]. */
+    /**
+     * The image of [page] (page [index] of chapter [chapterId]) from the folder [saveDir], else from [source]. A
+     * folder outside the page cache (a download's staging, Phase 6) passes [counted] false, so its files don't count
+     * towards the cache's cap.
+     */
     suspend fun get(
         mangaId: Int,
         chapterId: Int,
@@ -76,7 +80,8 @@ object PageImages {
         fileName: String,
         source: HttpSource,
         page: Page,
-    ): Pair<InputStream, String> = PageCache.image(saveDir, fileName, SourcePageFetcher(mangaId, chapterId, index, source, page))
+        counted: Boolean = true,
+    ): Pair<InputStream, String> = PageCache.image(saveDir, fileName, SourcePageFetcher(mangaId, chapterId, index, source, page), counted)
 
     /** An image URL that may have expired: HTTP 401, 403, 404 or 410. */
     fun isExpired(error: Throwable): Boolean = PageCache.httpCode(error) in EXPIRED

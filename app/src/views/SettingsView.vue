@@ -31,6 +31,12 @@ import {
   useSetLibraryUpdateSettings,
 } from "../composables/useLibraryUpdates";
 import { clockTime } from "../utils/updates";
+import {
+  DEFAULT_DOWNLOAD_SETTINGS,
+  useDownloadSettings,
+  useSetDownloadSettings,
+} from "../composables/useDownloads";
+import { revealFolder } from "../utils/folders";
 import { useBackendStore } from "../stores/backend";
 import { useMediaKindStore } from "../stores/mediaKind";
 import { NEXT_EPISODE_COUNTDOWN_SECONDS, usePlayerPrefsStore } from "../stores/playerPrefs";
@@ -57,6 +63,11 @@ import PageLayout from "../components/PageLayout.vue";
  * Updates (Phase 6 Stage 3): the library update check's schedule (off, the user's default, or every 6, 12 or 24 h)
  * with the next check, which entries it skips (completed, with unwatched/unread items, not started), and the Windows
  * toast (off by default, the user's decision). The backend keeps them, for both kinds.
+ *
+ * Downloads (Phase 6 Stage 4): how many download at once (all sources, and from one source), the automatic download
+ * of the new chapters a library update finds (off by default, the user's decision; the Categories dialog's Downloads
+ * flags say which categories), and the folder downloads are saved in (the data dir's, the user's decision), with
+ * Show in Explorer. The backend keeps them, for both kinds.
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -80,6 +91,24 @@ const nextCheck = computed(() => {
 function saveInterval(e: Event) {
   const v = Number(selectValue(e)) as (typeof INTERVALS)[number];
   if (INTERVALS.includes(v)) setUpdates.mutate({ intervalHours: v });
+}
+
+const downloadSettings = useDownloadSettings();
+const setDownloads = useSetDownloadSettings();
+const downloads = computed(() =>
+  downloadSettings.data.value
+    ? { ...DEFAULT_DOWNLOAD_SETTINGS, ...downloadSettings.data.value }
+    : null,
+);
+const PARALLEL = Array.from({ length: 10 }, (_, i) => i + 1);
+const PER_SOURCE = [1, 2, 3] as const;
+function saveParallel(e: Event) {
+  const v = Number(selectValue(e));
+  if (PARALLEL.includes(v)) setDownloads.mutate({ maxParallel: v });
+}
+function savePerSource(e: Event) {
+  const v = Number(selectValue(e));
+  if ((PER_SOURCE as readonly number[]).includes(v)) setDownloads.mutate({ perSource: v });
 }
 
 /** 50 % to 95 % in steps of 5 (the backend's range). */
@@ -371,6 +400,95 @@ const unknown = computed(
         v-if="setUpdates.error.value"
         title="Couldn't save the change"
         :error="setUpdates.error.value"
+      />
+    </section>
+
+    <section class="group" aria-labelledby="settings-downloads">
+      <h2 id="settings-downloads">Downloads</h2>
+      <div class="card" data-testid="download-settings">
+        <template v-if="downloads">
+          <div class="row">
+            <label class="text" for="settings-parallel">
+              <span>Downloads at once</span>
+              <span class="summary">All sources together, anime and manga.</span>
+            </label>
+            <select
+              id="settings-parallel"
+              class="field"
+              data-testid="parallel-select"
+              :value="downloads.maxParallel"
+              @change="saveParallel"
+            >
+              <option v-for="n in PARALLEL" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
+          <div class="row">
+            <label class="text" for="settings-per-source">
+              <span>Downloads at once from one source</span>
+              <span class="summary">
+                More is faster but some sites limit how much one visitor fetches.
+              </span>
+            </label>
+            <select
+              id="settings-per-source"
+              class="field"
+              data-testid="per-source-select"
+              :value="downloads.perSource"
+              @change="savePerSource"
+            >
+              <option v-for="n in PER_SOURCE" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="text">
+              <span id="settings-auto-download">Download new chapters</span>
+              <span class="summary">
+                When a library update finds new chapters in a category with Downloads on (the
+                Library's Categories dialog), they are queued.
+              </span>
+            </div>
+            <SwitchRoot
+              :model-value="downloads.autoDownload"
+              class="switch"
+              aria-labelledby="settings-auto-download"
+              data-testid="auto-download-switch"
+              @update:model-value="(v: boolean) => setDownloads.mutate({ autoDownload: v })"
+            >
+              <SwitchThumb class="switch-thumb" />
+            </SwitchRoot>
+          </div>
+          <div class="row">
+            <div class="text">
+              <span>Download folder</span>
+              <span class="summary">Chapters are saved as CBZ files under manga/.</span>
+            </div>
+            <div class="path-actions">
+              <code class="path" data-testid="downloads-path">{{ downloads.path }}</code>
+              <button
+                v-if="backend.mode === 'tauri'"
+                type="button"
+                class="btn"
+                data-action="open-downloads"
+                @click="revealFolder(downloads.path)"
+              >
+                Show in Explorer
+              </button>
+            </div>
+          </div>
+        </template>
+        <ErrorNotice
+          v-else-if="downloadSettings.isError.value"
+          class="row"
+          title="Couldn't load the download settings"
+          :error="downloadSettings.error.value"
+          @retry="downloadSettings.refetch()"
+        />
+        <p v-else class="row muted">Loading…</p>
+      </div>
+      <ErrorNotice
+        v-if="setDownloads.error.value"
+        title="Couldn't save the change"
+        :error="setDownloads.error.value"
       />
     </section>
 

@@ -8,10 +8,17 @@ import { createQueryClient } from "../../api/realtime";
 import { ApiError } from "../../api/client";
 import type { Chapter, ChapterPatch } from "../../api/types";
 import { queryKeys } from "../../composables/queryKeys";
-import { makeChapters } from "../../test/fixtures";
+import type { DownloadQueue } from "../../api/types";
+import { makeChapters, makeDownloadItem, makeDownloadQueue } from "../../test/fixtures";
 import { createTestRouter, mountView, setBackendReady } from "../../test/mountView";
 
-const ops = vi.hoisted(() => ({ updateChapters: vi.fn() }));
+const ops = vi.hoisted(() => ({
+  updateChapters: vi.fn(),
+  fetchDownloadQueue: vi.fn(),
+  enqueueDownloads: vi.fn(),
+  changeDownloads: vi.fn(),
+  deleteDownloads: vi.fn(),
+}));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   ...ops,
@@ -29,6 +36,7 @@ let queryClient: QueryClient;
 let router: Router;
 let wrapper: VueWrapper;
 let chapters: Chapter[];
+let queue: DownloadQueue;
 
 async function mountList() {
   queryClient.setQueryData(queryKeys.chapters(34), chapters);
@@ -53,6 +61,20 @@ beforeEach(() => {
   ops.updateChapters.mockImplementation(async (ids: number[], patch: ChapterPatch) =>
     chapters.filter((c) => ids.includes(c.id)).map((c) => ({ ...c, ...patch })),
   );
+  queue = makeDownloadQueue();
+  ops.fetchDownloadQueue.mockImplementation(async () => queue);
+  ops.enqueueDownloads.mockImplementation(async (_kind: string, ids: number[]) => {
+    queue = makeDownloadQueue(ids.map((itemId, i) => makeDownloadItem({ id: 100 + i, itemId })));
+    return { queued: ids.length, queue };
+  });
+  ops.changeDownloads.mockImplementation(async (_action: string, t: { ids?: number[] }) => {
+    queue = makeDownloadQueue(queue.items.filter((i) => !t.ids?.includes(i.id)));
+    return { changed: 1, queue };
+  });
+  ops.deleteDownloads.mockImplementation(async (_kind: string, ids: number[]) => ({
+    deleted: ids.length,
+    queue: makeDownloadQueue(),
+  }));
 });
 
 afterEach(() => {
@@ -154,5 +176,96 @@ describe("ChapterList", () => {
       "Couldn't change the chapters",
     );
     expect(wrapper.find('[data-testid="selected-count"]').text()).toBe("1 selected");
+  });
+
+  it("downloads a chapter from its row, shows how far it got, and cancels it", async () => {
+    await mountList();
+
+    await row("Chapter 2").find('[data-action="download"]').trigger("click");
+    await flushPromises();
+    expect(ops.enqueueDownloads).toHaveBeenCalledWith("manga", [5002]);
+    expect(row("Chapter 2").find('[data-testid="download-state"]').text()).toBe("Queued");
+    expect(row("Chapter 2").find('[data-action="download"]').exists()).toBe(false);
+
+    // the subscription's queue: downloading, page 5 of 20
+    queryClient.setQueryData(
+      queryKeys.downloadQueue(),
+      makeDownloadQueue([
+        makeDownloadItem({
+          id: 100,
+          itemId: 5002,
+          state: "DOWNLOADING",
+          progressDone: 5,
+          progressTotal: 20,
+        }),
+      ]),
+    );
+    await flushPromises();
+    expect(row("Chapter 2").find('[data-testid="download-state"]').text()).toBe(
+      "Downloading 5/20 · 25%",
+    );
+
+    await row("Chapter 2").find('[data-action="cancel-download"]').trigger("click");
+    await flushPromises();
+    expect(ops.changeDownloads).toHaveBeenCalledWith("cancel", { kind: undefined, ids: [100] });
+  });
+
+  it("offers Retry for a failed download, and marks downloaded chapters", async () => {
+    chapters[0] = { ...chapters[0]!, isDownloaded: true };
+    queue = makeDownloadQueue([
+      makeDownloadItem({ id: 9, itemId: 5003, state: "FAILED", tries: 3, error: "HTTP 403" }),
+    ]);
+    await mountList();
+
+    expect(row("Chapter 1").find('[data-testid="downloaded"]').text()).toBe("Downloaded");
+    expect(row("Chapter 1").find('[data-action="download"]').exists()).toBe(false);
+    expect(row("Chapter 3").find('[data-testid="download-state"]').text()).toBe("Failed");
+    expect(row("Chapter 3").find('[data-testid="download-state"]').attributes("title")).toBe(
+      "HTTP 403",
+    );
+    await row("Chapter 3").find('[data-action="retry-download"]').trigger("click");
+    await flushPromises();
+    expect(ops.changeDownloads).toHaveBeenCalledWith("retry", { kind: undefined, ids: [9] });
+  });
+
+  it("downloads and deletes the selected chapters", async () => {
+    chapters[0] = { ...chapters[0]!, isDownloaded: true };
+    await mountList();
+
+    for (const name of ["Chapter 1", "Chapter 2", "Chapter 3"]) {
+      await row(name).find('[data-testid="item-select"]').trigger("click");
+    }
+    await button("download-selected").trigger("click");
+    await flushPromises();
+    expect(ops.enqueueDownloads).toHaveBeenCalledWith("manga", [5002, 5003]);
+    expect(wrapper.find('[data-testid="bulk-bar"]').exists()).toBe(false);
+
+    await row("Chapter 1").find('[data-testid="item-select"]').trigger("click");
+    await row("Chapter 2").find('[data-testid="item-select"]').trigger("click");
+    await row("Chapter 4").find('[data-testid="item-select"]').trigger("click");
+    expect(button("delete-downloads").attributes("disabled")).toBeUndefined();
+    await button("delete-downloads").trigger("click");
+    await flushPromises();
+    expect(ops.deleteDownloads).toHaveBeenCalledWith("manga", [5001, 5002]);
+  });
+
+  it("downloads the next unread chapters in reading order", async () => {
+    chapters[0] = { ...chapters[0]!, isRead: true };
+    chapters[1] = { ...chapters[1]!, isDownloaded: true };
+    await mountList();
+
+    const select = wrapper.find('[data-testid="download-next"]');
+    expect(select.findAll("option").map((o) => o.text())).toEqual([
+      "Download…",
+      "Next unread chapter",
+      "Next 5 unread",
+      "Next 10 unread",
+      "Next 25 unread",
+      "All unread",
+    ]);
+    await select.setValue("5");
+    await flushPromises();
+    expect(ops.enqueueDownloads).toHaveBeenCalledWith("manga", [5003, 5004]);
+    expect((select.element as HTMLSelectElement).value).toBe("");
   });
 });

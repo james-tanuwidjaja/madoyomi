@@ -488,7 +488,8 @@ class LibraryUpdateApiTest : AnimeApiTest() {
                 assertEquals(3, start("kind: MANGA").path("total"), "added to the running check")
                 while (LibraryUpdater.status.value.done < 2) delay(20)
                 graphql("mutation { stopLibraryUpdate(input: {}) { libraryCheck { running cancelled } } }").assertNoErrors()
-                while (seen.none { it.path("cancelled") == true }) delay(20)
+                // a synchronized list is iterated under its lock: the collector adds to it meanwhile
+                while (synchronized(seen) { seen.none { it.path("cancelled") == true } }) delay(20)
                 collector.cancel()
             }
         }

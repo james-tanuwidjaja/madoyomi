@@ -14,7 +14,7 @@ import { queryKeys } from "../../composables/queryKeys";
 import { backendStatus, healthyStatus } from "../../test/backendStatus";
 import { fakeSocketFactory } from "../../test/fakeSocket";
 import { makeLibraryCheck } from "../../test/fixtures";
-import type { LibraryCheck } from "../types";
+import type { DownloadQueue, LibraryCheck } from "../types";
 
 const toast = vi.hoisted(() => ({ showToast: vi.fn(), windowFocused: vi.fn() }));
 vi.mock("../../utils/toast", () => toast);
@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 describe("realtime", () => {
-  it("connects to the backend's WebSocket with the token, and subscribes to the four event streams", () => {
+  it("connects to the backend's WebSocket with the token, and subscribes to the five event streams", () => {
     expect(sockets.last.url).toBe(`ws://127.0.0.1:50266/api/graphql?token=${TOKEN}`);
     sockets.last.open();
     sockets.last.ack();
@@ -75,8 +75,9 @@ describe("realtime", () => {
     const queries = sockets.last
       .sentOfType("subscribe")
       .map((m) => (m.payload as { query: string }).query);
-    expect(queries).toHaveLength(4);
+    expect(queries).toHaveLength(5);
     expect(queries.some((q) => q.includes("libraryUpdates"))).toBe(true);
+    expect(queries.some((q) => q.includes("downloadsChanged"))).toBe(true);
     expect(queries.some((q) => q.includes("extensionInstallProgress"))).toBe(true);
     expect(queries.some((q) => q.includes("extensionStoreRefreshed"))).toBe(true);
     expect(queries.some((q) => q.includes("playbackEvents"))).toBe(true);
@@ -115,6 +116,61 @@ describe("realtime", () => {
       queryKeys.extensionStores(),
       queryKeys.extensions("anime"),
     ]);
+  });
+
+  describe("download queue events (Phase 6 Stage 4)", () => {
+    const item = (id: number, itemId: number, entryId: number, state = "DOWNLOADING") => ({
+      id,
+      kind: "MANGA",
+      state,
+      entryId,
+      itemId,
+      entryTitle: "Kingdom",
+      itemName: `Chapter ${itemId}`,
+      progressDone: 1,
+      progressTotal: 20,
+      bytes: "1000",
+      tries: 0,
+      error: null,
+      addedAt: "1700000000000",
+      finishedAt: "0",
+    });
+    const send = (items: unknown[], mangaDone = 0, lastFinishedAt = "0") =>
+      sockets.last.receive({
+        id: opId("downloadsChanged"),
+        type: "next",
+        payload: { data: { downloadsChanged: { items, mangaDone, animeDone: 0, lastFinishedAt } } },
+      });
+
+    beforeEach(() => {
+      sockets.last.open();
+      sockets.last.ack();
+    });
+
+    it("keeps the cached queue current, and refetches the entries whose downloads finished or went", () => {
+      const spy = vi.spyOn(queryClient, "invalidateQueries");
+      send([item(1, 900, 51), item(2, 901, 51, "QUEUED"), item(3, 700, 7, "QUEUED")]);
+      const queue = queryClient.getQueryData<DownloadQueue>(queryKeys.downloadQueue());
+      expect(queue?.items.map((i) => [i.id, i.kind, i.bytes])).toEqual([
+        [1, "manga", 1000],
+        [2, "manga", 1000],
+        [3, "manga", 1000],
+      ]);
+      expect(spy).not.toHaveBeenCalled();
+
+      // a page more: nothing to refetch
+      send([item(1, 900, 51), item(2, 901, 51, "QUEUED"), item(3, 700, 7, "QUEUED")]);
+      expect(spy).not.toHaveBeenCalled();
+
+      // chapter 900 done, chapter 700 cancelled
+      send([item(2, 901, 51)], 1, "1700000009000");
+      expect(invalidatedKeys(spy)).toEqual([
+        queryKeys.chapters(51),
+        queryKeys.chapters(7),
+        queryKeys.library("manga"),
+        queryKeys.completedDownloads("manga"),
+      ]);
+    });
   });
 
   describe("library update events (Phase 6 Stage 3)", () => {
@@ -390,7 +446,7 @@ describe("realtime", () => {
 
     sockets.last.open();
     sockets.last.ack();
-    expect(sockets.last.sentOfType("subscribe")).toHaveLength(4);
+    expect(sockets.last.sentOfType("subscribe")).toHaveLength(5);
     // a reconnect may have missed events: the lists are fetched again
     expect(invalidatedKeys(invalidate)).toEqual([
       queryKeys.extensionStores(),
@@ -398,6 +454,7 @@ describe("realtime", () => {
       queryKeys.sources(),
       queryKeys.libraryCheck(),
       queryKeys.updateMarks(),
+      queryKeys.downloads(),
     ]);
   });
 

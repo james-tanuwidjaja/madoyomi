@@ -47,4 +47,11 @@ export const queryKeys = {
     kind ? (["api", "updates", kind] as const) : (["api", "updates"] as const),
   updateMarks: (kind?: MediaKind) =>
     kind ? (["api", "updateMarks", kind] as const) : (["api", "updateMarks"] as const),
+  downloads: () => ["api", "downloads"] as const,
+  downloadQueue: () => ["api", "downloads", "queue"] as const,
+  completedDownloads: (kind?: MediaKind) =>
+    kind
+      ? (["api", "downloads", "completed", kind] as const)
+      : (["api", "downloads", "completed"] as const),
+  downloadSettings: () => ["api", "downloads", "settings"] as const,
 };
