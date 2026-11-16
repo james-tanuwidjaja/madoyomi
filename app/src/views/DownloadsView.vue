@@ -10,9 +10,17 @@ import {
   useDownloadQueue,
   useReorderDownload,
 } from "../composables/useDownloads";
+import { usePlayDownloadedEpisode } from "../composables/usePlayback";
 import { useBackendStore } from "../stores/backend";
 import { useMediaKindStore } from "../stores/mediaKind";
-import { formatBytes, itemsOf, percentOf, queueCounts, stateText } from "../utils/downloads";
+import {
+  formatBytes,
+  itemsOf,
+  percentOf,
+  queueCounts,
+  sizeText,
+  stateText,
+} from "../utils/downloads";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import PageLayout from "../components/PageLayout.vue";
 import VirtualList from "../components/VirtualList.vue";
@@ -22,7 +30,8 @@ import VirtualList from "../components/VirtualList.vue";
  * live over the `downloadsChanged` subscription (each row's state and pages, Pause or Resume, Retry once it failed,
  * moves up, down and to the top, Cancel), with Pause all / Resume all / Retry failed / Cancel all for the kind, and the
  * completed list (the last finished first, Read, Delete for the file, Clear list for the rows). One queue serves both
- * kinds with shared limits (Settings → Downloads); episode downloads come in Stage 5.
+ * kinds with shared limits (Settings → Downloads). Stage 5: episodes too, their rows in bytes, the episode's time or
+ * segments, and the completed list's Play plays the file in mpv from where it stopped (offline too).
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -34,12 +43,18 @@ const change = useChangeDownloads();
 const reorder = useReorderDownload();
 const remove = useDeleteDownloads();
 const clear = useClearCompletedDownloads();
+const playLocal = usePlayDownloadedEpisode();
 
 const items = computed(() => itemsOf(queue.data.value, kind.value));
 const counts = computed(() => queueCounts(queue.data.value, kind.value));
 const error = computed(
   () =>
-    change.error.value ?? reorder.error.value ?? remove.error.value ?? clear.error.value ?? null,
+    change.error.value ??
+    reorder.error.value ??
+    remove.error.value ??
+    clear.error.value ??
+    playLocal.error.value ??
+    null,
 );
 
 const subtitle = computed(() => {
@@ -142,10 +157,6 @@ function finishedText(item: DownloadItem) {
       {{ backend.ready ? "Loading…" : "Waiting for the backend…" }}
     </p>
 
-    <p v-if="kind === 'anime'" class="muted" data-testid="anime-note">
-      Episode downloads aren't available yet. Manga chapters download from a manga's chapter list.
-    </p>
-
     <section
       v-if="items.length"
       class="section queue"
@@ -174,8 +185,15 @@ function finishedText(item: DownloadItem) {
                 <span class="item">{{ item.itemName }}</span>
               </span>
               <span class="sub">
-                <span data-testid="download-row-state">{{ stateText(item) }}</span>
-                <span v-if="item.bytes > 0">{{ formatBytes(item.bytes) }}</span>
+                <span data-testid="download-row-state"
+                  >{{ stateText(item)
+                  }}<template v-if="item.progressUnit === 'BYTES' && percentOf(item) !== null">
+                    · {{ percentOf(item) }}%</template
+                  ></span
+                >
+                <span v-if="item.bytes > 0" data-testid="download-row-size">{{
+                  sizeText(item)
+                }}</span>
                 <span v-if="item.error" class="error" data-testid="download-row-error">{{
                   item.error
                 }}</span>
@@ -269,13 +287,15 @@ function finishedText(item: DownloadItem) {
         </template>
       </VirtualList>
     </section>
-    <p
-      v-else-if="!queue.isPending.value && kind === 'manga'"
-      class="muted"
-      data-testid="queue-empty"
-    >
-      Nothing is downloading. Download chapters from a manga's chapter list: one, a selection, or
-      the next unread ones.
+    <p v-else-if="!queue.isPending.value" class="muted" data-testid="queue-empty">
+      <template v-if="kind === 'anime'">
+        Nothing is downloading. Download episodes from an anime's episode list: one, a selection, or
+        the next unwatched ones.
+      </template>
+      <template v-else>
+        Nothing is downloading. Download chapters from a manga's chapter list: one, a selection, or
+        the next unread ones.
+      </template>
     </p>
 
     <section class="section" aria-label="Downloaded" data-testid="downloads-completed">
@@ -333,6 +353,17 @@ function finishedText(item: DownloadItem) {
               data-action="read-download"
               >Read</RouterLink
             >
+            <button
+              v-else
+              type="button"
+              class="btn"
+              data-action="play-download"
+              :aria-label="`Play ${item.itemName}`"
+              :disabled="playLocal.isPending.value"
+              @click="playLocal.mutate({ episodeId: item.itemId, resume: true })"
+            >
+              Play
+            </button>
             <button
               type="button"
               class="btn"

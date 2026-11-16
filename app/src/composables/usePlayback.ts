@@ -4,6 +4,7 @@ import { ApiError } from "../api/client";
 import {
   fetchEpisodeVideos,
   fetchHosterVideos,
+  playDownloadedEpisode,
   playEpisode,
   type PlayRequest,
 } from "../api/operations";
@@ -126,5 +127,20 @@ export function usePlayEpisode() {
     mutationFn: ({ episodeId, hosterIndex, videoIndex, startSeconds }) =>
       playEpisode({ episodeId, hosterIndex, videoIndex, startSeconds }),
     onSuccess: (_session, choice) => choices.remember(choice.sourceId, choice.remember),
+  });
+}
+
+/**
+ * Plays a downloaded episode from its file (Phase 6 Stage 5, `playDownloadedEpisode`): the same mpv session as
+ * `playEpisode` (progress, the watched mark, the next episode), with nothing asked of the source, so it plays offline.
+ */
+export function usePlayDownloadedEpisode() {
+  return useMutation<
+    PlaybackSession,
+    Error,
+    { episodeId: number; startSeconds?: number | null; resume?: boolean }
+  >({
+    mutationFn: ({ episodeId, startSeconds, resume }) =>
+      playDownloadedEpisode(episodeId, startSeconds, resume ?? false),
   });
 }

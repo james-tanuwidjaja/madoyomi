@@ -1,8 +1,9 @@
-import type { Chapter, DownloadItem, DownloadQueue, MediaKind } from "../api/types";
+import type { Chapter, DownloadItem, DownloadQueue, Episode, MediaKind } from "../api/types";
+import { formatClock } from "./progress";
 
 /*
- * The download queue as the app shows it (Phase 6 Stage 4): pure helpers for the Downloads screen and the chapter
- * list.
+ * The download queue as the app shows it (Phase 6 Stages 4–5): pure helpers for the Downloads screen and the chapter
+ * and episode lists. A chapter counts pages; an episode bytes (a file), seconds (ffmpeg) or segments (yt-dlp).
  */
 
 /** The unfinished items of `kind`, in queue order. */
@@ -23,7 +24,7 @@ export function byItem(
   );
 }
 
-/** How far an item got, 0 to 100; null while its page count isn't known. */
+/** How far an item got, 0 to 100; null while its total (pages, size, duration) isn't known. */
 export function percentOf(item: DownloadItem): number | null {
   if (item.state === "DONE") return 100;
   if (item.progressTotal <= 0) return null;
@@ -36,9 +37,17 @@ export function stateText(item: DownloadItem): string {
     case "QUEUED":
       return item.tries > 0 ? `Queued (try ${item.tries + 1})` : "Queued";
     case "DOWNLOADING":
-      return item.progressTotal > 0
-        ? `Downloading ${item.progressDone}/${item.progressTotal}`
-        : "Downloading…";
+      if (item.progressTotal <= 0) return "Downloading…";
+      switch (item.progressUnit) {
+        case "BYTES":
+          return "Downloading";
+        case "SECONDS":
+          return `Downloading ${formatClock(item.progressDone)}/${formatClock(item.progressTotal)}`;
+        case "SEGMENTS":
+          return `Downloading ${item.progressDone}/${item.progressTotal} segments`;
+        default:
+          return `Downloading ${item.progressDone}/${item.progressTotal}`;
+      }
     case "PAUSED":
       return "Paused";
     case "FAILED":
@@ -46,6 +55,17 @@ export function stateText(item: DownloadItem): string {
     case "DONE":
       return "Downloaded";
   }
+}
+
+/**
+ * The size line of a queue row: what was written, and of how much when the size is known ("12.4 MB of 300 MB");
+ * empty before anything was written.
+ */
+export function sizeText(item: DownloadItem): string {
+  if (item.bytes <= 0) return "";
+  return item.totalBytes > 0 && item.state !== "DONE"
+    ? `${formatBytes(item.bytes)} of ${formatBytes(item.totalBytes)}`
+    : formatBytes(item.bytes);
 }
 
 /** A size for people: "820 KB", "12.4 MB", "1.2 GB". */
@@ -77,6 +97,22 @@ export function nextUnread(
     .filter((c) => !c.isRead && !c.isDownloaded && !queued.has(c.id))
     .sort((a, b) => a.sourceOrder - b.sourceOrder)
     .map((c) => c.id);
+  return n === "all" ? candidates : candidates.slice(0, n);
+}
+
+/**
+ * The episodes to queue for "Download next N unwatched" (Stage 5): the unwatched ones in watching order (the source's
+ * order, oldest first), leaving out those downloaded or in the queue already, the first `n` (`"all"`: every one).
+ */
+export function nextUnwatched(
+  episodes: readonly Episode[],
+  n: number | "all",
+  queued: ReadonlyMap<number, DownloadItem>,
+): number[] {
+  const candidates = [...episodes]
+    .filter((e) => !e.isWatched && !e.downloaded && !queued.has(e.id))
+    .sort((a, b) => a.sourceOrder - b.sourceOrder)
+    .map((e) => e.id);
   return n === "all" ? candidates : candidates.slice(0, n);
 }
 

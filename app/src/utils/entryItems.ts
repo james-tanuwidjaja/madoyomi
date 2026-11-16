@@ -29,7 +29,7 @@ export interface ListItem {
    * page count (0 or less: not known yet).
    */
   pages?: { lastPageRead: number; pageCount: number };
-  /** Phase 6 Stage 4: downloaded (a chapter's CBZ), shown as a badge. */
+  /** Phase 6 Stages 4–5: downloaded (a chapter's CBZ, an episode's file), shown as a badge. */
   downloaded?: boolean;
   /**
    * Anime only: mpv is playing it now (or has it paused), or the backend is fetching its videos again after mpv
@@ -62,6 +62,7 @@ export function fromEpisode(e: Episode, live?: PlaybackSession | null, retrying 
     bookmarked: e.isBookmarked,
     filler: e.fillermark,
     progress: episodeProgress(e, live),
+    downloaded: e.downloaded ?? false,
     ...(playing ? { playing } : {}),
   };
 }

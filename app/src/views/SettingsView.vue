@@ -8,8 +8,8 @@ import {
   ToggleGroupRoot,
   type AcceptableValue,
 } from "reka-ui";
-import { checkMpv } from "../api/operations";
-import type { MpvCheck, MpvOrigin, VideoQualityPreference } from "../api/types";
+import { checkMpv, fetchDownloadTools } from "../api/operations";
+import type { DownloadTool, MpvCheck, MpvOrigin, VideoQualityPreference } from "../api/types";
 import {
   usePlayerLanguages,
   usePlayerSettings,
@@ -67,7 +67,8 @@ import PageLayout from "../components/PageLayout.vue";
  * Downloads (Phase 6 Stage 4): how many download at once (all sources, and from one source), the automatic download
  * of the new chapters a library update finds (off by default, the user's decision; the Categories dialog's Downloads
  * flags say which categories), and the folder downloads are saved in (the data dir's, the user's decision), with
- * Show in Explorer. The backend keeps them, for both kinds.
+ * Show in Explorer. The backend keeps them, for both kinds. Stage 5: new episodes too, and the two programs anime
+ * downloads use, ffmpeg (HLS) and yt-dlp (its fallback), each with its path (empty: looked for) and a check, as mpv's.
  */
 const backend = useBackendStore();
 const mediaKind = useMediaKindStore();
@@ -110,6 +111,89 @@ function savePerSource(e: Event) {
   const v = Number(selectValue(e));
   if ((PER_SOURCE as readonly number[]).includes(v)) setDownloads.mutate({ perSource: v });
 }
+
+type ToolKey = "ffmpegPath" | "ytDlpPath";
+const TOOLS: {
+  key: ToolKey;
+  tool: DownloadTool["tool"];
+  label: string;
+  env: string;
+  hint: string;
+}[] = [
+  {
+    key: "ffmpegPath",
+    tool: "FFMPEG",
+    label: "ffmpeg",
+    env: "MADOYOMI_FFMPEG",
+    hint: "Downloads HLS and DASH episodes.",
+  },
+  {
+    key: "ytDlpPath",
+    tool: "YT_DLP",
+    label: "yt-dlp",
+    env: "MADOYOMI_YTDLP",
+    hint: "Tried when ffmpeg fails.",
+  },
+];
+const toolText = ref<Record<ToolKey, string>>({ ffmpegPath: "", ytDlpPath: "" });
+watch(
+  () => [downloads.value?.ffmpegPath, downloads.value?.ytDlpPath] as const,
+  ([f, y]) => (toolText.value = { ffmpegPath: f ?? "", ytDlpPath: y ?? "" }),
+  { immediate: true },
+);
+const toolStatus = ref<Partial<Record<DownloadTool["tool"], DownloadTool>>>({});
+const toolsChecking = ref(false);
+const toolsCheckError = ref<unknown>(null);
+
+/** Asks the backend for both tools; `paths` tries typed paths in place of the saved ones. */
+async function runToolsCheck(paths: { ffmpegPath?: string; ytDlpPath?: string } = {}) {
+  toolsChecking.value = true;
+  toolsCheckError.value = null;
+  try {
+    const list = await fetchDownloadTools(paths);
+    toolStatus.value = Object.fromEntries(list.map((t) => [t.tool, t]));
+  } catch (e) {
+    toolsCheckError.value = e;
+  } finally {
+    toolsChecking.value = false;
+  }
+}
+
+/** Where a tool's path came from, as Settings says it. */
+function toolOrigin(env: string, origin: NonNullable<DownloadTool["origin"]>) {
+  return origin === "ENV"
+    ? env
+    : { SETTINGS: "this setting", SYSTEM_PROPERTY: "a system property", PATH: "PATH" }[origin];
+}
+
+const cleanPath = (v: string) => v.trim().replace(/^"(.*)"$/, "$1");
+
+async function saveToolPath(key: ToolKey) {
+  const v = cleanPath(toolText.value[key]);
+  toolText.value = { ...toolText.value, [key]: v };
+  if (!downloads.value || v === downloads.value[key]) return;
+  try {
+    await setDownloads.mutateAsync(key === "ffmpegPath" ? { ffmpegPath: v } : { ytDlpPath: v });
+  } catch {
+    return; // shown below, from setDownloads.error
+  }
+  await runToolsCheck();
+}
+
+function checkTypedTools() {
+  void runToolsCheck({
+    ffmpegPath: cleanPath(toolText.value.ffmpegPath),
+    ytDlpPath: cleanPath(toolText.value.ytDlpPath),
+  });
+}
+
+watch(
+  () => backend.ready,
+  (ready) => {
+    if (ready && !toolStatus.value.FFMPEG && !toolsChecking.value) void runToolsCheck();
+  },
+  { immediate: true },
+);
 
 /** 50 % to 95 % in steps of 5 (the backend's range). */
 const THRESHOLDS = Array.from({ length: 10 }, (_, i) => 50 + i * 5);
@@ -441,10 +525,10 @@ const unknown = computed(
           </div>
           <div class="row">
             <div class="text">
-              <span id="settings-auto-download">Download new chapters</span>
+              <span id="settings-auto-download">Download new episodes and chapters</span>
               <span class="summary">
-                When a library update finds new chapters in a category with Downloads on (the
-                Library's Categories dialog), they are queued.
+                When a library update finds new episodes or chapters in a category with Downloads on
+                (the Library's Categories dialog), they are queued.
               </span>
             </div>
             <SwitchRoot
@@ -460,7 +544,10 @@ const unknown = computed(
           <div class="row">
             <div class="text">
               <span>Download folder</span>
-              <span class="summary">Chapters are saved as CBZ files under manga/.</span>
+              <span class="summary">
+                Chapters are saved as CBZ files under manga/, episodes under anime/ with their
+                subtitles beside them.
+              </span>
             </div>
             <div class="path-actions">
               <code class="path" data-testid="downloads-path">{{ downloads.path }}</code>
@@ -475,6 +562,62 @@ const unknown = computed(
               </button>
             </div>
           </div>
+          <div v-for="t in TOOLS" :key="t.key" class="row mpv-row" :data-testid="`tool-${t.tool}`">
+            <label class="text" :for="`settings-${t.key}`">
+              <span>{{ t.label }}</span>
+              <span class="summary">
+                {{ t.hint }} Empty: {{ t.env }} if set, else {{ t.label }}.exe on PATH.
+              </span>
+            </label>
+            <div class="mpv-field">
+              <div class="path-actions">
+                <input
+                  :id="`settings-${t.key}`"
+                  v-model="toolText[t.key]"
+                  class="field text-field path-field"
+                  type="text"
+                  spellcheck="false"
+                  :placeholder="`C:\\Tools\\${t.label}.exe`"
+                  :data-testid="`tool-input-${t.tool}`"
+                  @blur="saveToolPath(t.key)"
+                  @keydown.enter="saveToolPath(t.key)"
+                />
+                <button
+                  type="button"
+                  class="btn"
+                  :data-action="`check-${t.tool}`"
+                  :disabled="toolsChecking"
+                  @mousedown.prevent
+                  @click="checkTypedTools"
+                >
+                  {{ toolsChecking ? "Checking…" : "Check" }}
+                </button>
+              </div>
+              <p
+                v-if="toolStatus[t.tool]?.ok"
+                class="summary"
+                :data-testid="`tool-status-${t.tool}`"
+              >
+                {{ toolStatus[t.tool]!.version }} · {{ toolStatus[t.tool]!.path }}
+                <template v-if="toolStatus[t.tool]!.origin">
+                  (from {{ toolOrigin(t.env, toolStatus[t.tool]!.origin!) }})</template
+                >
+              </p>
+              <p
+                v-else-if="toolStatus[t.tool]"
+                class="summary danger"
+                :data-testid="`tool-status-${t.tool}`"
+              >
+                {{ toolStatus[t.tool]!.message }}
+              </p>
+            </div>
+          </div>
+          <ErrorNotice
+            v-if="toolsCheckError"
+            class="row"
+            title="Couldn't check the download tools"
+            :error="toolsCheckError"
+          />
         </template>
         <ErrorNotice
           v-else-if="downloadSettings.isError.value"

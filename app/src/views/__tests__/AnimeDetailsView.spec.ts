@@ -17,6 +17,8 @@ import { queryKeys } from "../../composables/queryKeys";
 import { resetAutoRefresh } from "../../composables/useEntries";
 import { DEFAULT_PLAYER_SETTINGS } from "../../composables/usePlayerSettings";
 import {
+  makeDownloadItem,
+  makeDownloadQueue,
   makeAnime,
   makeEpisodes,
   makePage,
@@ -42,6 +44,11 @@ const ops = vi.hoisted(() => ({
   stopPlayback: vi.fn(),
   updateEpisodes: vi.fn(),
   fetchPlayerSettings: vi.fn(),
+  fetchDownloadQueue: vi.fn(),
+  playDownloadedEpisode: vi.fn(),
+  enqueueDownloads: vi.fn(),
+  changeDownloads: vi.fn(),
+  deleteDownloads: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -135,6 +142,12 @@ beforeEach(() => {
   queryClient = createQueryClient();
   setBackendReady();
   resetAutoRefresh();
+  ops.fetchDownloadQueue.mockResolvedValue({
+    items: [],
+    mangaDone: 0,
+    animeDone: 0,
+    lastFinishedAt: 0,
+  });
   stored = makeAnime();
   episodes = makeEpisodes(3);
   ops.fetchSources.mockResolvedValue([animegg]);
@@ -776,5 +789,143 @@ describe("AnimeDetailsView: the player settings (Phase 4 Stage 5)", () => {
     expect(ops.playEpisode).toHaveBeenCalledWith(
       expect.objectContaining({ episodeId: 1002, startSeconds: 1350 }),
     );
+  });
+});
+
+describe("AnimeDetailsView: the episode list's downloads (Phase 6 Stage 5)", () => {
+  const row = (name: string) =>
+    wrapper.findAll('[data-testid="item-row"]').find((r) => r.find(".name").text() === name)!;
+
+  beforeEach(() => {
+    ops.enqueueDownloads.mockImplementation(async (_kind: string, ids: number[]) => ({
+      queued: ids.length,
+      queue: makeDownloadQueue(
+        ids.map((itemId, i) =>
+          makeDownloadItem({ id: 100 + i, kind: "anime", entryId: 12, itemId }),
+        ),
+      ),
+    }));
+    ops.changeDownloads.mockImplementation(async () => ({
+      changed: 1,
+      queue: makeDownloadQueue(),
+    }));
+    ops.deleteDownloads.mockImplementation(async (_kind: string, ids: number[]) => ({
+      deleted: ids.length,
+      queue: makeDownloadQueue(),
+    }));
+    ops.playDownloadedEpisode.mockImplementation(async (id: number) => session(id));
+  });
+
+  it("downloads an episode from its row, shows how far it got in bytes, time or segments, and cancels it", async () => {
+    await mountDetails();
+    await row("Episode 2").find('[data-action="download"]').trigger("click");
+    await flushPromises();
+    expect(ops.enqueueDownloads).toHaveBeenCalledWith("anime", [1002]);
+    expect(row("Episode 2").find('[data-testid="download-state"]').text()).toBe("Queued");
+
+    const state = (over: Parameters<typeof makeDownloadItem>[0]) => {
+      queryClient.setQueryData(
+        queryKeys.downloadQueue(),
+        makeDownloadQueue([
+          makeDownloadItem({
+            id: 100,
+            kind: "anime",
+            entryId: 12,
+            itemId: 1002,
+            state: "DOWNLOADING",
+            ...over,
+          }),
+        ]),
+      );
+      return flushPromises().then(() =>
+        row("Episode 2").find('[data-testid="download-state"]').text(),
+      );
+    };
+    expect(await state({ progressUnit: "BYTES", progressDone: 450, progressTotal: 1000 })).toBe(
+      "Downloading · 45%",
+    );
+    expect(await state({ progressUnit: "SECONDS", progressDone: 330, progressTotal: 1440 })).toBe(
+      "Downloading 5:30/24:00 · 23%",
+    );
+    expect(await state({ progressUnit: "SEGMENTS", progressDone: 30, progressTotal: 120 })).toBe(
+      "Downloading 30/120 segments · 25%",
+    );
+    await row("Episode 2").find('[data-action="cancel-download"]').trigger("click");
+    await flushPromises();
+    expect(ops.changeDownloads).toHaveBeenCalledWith("cancel", { kind: undefined, ids: [100] });
+  });
+
+  it("plays a downloaded episode from its file where it stopped, and Stream… opens the picker", async () => {
+    episodes = makeEpisodes(3).map((e) =>
+      e.id === 1001
+        ? { ...e, downloaded: true, lastSecondSeen: "600000", totalSeconds: "1500000" }
+        : e,
+    );
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster()]);
+    await mountDetails();
+    expect(row("Episode 1").find('[data-testid="downloaded"]').text()).toBe("Downloaded");
+    expect(row("Episode 1").find('[data-action="download"]').exists()).toBe(false);
+
+    await row("Episode 1").find('[data-action="play"]').trigger("click");
+    await flushPromises();
+    expect(ops.playDownloadedEpisode).toHaveBeenCalledWith(1001, 600, false);
+    expect(ops.fetchEpisodeVideos).not.toHaveBeenCalled();
+    expect(document.body.querySelector('[data-testid="video-picker"]')).toBeNull();
+
+    await row("Episode 1").find('[data-action="stream"]').trigger("click");
+    await flushPromises();
+    expect(ops.fetchEpisodeVideos).toHaveBeenCalledWith(1001);
+    expect(document.body.querySelector('[data-testid="video-picker"]')).not.toBeNull();
+  });
+
+  it("downloads and deletes the selected episodes, and the next unwatched ones in watching order", async () => {
+    episodes = makeEpisodes(4).map((e) =>
+      e.id === 1001 ? { ...e, isWatched: true } : e.id === 1002 ? { ...e, downloaded: true } : e,
+    );
+    await mountDetails();
+
+    for (const name of ["Episode 1", "Episode 2", "Episode 3"]) {
+      await row(name).find('[data-testid="item-select"]').trigger("click");
+    }
+    expect(button("delete-downloads").attributes("disabled")).toBeUndefined();
+    await button("download-selected").trigger("click");
+    await flushPromises();
+    expect(ops.enqueueDownloads).toHaveBeenCalledWith("anime", [1001, 1003]);
+
+    await row("Episode 2").find('[data-testid="item-select"]').trigger("click");
+    await button("delete-downloads").trigger("click");
+    await flushPromises();
+    expect(ops.deleteDownloads).toHaveBeenCalledWith("anime", [1002]);
+
+    ops.enqueueDownloads.mockClear();
+    queryClient.setQueryData(queryKeys.downloadQueue(), makeDownloadQueue());
+    await flushPromises();
+    const select = wrapper.find('[data-testid="download-next"]');
+    expect(select.findAll("option").map((o) => o.text())).toContain("Next 5 unwatched");
+    await select.setValue("5");
+    await flushPromises();
+    expect(ops.enqueueDownloads).toHaveBeenCalledWith("anime", [1003, 1004]);
+  });
+
+  it("plays a downloaded next episode from its file, without asking the source", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      episodes = makeEpisodes(3).map((e) => (e.id === 1002 ? { ...e, downloaded: true } : e));
+      await mountDetails();
+      usePlaybackStore().apply(
+        makePlaybackEvent("ENDED", {
+          session: makePlaybackSession({ episodeId: 1001, state: "EXITED" }),
+          nextEpisodeId: 1002,
+          reason: "eof",
+        }),
+      );
+      await flushPromises();
+      await wrapper.find('[data-action="play-next"]').trigger("click");
+      await flushPromises();
+      expect(ops.playDownloadedEpisode).toHaveBeenCalledWith(1002, null, false);
+      expect(ops.fetchEpisodeVideos).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

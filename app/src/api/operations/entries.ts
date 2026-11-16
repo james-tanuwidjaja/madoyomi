@@ -77,6 +77,7 @@ const EPISODE_FIELDS = /* GraphQL */ `
     totalSeconds
     summary
     previewUrl
+    downloaded
   }
 `;
 
@@ -277,6 +278,7 @@ export const LIBRARY_ANIME_QUERY = /* GraphQL */ `
         }
         unwatchedCount
         lastSeenAt
+        downloadCount
       }
     }
   }

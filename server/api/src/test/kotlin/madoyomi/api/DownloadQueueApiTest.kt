@@ -21,6 +21,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import madoyomi.core.downloads.DownloadItem
 import madoyomi.core.downloads.DownloadItemState
+import madoyomi.core.downloads.DownloadProgress
 import madoyomi.core.downloads.DownloadQueue
 import madoyomi.core.downloads.DownloadSettings
 import madoyomi.core.downloads.DownloadSettingsStore
@@ -83,7 +84,7 @@ private class FakeDownloader : ItemDownloader {
 
     override suspend fun download(
         item: DownloadItem,
-        progress: suspend (done: Int, total: Int, bytes: Long) -> Unit,
+        progress: suspend (DownloadProgress) -> Unit,
     ): Long {
         starts += Start(item.itemId, item.sourceId, System.currentTimeMillis())
         val n = active.incrementAndGet()
@@ -93,14 +94,14 @@ private class FakeDownloader : ItemDownloader {
             maxPerSource = maxOf(maxPerSource, s)
         }
         try {
-            progress(1, 2, 10)
+            progress(DownloadProgress(1, 2, 10))
             gates[item.itemId]?.await()
             val left = failures[item.itemId] ?: 0
             if (left > 0) {
                 failures[item.itemId] = left - 1
                 throw IOException("boom ${item.itemId}")
             }
-            progress(2, 2, 20)
+            progress(DownloadProgress(2, 2, 20))
             return 20
         } finally {
             active.decrementAndGet()
@@ -286,7 +287,9 @@ class DownloadQueueApiTest : ApiGraphQLTest() {
         DownloadQueue.start()
 
         until("a chapter of each source") { fake.started().size == 2 }
-        assertEquals(listOf(a[0], b[0]), fake.started(), "one per source, in queue order, two at once")
+        // both start in one scheduling pass; which of the two coroutines records its start first is up to the dispatcher
+        // (Stage 5's final build saw them the other way round once), so the pair is compared as a set
+        assertEquals(setOf(a[0], b[0]), fake.started().toSet(), "one per source, the first of each in queue order, two at once")
         assertEquals("DOWNLOADING", stateOf(a[0]))
         assertEquals(listOf(1, 2), queue().first { it["itemId"] == a[0] }.let { listOf(it["progressDone"], it["progressTotal"]) })
         Thread.sleep(200)
@@ -298,7 +301,11 @@ class DownloadQueueApiTest : ApiGraphQLTest() {
         (a + b).forEach { fake.gates.getValue(it).complete(Unit) }
         runBlocking { DownloadQueue.awaitIdle() }
 
-        assertEquals(listOf(a[0], b[0], a[1], b[1], a[2]), fake.started())
+        // a pair started in one pass is recorded in either order (above): the first two, and the last two (all the gates
+        // opened at once); source A's second in between
+        assertEquals(setOf(a[0], b[0]), fake.started().take(2).toSet())
+        assertEquals(a[1], fake.started()[2])
+        assertEquals(setOf(b[1], a[2]), fake.started().drop(3).toSet())
         assertEquals(2, fake.maxActive)
         assertEquals(1, fake.maxPerSource)
         val aStarts = fake.starts.filter { it.sourceId == 9_001L }.map { it.at }
@@ -462,9 +469,13 @@ class DownloadQueueApiTest : ApiGraphQLTest() {
         assertEquals("QUEUED", stateOf(ids[0]))
         assertEquals(listOf(ids[0], ids[1], ids[2]), queue().map { it["itemId"] }, "where it was")
 
-        val anime =
-            graphql("mutation { enqueueDownloads(input: {kind: ANIME, itemIds: [1]}) { queued } }").errors?.single()?.extensions
-        assertEquals("BAD_REQUEST", anime?.get("code"))
+        assertEquals(
+            0,
+            graphql("mutation { enqueueDownloads(input: {kind: ANIME, itemIds: [424242]}) { queued } }")
+                .assertNoErrors()
+                .dataPath("enqueueDownloads", "queued"),
+            "the anime kind is accepted since Stage 5; an unknown episode is left out",
+        )
         assertEquals(0, enqueue(listOf(424242)), "unknown ids are left out")
 
         // a chapter's download goes with it when a refresh deletes the chapter (the reference cascades)

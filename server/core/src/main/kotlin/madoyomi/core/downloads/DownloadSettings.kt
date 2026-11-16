@@ -32,12 +32,18 @@ data class DownloadSettings(
      * `includeInDownload` rule). Off on a fresh install (the user's decision).
      */
     val autoDownload: Boolean = false,
+    /** Stage 5: the ffmpeg to download HLS episodes with ("": [DownloadTools]' own search). */
+    val ffmpegPath: String = "",
+    /** Stage 5: the yt-dlp to fall back on when ffmpeg fails ("": [DownloadTools]' own search). */
+    val ytDlpPath: String = "",
 ) {
-    /** Only the fields that aren't null change ([DownloadSettingsStore.update]). */
+    /** Only the fields that aren't null change ([DownloadSettingsStore.update]); a blank path clears it. */
     data class Patch(
         val maxParallel: Int? = null,
         val perSource: Int? = null,
         val autoDownload: Boolean? = null,
+        val ffmpegPath: String? = null,
+        val ytDlpPath: String? = null,
     )
 
     companion object {
@@ -89,6 +95,11 @@ object DownloadSettingsStore {
     fun update(patch: DownloadSettings.Patch): DownloadSettings {
         patch.maxParallel?.let { check("maxParallel", it, DownloadSettings.PARALLEL) }
         patch.perSource?.let { check("perSource", it, DownloadSettings.PER_SOURCE) }
+        listOf("ffmpegPath" to patch.ffmpegPath, "ytDlpPath" to patch.ytDlpPath).forEach { (field, value) ->
+            if (value != null && value.any { it == '\n' || it == '\r' || it == '\u0000' }) {
+                throw MadoyomiException(ErrorCode.BAD_REQUEST, "$field: not a path", mapOf("field" to field))
+            }
+        }
         val (before, next) =
             synchronized(this) {
                 val before = current()
@@ -97,6 +108,8 @@ object DownloadSettingsStore {
                         maxParallel = patch.maxParallel ?: before.maxParallel,
                         perSource = patch.perSource ?: before.perSource,
                         autoDownload = patch.autoDownload ?: before.autoDownload,
+                        ffmpegPath = patch.ffmpegPath?.let(::cleanPath) ?: before.ffmpegPath,
+                        ytDlpPath = patch.ytDlpPath?.let(::cleanPath) ?: before.ytDlpPath,
                     )
                 if (next != before) {
                     write(file().absoluteFile, next)
@@ -106,7 +119,8 @@ object DownloadSettingsStore {
             }
         if (next != before) {
             logger.info {
-                "download settings changed: maxParallel=${next.maxParallel} perSource=${next.perSource} autoDownload=${next.autoDownload}"
+                "download settings changed: maxParallel=${next.maxParallel} perSource=${next.perSource} autoDownload=${next.autoDownload}" +
+                    " ffmpeg=${next.ffmpegPath.ifEmpty { "(search)" }} yt-dlp=${next.ytDlpPath.ifEmpty { "(search)" }}"
             }
             onChange?.invoke(next)
         }
@@ -118,6 +132,9 @@ object DownloadSettingsStore {
     fun reload() {
         loaded = null
     }
+
+    /** A path as given in Settings: trimmed, surrounding quotes dropped. */
+    private fun cleanPath(path: String): String = path.trim().removeSurrounding("\"").trim()
 
     private fun check(
         field: String,

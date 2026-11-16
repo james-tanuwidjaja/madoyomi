@@ -145,7 +145,11 @@ class MigrationsFromEmptyDbTest {
                         "ERROR",
                         "ADDED_AT",
                         "FINISHED_AT",
+                        "PROGRESS_UNIT",
+                        "TOTAL_BYTES",
                     ),
+                "EPISODE_DOWNLOAD" to
+                    setOf("ID", "EPISODE", "ANIME", "PATH", "SUBTITLES", "VIDEO_TITLE", "METHOD", "BYTES", "DOWNLOADED_AT"),
             )
 
         /** Foreign keys of the new tables: table -> column -> (referenced table, ON DELETE rule or null if unspecified). */
@@ -167,6 +171,7 @@ class MigrationsFromEmptyDbTest {
                         "ANIME" to ("ANIME" to "CASCADE"),
                         "EPISODE" to ("EPISODE" to "CASCADE"),
                     ),
+                "EPISODE_DOWNLOAD" to mapOf("EPISODE" to ("EPISODE" to "CASCADE"), "ANIME" to ("ANIME" to "CASCADE")),
             )
 
         @BeforeAll
@@ -197,7 +202,7 @@ class MigrationsFromEmptyDbTest {
         val migrations = loadMigrations()
         val versions = migrations.map { it.version }.sorted()
         assertEquals((1..migrations.size).toList(), versions, "migration versions must be consecutive from 1")
-        assertTrue(migrations.size >= 74, "expected at least M0069 to M0074, found ${migrations.size} migrations")
+        assertTrue(migrations.size >= 75, "expected at least M0069 to M0075, found ${migrations.size} migrations")
 
         val madoyomiVersions = migrations.filter { it is MadoyomiMigration }.map { it.version }.sorted()
         assertEquals(

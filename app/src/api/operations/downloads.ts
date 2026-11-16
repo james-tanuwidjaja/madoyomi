@@ -5,17 +5,21 @@ import type {
   DownloadItemState,
   DownloadQueue,
   DownloadSettings,
+  DownloadTool,
   ExtensionKind,
   LongString,
   MediaKind,
+  PlaybackSession,
 } from "../types";
+import { PLAYBACK_SESSION_FIELDS } from "./playback";
 import { extensionKindOf, mediaKindOf } from "../types";
 
 /*
  * The download queue (Phase 6 Stage 4), the backend's for both kinds: the queue (`downloadQueue`; the
  * `downloadsChanged` subscription is in ./subscriptions), the completed list of a kind (the last finished first, paged
- * by offset), queueing chapters, pause, resume, retry, cancel and reorder, deleting downloads (the files), clearing the
- * completed list, and Settings → Downloads.
+ * by offset), queueing chapters or episodes, pause, resume, retry, cancel and reorder, deleting downloads (the files),
+ * clearing the completed list, and Settings → Downloads. Stage 5: the tools' check (`downloadTools`) and playing a
+ * downloaded episode (`playDownloadedEpisode`).
  */
 
 export const DOWNLOAD_ITEM_FIELDS = /* GraphQL */ `
@@ -29,7 +33,9 @@ export const DOWNLOAD_ITEM_FIELDS = /* GraphQL */ `
     itemName
     progressDone
     progressTotal
+    progressUnit
     bytes
+    totalBytes
     tries
     error
     addedAt
@@ -135,6 +141,8 @@ const DOWNLOAD_SETTINGS_FIELDS = `
   perSource
   autoDownload
   path
+  ffmpegPath
+  ytDlpPath
 `;
 
 export const DOWNLOAD_SETTINGS_QUERY = /* GraphQL */ `
@@ -146,15 +154,53 @@ export const DOWNLOAD_SETTINGS_QUERY = /* GraphQL */ `
 `;
 
 export const SET_DOWNLOAD_SETTINGS_MUTATION = /* GraphQL */ `
-  mutation SetDownloadSettings($maxParallel: Int, $perSource: Int, $autoDownload: Boolean) {
+  mutation SetDownloadSettings(
+    $maxParallel: Int
+    $perSource: Int
+    $autoDownload: Boolean
+    $ffmpegPath: String
+    $ytDlpPath: String
+  ) {
     setDownloadSettings(
-      input: { maxParallel: $maxParallel, perSource: $perSource, autoDownload: $autoDownload }
+      input: {
+        maxParallel: $maxParallel
+        perSource: $perSource
+        autoDownload: $autoDownload
+        ffmpegPath: $ffmpegPath
+        ytDlpPath: $ytDlpPath
+      }
     ) {
       settings {
         ${DOWNLOAD_SETTINGS_FIELDS}
       }
     }
   }
+`;
+
+export const DOWNLOAD_TOOLS_QUERY = /* GraphQL */ `
+  query DownloadTools($ffmpegPath: String, $ytDlpPath: String) {
+    downloadTools(ffmpegPath: $ffmpegPath, ytDlpPath: $ytDlpPath) {
+      tool
+      ok
+      path
+      origin
+      version
+      message
+    }
+  }
+`;
+
+export const PLAY_DOWNLOADED_EPISODE_MUTATION = /* GraphQL */ `
+  mutation PlayDownloadedEpisode($episodeId: Int!, $startSeconds: Float, $resume: Boolean) {
+    playDownloadedEpisode(
+      input: { episodeId: $episodeId, startSeconds: $startSeconds, resume: $resume }
+    ) {
+      session {
+        ...PlaybackSessionFields
+      }
+    }
+  }
+  ${PLAYBACK_SESSION_FIELDS}
 `;
 
 /** A download item as the backend sends it: the kind by its GraphQL name, the 64-bit numbers as strings. */
@@ -168,7 +214,9 @@ export interface DownloadItemNode {
   itemName: string;
   progressDone: number;
   progressTotal: number;
+  progressUnit: DownloadItem["progressUnit"];
   bytes: LongString;
+  totalBytes: LongString;
   tries: number;
   error: string | null;
   addedAt: LongString;
@@ -187,6 +235,7 @@ export function toDownloadItem(n: DownloadItemNode): DownloadItem {
     ...n,
     kind: mediaKindOf(n.kind),
     bytes: Number(n.bytes),
+    totalBytes: Number(n.totalBytes),
     addedAt: Number(n.addedAt),
     finishedAt: Number(n.finishedAt),
   };
@@ -315,4 +364,35 @@ export async function setDownloadSettings(
       patch,
     )
   ).setDownloadSettings.settings;
+}
+
+/** ffmpeg and yt-dlp as the backend would use them now; a path given is tried in place of the saved one. */
+export async function fetchDownloadTools(
+  paths: { ffmpegPath?: string; ytDlpPath?: string } = {},
+  signal?: AbortSignal,
+): Promise<DownloadTool[]> {
+  return (
+    await api.gql<{ downloadTools: DownloadTool[] }>(
+      DOWNLOAD_TOOLS_QUERY,
+      { ffmpegPath: paths.ffmpegPath ?? null, ytDlpPath: paths.ytDlpPath ?? null },
+      { signal },
+    )
+  ).downloadTools;
+}
+
+/**
+ * Plays a downloaded episode's file in mpv (the same session as `playEpisode`), from `startSeconds`, or with `resume`
+ * (and no start) from where it stopped, as the backend reckons it.
+ */
+export async function playDownloadedEpisode(
+  episodeId: number,
+  startSeconds?: number | null,
+  resume = false,
+): Promise<PlaybackSession> {
+  return (
+    await api.gql<{ playDownloadedEpisode: { session: PlaybackSession } }>(
+      PLAY_DOWNLOADED_EPISODE_MUTATION,
+      { episodeId, startSeconds: startSeconds ?? null, resume },
+    )
+  ).playDownloadedEpisode.session;
 }

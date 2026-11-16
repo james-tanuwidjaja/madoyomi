@@ -550,6 +550,12 @@ fn run_once(
     if let Some(dir) = &player.config_dir {
         cmd.env("MADOYOMI_PLAYER_DIR", dir);
     }
+    if let Some(ffmpeg) = &player.ffmpeg {
+        cmd.env("MADOYOMI_FFMPEG", ffmpeg);
+    }
+    if let Some(yt_dlp) = &player.yt_dlp {
+        cmd.env("MADOYOMI_YTDLP", yt_dlp);
+    }
     shared.log.shell(&format!(
         "start attempt {attempt}: {} -jar {} --data-dir {}",
         java.display(),
@@ -566,6 +572,17 @@ fn run_once(
             .config_dir
             .as_deref()
             .map_or_else(|| "in the data dir".to_owned(), |p| p.display().to_string()),
+    ));
+    shared.log.shell(&format!(
+        "downloads: ffmpeg {}, yt-dlp {}",
+        player.ffmpeg.as_deref().map_or_else(
+            || "from the settings or PATH".to_owned(),
+            |p| p.display().to_string()
+        ),
+        player.yt_dlp.as_deref().map_or_else(
+            || "from the settings or PATH".to_owned(),
+            |p| p.display().to_string()
+        ),
     ));
 
     let mut child = match cmd.spawn() {
@@ -1068,6 +1085,9 @@ fn jar_from(
 struct Player {
     mpv: Option<PathBuf>,
     config_dir: Option<PathBuf>,
+    /// Phase 6 Stage 5: the anime downloads' programs, `MADOYOMI_FFMPEG` and `MADOYOMI_YTDLP`, found as mpv is.
+    ffmpeg: Option<PathBuf>,
+    yt_dlp: Option<PathBuf>,
 }
 
 fn resolve_player(resources: Option<&Path>) -> Player {
@@ -1075,6 +1095,8 @@ fn resolve_player(resources: Option<&Path>) -> Player {
     Player {
         mpv: mpv_from(env_path("MADOYOMI_MPV"), resources, &root),
         config_dir: player_dir_from(env_path("MADOYOMI_PLAYER_DIR"), resources, &root),
+        ffmpeg: tool_from(env_path("MADOYOMI_FFMPEG"), resources, &root, "ffmpeg"),
+        yt_dlp: tool_from(env_path("MADOYOMI_YTDLP"), resources, &root, "yt-dlp"),
     }
 }
 
@@ -1086,13 +1108,29 @@ fn mpv_from(
     resources: Option<&Path>,
     dev_root: &Path,
 ) -> Option<PathBuf> {
-    if override_mpv.is_some() {
-        return override_mpv;
+    tool_from(override_mpv, resources, dev_root, "mpv")
+}
+
+/// A bundled program `name` as mpv is found (Phase 6 Stage 5 adds ffmpeg and yt-dlp): the override, else
+/// `<resources>/<name>/<name>.exe` (release) or the repo's `tools/bin/<name>/<name>.exe` (debug) when it is there,
+/// else `None` (the backend looks in its settings, then on PATH).
+fn tool_from(
+    override_path: Option<PathBuf>,
+    resources: Option<&Path>,
+    dev_root: &Path,
+    name: &str,
+) -> Option<PathBuf> {
+    if override_path.is_some() {
+        return override_path;
     }
-    let exe = if cfg!(windows) { "mpv.exe" } else { "mpv" };
+    let exe = if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
     let candidate = match resources {
-        Some(dir) => dir.join("mpv").join(exe),
-        None => dev_root.join("tools").join("bin").join("mpv").join(exe),
+        Some(dir) => dir.join(name).join(&exe),
+        None => dev_root.join("tools").join("bin").join(name).join(&exe),
     };
     candidate.is_file().then_some(candidate)
 }
@@ -1533,6 +1571,41 @@ mod tests {
         let custom = dir.join("custom").join(exe);
         assert_eq!(
             mpv_from(Some(custom.clone()), Some(&resources), &repo),
+            Some(custom)
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_download_tools_come_from_the_override_then_the_bundle_or_the_repo_else_path() {
+        // Phase 6 Stage 5: MADOYOMI_FFMPEG / MADOYOMI_YTDLP, the bundled ones (release) or tools/bin (debug).
+        let dir = std::env::temp_dir().join(format!("madoyomi-tools-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let exe = if cfg!(windows) {
+            "yt-dlp.exe"
+        } else {
+            "yt-dlp"
+        };
+        let repo = dir.join("repo");
+        let resources = dir.join("resources");
+        assert_eq!(tool_from(None, None, &repo, "yt-dlp"), None);
+
+        let dev = repo.join("tools").join("bin").join("yt-dlp");
+        fs::create_dir_all(&dev).unwrap();
+        File::create(dev.join(exe)).unwrap();
+        assert_eq!(tool_from(None, None, &repo, "yt-dlp"), Some(dev.join(exe)));
+        assert_eq!(tool_from(None, None, &repo, "ffmpeg"), None);
+        assert_eq!(tool_from(None, Some(&resources), &repo, "yt-dlp"), None);
+        let bundled = resources.join("yt-dlp");
+        fs::create_dir_all(&bundled).unwrap();
+        File::create(bundled.join(exe)).unwrap();
+        assert_eq!(
+            tool_from(None, Some(&resources), &repo, "yt-dlp"),
+            Some(bundled.join(exe))
+        );
+        let custom = dir.join("custom.exe");
+        assert_eq!(
+            tool_from(Some(custom.clone()), None, &repo, "yt-dlp"),
             Some(custom)
         );
         fs::remove_dir_all(&dir).unwrap();

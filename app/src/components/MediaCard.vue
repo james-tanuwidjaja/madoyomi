@@ -15,7 +15,7 @@ import type { EntrySummary } from "../api/types";
  * the card is a toggle button instead of a link, `selected` marks it, and a click emits `select` with the event (for
  * Shift+click ranges). `count` (Phase 6 Stage 2): the unwatched/unread badge, shown above 0. `newCount` (Stage 3):
  * the "N new" mark of an entry a library update check found new items in, until it is opened. `downloaded` (Stage 4):
- * how many of its chapters are downloaded, shown above 0.
+ * how many of its chapters (Stage 5: or episodes) are downloaded, shown above 0.
  */
 const props = defineProps<{
   entry: EntrySummary;

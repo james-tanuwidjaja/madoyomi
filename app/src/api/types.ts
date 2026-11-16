@@ -387,6 +387,8 @@ export interface Episode {
   totalSeconds: LongString;
   summary: string | null;
   previewUrl: string | null;
+  /** Phase 6 Stage 5: downloaded; Play plays its file (`playDownloadedEpisode`), offline too. */
+  downloaded?: boolean;
 }
 
 /** `UpdateEpisodePatch` (`updateEpisode(s)`, Phase 4 Stage 3): what to change; a field left out stays. */
@@ -461,7 +463,10 @@ export interface LibraryEntry extends EntrySummary {
   unreadCount: number;
   /** When an episode was last played or a chapter last read, epoch seconds (0: never); the "Last watched/read" sort. */
   lastReadAt: number;
-  /** Phase 6 Stage 4: chapters downloaded (upstream's `MangaType.downloadCount`); anime's come in Stage 5. */
+  /**
+   * Phase 6 Stages 4–5: chapters downloaded (upstream's `MangaType.downloadCount`) or episodes downloaded
+   * (`AnimeType.downloadCount`, a Seasons entry's seasons included).
+   */
   downloadCount?: number;
 }
 
@@ -846,6 +851,12 @@ export interface UpdatesPage {
  */
 export type DownloadItemState = "QUEUED" | "DOWNLOADING" | "PAUSED" | "FAILED" | "DONE";
 
+/**
+ * What a download's `progressDone`/`progressTotal` count (Stage 5): a chapter's pages; a file's bytes (as thousandths,
+ * with `totalBytes`); the seconds ffmpeg wrote of the episode's duration (HLS, DASH); yt-dlp's segments.
+ */
+export type DownloadProgressUnit = "PAGES" | "BYTES" | "SECONDS" | "SEGMENTS";
+
 /** An episode or chapter in the download queue or the completed list. */
 export interface DownloadItem {
   id: number;
@@ -857,11 +868,14 @@ export interface DownloadItem {
   itemId: number;
   entryTitle: string;
   itemName: string;
-  /** Pages downloaded of `progressTotal` (0 before the page list is known). */
+  /** How far it got of `progressTotal` (0 before that is known), in `progressUnit`. */
   progressDone: number;
   progressTotal: number;
+  progressUnit: DownloadProgressUnit;
   /** Bytes written so far; the file's size once done. */
   bytes: number;
+  /** The size it will have, when known (0: unknown). */
+  totalBytes: number;
   /** Failed attempts since it was queued or retried. */
   tries: number;
   error: string | null;
@@ -895,4 +909,18 @@ export interface DownloadSettings {
   autoDownload: boolean;
   /** The folder downloads are saved in (read only). */
   path: string;
+  /** Stage 5: the ffmpeg for HLS episodes; "" looks for one (`MADOYOMI_FFMPEG`, then PATH). */
+  ffmpegPath: string;
+  /** Stage 5: the yt-dlp to fall back on; "" looks for one (`MADOYOMI_YTDLP`, then PATH). */
+  ytDlpPath: string;
+}
+
+/** Stage 5: ffmpeg or yt-dlp as the backend finds it now (Settings → Downloads). */
+export interface DownloadTool {
+  tool: "FFMPEG" | "YT_DLP";
+  ok: boolean;
+  path: string | null;
+  origin: "SETTINGS" | "SYSTEM_PROPERTY" | "ENV" | "PATH" | null;
+  version: string | null;
+  message: string | null;
 }
