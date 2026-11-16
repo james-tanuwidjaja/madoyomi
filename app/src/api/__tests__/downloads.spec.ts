@@ -13,6 +13,10 @@ import {
   COMPLETED_DOWNLOADS_QUERY,
   DELETE_DOWNLOADS_MUTATION,
   deleteDownloads,
+  DOWNLOAD_TOOLS_QUERY,
+  fetchDownloadTools,
+  PLAY_DOWNLOADED_EPISODE_MUTATION,
+  playDownloadedEpisode,
   ENQUEUE_DOWNLOADS_MUTATION,
   enqueueDownloads,
   fetchCompletedDownloads,
@@ -38,7 +42,9 @@ const node = (overrides: Partial<DownloadItemNode> = {}): DownloadItemNode => ({
   itemName: "Chapter 892",
   progressDone: 4,
   progressTotal: 20,
+  progressUnit: "PAGES",
   bytes: "123456",
+  totalBytes: "0",
   tries: 0,
   error: null,
   addedAt: "1700000000000",
@@ -57,6 +63,7 @@ describe("download operations", () => {
           ...node(),
           kind: "manga",
           bytes: 123456,
+          totalBytes: 0,
           addedAt: 1_700_000_000_000,
           finishedAt: 0,
         },
@@ -127,6 +134,45 @@ describe("download operations", () => {
     expect(client.gql).toHaveBeenLastCalledWith(SET_DOWNLOAD_SETTINGS_MUTATION, {
       maxParallel: 4,
       autoDownload: true,
+    });
+  });
+
+  it("checks the download tools and plays a downloaded episode (Stage 5)", async () => {
+    const tool = {
+      tool: "FFMPEG",
+      ok: true,
+      path: "C:/ffmpeg.exe",
+      origin: "PATH",
+      version: "ffmpeg version 7",
+      message: null,
+    };
+    client.gql.mockResolvedValueOnce({ downloadTools: [tool] });
+    expect(await fetchDownloadTools()).toEqual([tool]);
+    expect(client.gql).toHaveBeenLastCalledWith(
+      DOWNLOAD_TOOLS_QUERY,
+      { ffmpegPath: null, ytDlpPath: null },
+      { signal: undefined },
+    );
+    client.gql.mockResolvedValueOnce({ downloadTools: [tool] });
+    await fetchDownloadTools({ ffmpegPath: "D:/x/ffmpeg.exe" });
+    expect(client.gql.mock.lastCall?.[1]).toEqual({
+      ffmpegPath: "D:/x/ffmpeg.exe",
+      ytDlpPath: null,
+    });
+
+    client.gql.mockResolvedValueOnce({ playDownloadedEpisode: { session: { id: "s1" } } });
+    expect(await playDownloadedEpisode(81, 42)).toEqual({ id: "s1" });
+    expect(client.gql).toHaveBeenLastCalledWith(PLAY_DOWNLOADED_EPISODE_MUTATION, {
+      episodeId: 81,
+      startSeconds: 42,
+      resume: false,
+    });
+    client.gql.mockResolvedValueOnce({ playDownloadedEpisode: { session: { id: "s2" } } });
+    await playDownloadedEpisode(81, null, true);
+    expect(client.gql.mock.lastCall?.[1]).toEqual({
+      episodeId: 81,
+      startSeconds: null,
+      resume: true,
     });
   });
 });

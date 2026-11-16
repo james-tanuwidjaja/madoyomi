@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
-import type { Episode } from "../api/types";
+import type { DownloadItem, Episode } from "../api/types";
+import {
+  useChangeDownloads,
+  useDeleteDownloads,
+  useEnqueueDownloads,
+  useEntryDownloads,
+} from "../composables/useDownloads";
 import { useUpdateEpisodes } from "../composables/useEntries";
 import { useNextEpisode, type PickerFailure } from "../composables/useNextEpisode";
+import { usePlayDownloadedEpisode } from "../composables/usePlayback";
+import { useWatchedThreshold } from "../composables/usePlayerSettings";
 import { usePlaybackStore } from "../stores/playback";
+import { NEXT_UNREAD_COUNTS, nextUnwatched, percentOf, stateText } from "../utils/downloads";
 import { fromEpisode } from "../utils/entryItems";
+import { episodeProgress, resumePoint } from "../utils/progress";
 import EntryItemList from "./EntryItemList.vue";
 import ErrorNotice from "./ErrorNotice.vue";
 import NextEpisodeToast from "./NextEpisodeToast.vue";
@@ -26,6 +36,12 @@ import VideoPicker from "./VideoPicker.vue";
  *
  * Phase 6 Stage 2: `playOnOpen` (History's Resume, `?play=` on the details page) opens the picker for that episode
  * once it is in the list, then emits `play-opened`.
+ *
+ * Phase 6 Stage 5, downloads (as the chapter list's): a row's Download queues it (the backend resolves the video by the
+ * player settings' preference right before), and while it is in the queue the row says how far it got with Cancel
+ * (Retry once it failed); a downloaded one has a badge, and its Play plays the file from where it stopped, with
+ * nothing asked of the source (offline too), while "Stream…" opens the picker. The selection has Download and Delete
+ * downloads, and the toolbar's "Download…" queues the next 1, 5, 10 or 25 unwatched episodes, or all of them.
  */
 defineOptions({ inheritAttrs: false });
 
@@ -124,6 +140,102 @@ async function mark(ids: number[], isWatched: boolean) {
     // shown above the rows, from update.error
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Downloads (Phase 6 Stage 5)
+
+const downloads = useEntryDownloads("anime", () => props.animeId);
+const enqueue = useEnqueueDownloads();
+const change = useChangeDownloads();
+const remove = useDeleteDownloads();
+const playLocal = usePlayDownloadedEpisode();
+const threshold = useWatchedThreshold();
+const downloadError = computed(
+  () =>
+    enqueue.error.value ??
+    change.error.value ??
+    remove.error.value ??
+    playLocal.error.value ??
+    null,
+);
+
+const byId = computed(() => new Map(props.episodes.map((e) => [e.id, e])));
+
+function downloadOf(id: number): DownloadItem | undefined {
+  return downloads.value.get(id);
+}
+
+function queue(ids: number[]) {
+  const fresh = ids.filter((id) => !byId.value.get(id)?.downloaded && !downloads.value.has(id));
+  if (fresh.length === 0) return;
+  enqueue.mutate({ kind: "anime", entryId: props.animeId, itemIds: fresh });
+}
+
+const selectedDownloads = computed(() =>
+  selected.value.filter((id) => byId.value.get(id)?.downloaded || downloads.value.has(id)),
+);
+const selectedToDownload = computed(() =>
+  selected.value.filter((id) => !byId.value.get(id)?.downloaded && !downloads.value.has(id)),
+);
+
+async function deleteSelected() {
+  const ids = selectedDownloads.value;
+  if (ids.length === 0) return;
+  try {
+    await remove.mutateAsync({ kind: "anime", entryIds: [props.animeId], itemIds: ids });
+    selected.value = [];
+  } catch {
+    // shown above the rows
+  }
+}
+
+function queueSelected() {
+  queue(selectedToDownload.value);
+  selected.value = [];
+}
+
+function cancel(item: DownloadItem) {
+  change.mutate({ action: "cancel", ids: [item.id] });
+}
+
+function retry(item: DownloadItem) {
+  change.mutate({ action: "retry", ids: [item.id] });
+}
+
+/** Play on a downloaded episode: its file, from where it stopped (as the next episode and History resume). */
+function play(id: number) {
+  const episode = byId.value.get(id);
+  if (!episode?.downloaded) return openPicker(id);
+  next.dismiss();
+  playLocal.reset();
+  const startSeconds = resumePoint(
+    episode.isWatched,
+    episodeProgress(episode, playback.session),
+    threshold.value,
+  );
+  playLocal.mutate({ episodeId: id, startSeconds });
+}
+
+/** "Download…": the select resets to its title after each pick. */
+const nextChoice = ref("");
+const nextOptions = computed(() => [
+  ...NEXT_UNREAD_COUNTS.map((n) => ({
+    value: String(n),
+    label: n === 1 ? "Next unwatched episode" : `Next ${n} unwatched`,
+    count: nextUnwatched(props.episodes, n, downloads.value).length,
+  })),
+  {
+    value: "all",
+    label: "All unwatched",
+    count: nextUnwatched(props.episodes, "all", downloads.value).length,
+  },
+]);
+function onNext() {
+  const choice = nextChoice.value;
+  nextChoice.value = "";
+  if (!choice) return;
+  queue(nextUnwatched(props.episodes, choice === "all" ? "all" : Number(choice), downloads.value));
+}
 </script>
 
 <template>
@@ -135,15 +247,45 @@ async function mark(ids: number[], isWatched: boolean) {
     :items="items"
     :noun="{ one: 'episode', many: 'episodes' }"
     :done-labels="{ done: 'Watched', notDone: 'Unwatched' }"
-    note="Play lets you choose the video, and resumes where you stopped."
+    note="Play lets you choose the video, and resumes where you stopped. Downloaded episodes play offline."
     selectable
   >
+    <template #tools>
+      <label class="control">
+        <span class="sr-only">Download unwatched episodes</span>
+        <select
+          v-model="nextChoice"
+          class="field"
+          data-testid="download-next"
+          :disabled="enqueue.isPending.value"
+          @change="onNext"
+        >
+          <option value="" disabled>Download…</option>
+          <option
+            v-for="o in nextOptions"
+            :key="o.value"
+            :value="o.value"
+            :disabled="o.count === 0"
+          >
+            {{ o.label }}{{ o.count === 0 ? " (none left)" : "" }}
+          </option>
+        </select>
+      </label>
+    </template>
     <template #notice>
       <ErrorNotice
         v-if="update.error.value"
         title="Couldn't change the episodes"
         :error="update.error.value"
         data-testid="mark-error"
+      />
+      <ErrorNotice
+        v-if="downloadError"
+        :title="
+          playLocal.error.value ? 'Couldn\'t play the download' : 'Couldn\'t change the downloads'
+        "
+        :error="downloadError"
+        data-testid="download-error"
       />
     </template>
     <template #bulk-actions="{ ids }">
@@ -176,14 +318,100 @@ async function mark(ids: number[], isWatched: boolean) {
       >
         Mark previous as watched
       </button>
+      <button
+        type="button"
+        class="btn"
+        data-action="download-selected"
+        :disabled="enqueue.isPending.value || selectedToDownload.length === 0"
+        :title="
+          selectedToDownload.length === 0
+            ? 'Every selected episode is downloaded or queued'
+            : undefined
+        "
+        @click="queueSelected"
+      >
+        Download
+      </button>
+      <button
+        type="button"
+        class="btn"
+        data-action="delete-downloads"
+        :disabled="remove.isPending.value || selectedDownloads.length === 0"
+        :title="
+          selectedDownloads.length === 0 ? 'None of the selected episodes is downloaded' : undefined
+        "
+        @click="deleteSelected"
+      >
+        Delete downloads
+      </button>
     </template>
     <template #actions="{ item }">
+      <template v-if="downloadOf(item.id)">
+        <span
+          class="download-state"
+          :class="{ failed: downloadOf(item.id)!.state === 'FAILED' }"
+          data-testid="download-state"
+          :title="downloadOf(item.id)!.error ?? undefined"
+        >
+          {{ stateText(downloadOf(item.id)!)
+          }}<template
+            v-if="
+              downloadOf(item.id)!.state === 'DOWNLOADING' &&
+              percentOf(downloadOf(item.id)!) !== null
+            "
+          >
+            · {{ percentOf(downloadOf(item.id)!) }}%</template
+          >
+        </span>
+        <button
+          v-if="downloadOf(item.id)!.state === 'FAILED'"
+          type="button"
+          class="btn"
+          data-action="retry-download"
+          :aria-label="`Retry downloading ${item.name}`"
+          @click="retry(downloadOf(item.id)!)"
+        >
+          Retry
+        </button>
+        <button
+          type="button"
+          class="btn"
+          data-action="cancel-download"
+          :aria-label="`Cancel downloading ${item.name}`"
+          @click="cancel(downloadOf(item.id)!)"
+        >
+          Cancel
+        </button>
+      </template>
+      <button
+        v-else-if="!item.downloaded"
+        type="button"
+        class="btn"
+        data-action="download"
+        :aria-label="`Download ${item.name}`"
+        :disabled="enqueue.isPending.value"
+        @click="queue([item.id])"
+      >
+        Download
+      </button>
+      <button
+        v-else
+        type="button"
+        class="btn"
+        data-action="stream"
+        :aria-label="`Stream ${item.name}`"
+        title="Choose a video from the source instead of the download"
+        @click="openPicker(item.id)"
+      >
+        Stream…
+      </button>
       <button
         type="button"
         class="btn"
         data-action="play"
         :aria-label="`Play ${item.name}`"
-        @click="openPicker(item.id)"
+        :disabled="playLocal.isPending.value && playLocal.variables.value?.episodeId === item.id"
+        @click="play(item.id)"
       >
         Play
       </button>
@@ -205,3 +433,29 @@ async function mark(ids: number[], isWatched: boolean) {
     @cancel="next.cancel()"
   />
 </template>
+
+<style scoped>
+.control {
+  display: flex;
+  align-items: center;
+}
+
+.download-state {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  white-space: nowrap;
+}
+
+.download-state.failed {
+  color: var(--color-danger);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+</style>

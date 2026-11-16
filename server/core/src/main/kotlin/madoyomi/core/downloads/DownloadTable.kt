@@ -20,10 +20,17 @@ import suwayomi.tachidesk.manga.model.table.MangaTable
 enum class DownloadItemState { QUEUED, DOWNLOADING, PAUSED, FAILED, DONE }
 
 /**
+ * What a row's `progress_done`/`progress_total` count (Stage 5, M0075): a chapter's pages; a file's bytes (the two
+ * then thousandths, and [DownloadTable.totalBytes] the size); the seconds of the episode ffmpeg wrote, of its
+ * duration (HLS, DASH); yt-dlp's segments (fragments).
+ */
+enum class DownloadProgressUnit { PAGES, BYTES, SECONDS, SEGMENTS }
+
+/**
  * The download queue (M0074), one row per episode or chapter, for both kinds: a manga row has [manga] and [chapter],
  * an anime row (Stage 5) [anime] and [episode]. The references cascade, so a chapter that a refresh replaced takes
  * its download with it. [position] orders the unfinished rows (lowest first); [progressDone] of [progressTotal] are
- * pages for a chapter. Times are epoch milliseconds.
+ * in [progressUnit] (M0075). Times are epoch milliseconds.
  */
 object DownloadTable : IntIdTable("download") {
     val kind = enumerationByName("kind", 16, ExtensionKind::class)
@@ -46,4 +53,30 @@ object DownloadTable : IntIdTable("download") {
     val error = text("error").nullable()
     val addedAt = long("added_at").default(0)
     val finishedAt = long("finished_at").default(0)
+
+    /** Stage 5 (M0075): what [progressDone] and [progressTotal] count. */
+    val progressUnit = enumerationByName("progress_unit", 16, DownloadProgressUnit::class).default(DownloadProgressUnit.PAGES)
+
+    /** Stage 5 (M0075): the size the download will have, when known (0: unknown). */
+    val totalBytes = long("total_bytes").default(0)
+}
+
+/** How an episode was downloaded (Stage 5). */
+enum class EpisodeDownloadMethod { DIRECT, FFMPEG, YT_DLP }
+
+/**
+ * The downloaded episodes (Stage 5, M0075): one row per episode whose file is on disk, kept apart from the queue's
+ * completed list (which Clear list empties while the files stay). Paths are relative to the downloads folder, with
+ * `/`; [subtitles] is a JSON list of `{"path": …, "lang": …, "kind": "subtitle" | "audio"}` (the external audio tracks too). The episode reference cascades: a refresh that replaces
+ * the episode forgets the download (its files stay, as a re-listed chapter's CBZ does).
+ */
+object EpisodeDownloadTable : IntIdTable("episode_download") {
+    val episode = reference("episode", EpisodeTable, ReferenceOption.CASCADE).uniqueIndex()
+    val anime = reference("anime", AnimeTable, ReferenceOption.CASCADE).index()
+    val path = varchar("path", 2048)
+    val subtitles = text("subtitles").default("[]")
+    val videoTitle = varchar("video_title", 512).default("")
+    val method = enumerationByName("method", 16, EpisodeDownloadMethod::class)
+    val bytes = long("bytes").default(0)
+    val downloadedAt = long("downloaded_at").default(0)
 }

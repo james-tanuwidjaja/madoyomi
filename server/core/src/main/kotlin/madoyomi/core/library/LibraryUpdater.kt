@@ -130,8 +130,9 @@ object LibraryUpdater {
     var parallelSourcesOverride: Int? = null
 
     /**
-     * Called with the ids of the new chapters a check found in a manga entry (Stage 4: the download queue's automatic
-     * downloads, [madoyomi.core.downloads.MangaDownloads.autoDownload]).
+     * Called with the ids of the new chapters or episodes a check found in an entry (the download queue's automatic
+     * downloads: Stage 4's [madoyomi.core.downloads.MangaDownloads.autoDownload], Stage 5's
+     * [madoyomi.core.downloads.AnimeDownloads.autoDownload]).
      */
     @Volatile
     var onNewItems: ((Entry, List<Int>) -> Unit)? = null
@@ -316,24 +317,35 @@ object LibraryUpdater {
     // the real check of one entry: the fetch and the diff, then the number of items it inserted
     private suspend fun fetch(entry: Entry): Int =
         when (entry.kind) {
-            ExtensionKind.ANIME -> fetchAnime(entry.id)
+            ExtensionKind.ANIME -> fetchAnime(entry)
             ExtensionKind.MANGA -> fetchManga(entry)
         }
 
-    private suspend fun fetchAnime(animeId: Int): Int {
+    private suspend fun fetchAnime(entry: Entry): Int {
+        val ids = newEpisodes(entry.id)
+        if (ids.isNotEmpty()) {
+            // Stage 5: the anime downloads' turn (a Seasons entry's new episodes are its seasons')
+            runCatching { onNewItems?.invoke(entry, ids) }
+                .onFailure { logger.warn(it) { "library update: what follows the new episodes of anime ${entry.id} failed" } }
+        }
+        return ids.size
+    }
+
+    // the ids of the episodes the check of [animeId] inserted
+    private suspend fun newEpisodes(animeId: Int): List<Int> {
         val row = AnimeEntries.animeRow(animeId)
         val initialized = row[AnimeTable.initialized]
         if (row[AnimeTable.fetchType] == FetchType.Seasons) {
             // the season list, then the episodes of each season already fetched once (a season never opened is left
             // for its first visit, which would otherwise count its whole list as new)
             val result = AnimeDetails.fetch(animeId, fetchDetails = !initialized, fetchChildren = true)
-            var count = 0
+            val ids = mutableListOf<Int>()
             for (seasonId in result.seasonIds) {
                 if (episodeCount(seasonId) == 0L) continue
                 if (staggerMs > 0) delay(staggerMs)
-                count += fetchEpisodes(seasonId, fetchDetails = false)
+                ids += fetchEpisodes(seasonId, fetchDetails = false)
             }
-            return count
+            return ids
         }
         return fetchEpisodes(animeId, fetchDetails = !initialized)
     }
@@ -341,11 +353,11 @@ object LibraryUpdater {
     private suspend fun fetchEpisodes(
         animeId: Int,
         fetchDetails: Boolean,
-    ): Int {
+    ): List<Int> {
         val before = episodes(animeId).keys
         val since = System.currentTimeMillis() / 1000
         AnimeDetails.fetch(animeId, fetchDetails = fetchDetails, fetchChildren = true)
-        return newItems(before, since, episodes(animeId))
+        return newItemIds(before, since, episodes(animeId))
     }
 
     // id -> fetched_at of an anime's episodes

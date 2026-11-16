@@ -6,7 +6,7 @@ import { NEXT_EPISODE_COUNTDOWN_SECONDS, usePlayerPrefsStore } from "../stores/p
 import { useVideoChoicesStore } from "../stores/videoChoices";
 import { episodeProgress, resumePoint } from "../utils/progress";
 import { initialPick, rememberedHoster, videoOf } from "../utils/videos";
-import { usePlayEpisode } from "./usePlayback";
+import { usePlayDownloadedEpisode, usePlayEpisode } from "./usePlayback";
 import { useWatchedThreshold } from "./usePlayerSettings";
 
 /** What the picker shows when it opens because something failed, and the video it preselects instead. */
@@ -32,7 +32,8 @@ export interface NextEpisodeOptions {
  * the next episode plays without the picker (Stage 3's decision): the videos are fetched, the remembered choice for
  * the source is taken (else the player settings' preference, else the source's pick; Stage 5), and it plays from its
  * resume point (as the picker's default, with the settings' watched threshold), else
- * from the start. If that can't work, the picker opens for that episode with why.
+ * from the start. A downloaded next episode plays from its file instead (Phase 6 Stage 5), with nothing asked of the
+ * source. If that can't work, the picker opens for that episode with why.
  *
  * `cancel`, a new session (another Play), and the page going away (the scope's end) stop it. `cancel` and the page
  * going away while it starts also stop what it started: a start still fetching the videos plays nothing, and one whose
@@ -44,6 +45,7 @@ export function useNextEpisode(options: NextEpisodeOptions) {
   const prefs = usePlayerPrefsStore();
   const choices = useVideoChoicesStore();
   const play = usePlayEpisode();
+  const playLocal = usePlayDownloadedEpisode();
   const threshold = useWatchedThreshold();
 
   const offer = shallowRef<{ episode: Episode; secondsLeft: number | null } | null>(null);
@@ -115,6 +117,25 @@ export function useNextEpisode(options: NextEpisodeOptions) {
     const sourceId = options.sourceId();
     const remembered = choices.choiceOf(sourceId);
     try {
+      // Phase 6 Stage 5: a downloaded next episode plays from its file (offline too), from its resume point
+      if (episode.downloaded) {
+        const resumeAt = resumePoint(
+          episode.isWatched,
+          episodeProgress(episode, null),
+          threshold.value,
+        );
+        await playLocal.mutateAsync({ episodeId: episode.id, startSeconds: resumeAt });
+        if (mine !== generation) {
+          if (stopRequested === mine) {
+            stopRequested = null;
+            await stopPlayback().catch(() => null);
+          }
+          return;
+        }
+        offer.value = null;
+        starting.value = false;
+        return;
+      }
       let hosters = await fetchEpisodeVideos(episode.id);
       if (mine !== generation) return;
       // the remembered hoster loads only on request (as in the picker)

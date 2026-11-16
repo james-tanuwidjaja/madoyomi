@@ -68,7 +68,7 @@ object MangaChapterDownloader : ItemDownloader {
 
     override suspend fun download(
         item: DownloadItem,
-        progress: suspend (done: Int, total: Int, bytes: Long) -> Unit,
+        progress: suspend (DownloadProgress) -> Unit,
     ): Long {
         val mangaId = item.entryId
         val chapterId = item.itemId
@@ -76,7 +76,7 @@ object MangaChapterDownloader : ItemDownloader {
         val cbz = File(getChapterCbzPath(mangaId, chapterId))
         if (chapter.downloaded && cbz.isFile) {
             markDownloaded(item.userId, chapterId, chapter.pageCount)
-            progress(chapter.pageCount, chapter.pageCount, cbz.length())
+            progress(DownloadProgress(chapter.pageCount, chapter.pageCount, cbz.length()))
             return cbz.length()
         }
         val pageCount = chapter.pageCount
@@ -115,7 +115,7 @@ object MangaChapterDownloader : ItemDownloader {
                     }
                     ?: fetch(mangaId, chapterId, index, staging, name, source, pages[index])
             bytes += staged.length()
-            progress(index + 1, pageCount, bytes)
+            progress(DownloadProgress(index + 1, pageCount, bytes))
         }
 
         val (mangaRow, chapterRow) =

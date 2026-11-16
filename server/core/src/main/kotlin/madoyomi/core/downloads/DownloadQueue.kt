@@ -62,6 +62,22 @@ data class DownloadItem(
     val error: String?,
     val addedAt: Long,
     val finishedAt: Long,
+    /** Stage 5: what [progressDone] and [progressTotal] count. */
+    val progressUnit: DownloadProgressUnit = DownloadProgressUnit.PAGES,
+    /** Stage 5: the size it will have, when known (0: unknown). */
+    val totalBytes: Long = 0,
+)
+
+/**
+ * How far a download got: [done] of [total] in [unit] (pages; thousandths for [DownloadProgressUnit.BYTES]; seconds),
+ * [bytes] written so far and the [totalBytes] expected (0: unknown).
+ */
+data class DownloadProgress(
+    val done: Int,
+    val total: Int,
+    val bytes: Long,
+    val unit: DownloadProgressUnit = DownloadProgressUnit.PAGES,
+    val totalBytes: Long = 0,
 )
 
 /** What a kind's downloads are made by. */
@@ -73,7 +89,7 @@ interface ItemDownloader {
      */
     suspend fun download(
         item: DownloadItem,
-        progress: suspend (done: Int, total: Int, bytes: Long) -> Unit,
+        progress: suspend (DownloadProgress) -> Unit,
     ): Long
 
     /** Removes what [item] staged (it was cancelled). */
@@ -109,8 +125,9 @@ object DownloadQueue {
     @Volatile
     var staggerMs: Long = 1_000
 
-    /** The downloaders by kind (Stage 5 adds anime's); tests put fakes here. */
-    val downloaders: MutableMap<ExtensionKind, ItemDownloader> = ConcurrentHashMap(mapOf(ExtensionKind.MANGA to MangaChapterDownloader))
+    /** The downloaders by kind; tests put fakes here. */
+    val downloaders: MutableMap<ExtensionKind, ItemDownloader> =
+        ConcurrentHashMap(mapOf(ExtensionKind.MANGA to MangaChapterDownloader, ExtensionKind.ANIME to AnimeEpisodeDownloader))
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
@@ -143,7 +160,12 @@ object DownloadQueue {
                 }
             if (resumed > 0) logger.info { "download queue: $resumed downloads cut off by the last stop are queued again" }
             DownloadSettingsStore.onChange = { wakeUp() }
-            LibraryUpdater.onNewItems = { entry, ids -> MangaDownloads.autoDownload(entry, ids) }
+            LibraryUpdater.onNewItems = { entry, ids ->
+                when (entry.kind) {
+                    ExtensionKind.MANGA -> MangaDownloads.autoDownload(entry, ids)
+                    ExtensionKind.ANIME -> AnimeDownloads.autoDownload(entry, ids)
+                }
+            }
             loop = scope.launch { run() }
         }
         wakeUp()
@@ -239,6 +261,7 @@ object DownloadQueue {
                                 it[progressDone] = 0
                                 it[progressTotal] = 0
                                 it[bytes] = 0
+                                it[totalBytes] = 0
                                 it[tries] = 0
                                 it[error] = null
                                 it[addedAt] = now
@@ -558,7 +581,7 @@ object DownloadQueue {
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 try {
-                    val bytes = downloader.download(item) { done, total, b -> progress(item.id, done, total, b) }
+                    val bytes = downloader.download(item) { progress(item.id, it) }
                     finished(item, bytes)
                 } catch (e: CancellationException) {
                     throw e
@@ -579,16 +602,16 @@ object DownloadQueue {
 
     private fun progress(
         id: Int,
-        done: Int,
-        total: Int,
-        bytes: Long,
+        p: DownloadProgress,
     ) {
         val n =
             dbTransaction {
                 DownloadTable.update({ (DownloadTable.id eq id) and (DownloadTable.state eq DownloadItemState.DOWNLOADING) }) {
-                    it[progressDone] = done
-                    it[progressTotal] = total
-                    it[DownloadTable.bytes] = bytes
+                    it[progressDone] = p.done
+                    it[progressTotal] = p.total
+                    it[bytes] = p.bytes
+                    it[progressUnit] = p.unit
+                    it[totalBytes] = p.totalBytes
                 }
             }
         if (n > 0) changed()
@@ -699,6 +722,8 @@ object DownloadQueue {
             error = row[DownloadTable.error],
             addedAt = row[DownloadTable.addedAt],
             finishedAt = row[DownloadTable.finishedAt],
+            progressUnit = row[DownloadTable.progressUnit],
+            totalBytes = row[DownloadTable.totalBytes],
         )
     }
 }

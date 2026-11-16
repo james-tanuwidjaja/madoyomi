@@ -693,7 +693,8 @@ object PlaybackSessions {
         }
     }
 
-    private fun hostOf(url: String): String = runCatching { URI(url).host }.getOrNull() ?: "(no host)"
+    private fun hostOf(url: String): String =
+        if ("://" !in url) "a local file (a download)" else runCatching { URI(url).host }.getOrNull() ?: "(no host)"
 
     /** mpv's config dir, the sessions' files (`<data dir>/cache/player`) and mpv's log. */
     data class Dirs(

@@ -5,22 +5,27 @@ package madoyomi.api.graphql
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import com.expediagroup.graphql.dataloader.KotlinDataLoader
 import com.expediagroup.graphql.generator.annotations.GraphQLDescription
+import graphql.GraphQLContext
 import graphql.schema.DataFetchingEnvironment
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import madoyomi.core.anime.model.table.AnimeTable
 import madoyomi.core.anime.model.table.EpisodeTable
+import madoyomi.core.downloads.AnimeDownloads
 import madoyomi.core.downloads.DownloadItem
 import madoyomi.core.downloads.DownloadItemState
+import madoyomi.core.downloads.DownloadProgressUnit
 import madoyomi.core.downloads.DownloadQueue
 import madoyomi.core.downloads.DownloadSettings
 import madoyomi.core.downloads.DownloadSettingsStore
+import madoyomi.core.downloads.DownloadTools
 import madoyomi.core.downloads.MangaDownloads
-import madoyomi.core.error.ErrorCode
-import madoyomi.core.error.MadoyomiException
 import madoyomi.exthost.ExtensionKind
+import org.dataloader.DataLoader
+import org.dataloader.DataLoaderFactory
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.select
 import suwayomi.tachidesk.graphql.directives.RequireAuth
@@ -38,8 +43,9 @@ import java.util.concurrent.CompletableFuture
 
 /*
  * The download queue (Phase 6 Stage 4, madoyomi.core.downloads), for both kinds (manga in Stage 4, anime in Stage 5):
- * the queue and the completed list, queueing, pause, resume, retry, cancel, reorder, deleting downloaded chapters,
- * the settings, and the `downloadsChanged` subscription (the WS "downloads" event). Named apart from upstream's
+ * the queue and the completed list, queueing, pause, resume, retry, cancel, reorder, deleting downloaded chapters and
+ * episodes, the settings with the tools' check (Stage 5), playing a downloaded episode (Stage 5), and the
+ * `downloadsChanged` subscription (the WS "downloads" event). Named apart from upstream's
  * `enqueueChapterDownloads`/`downloadStatus`, which stay but the app doesn't use.
  */
 
@@ -55,11 +61,18 @@ data class DownloadItemType(
     val entryTitle: String,
     val itemName: String,
     val sourceId: Long,
-    @GraphQLDescription("Pages downloaded, of progressTotal (0 before the page list is known)")
+    @GraphQLDescription("How far it got, of progressTotal (0 before that is known), in progressUnit")
     val progressDone: Int,
     val progressTotal: Int,
+    @GraphQLDescription(
+        "What progressDone counts: PAGES (a chapter), BYTES (a file: thousandths, with totalBytes), SECONDS (ffmpeg, of " +
+            "the duration), SEGMENTS (yt-dlp's fragments)",
+    )
+    val progressUnit: DownloadProgressUnit,
     @GraphQLDescription("Bytes written so far (the file's size once done)")
     val bytes: Long,
+    @GraphQLDescription("The size it will have, when known; 0 if not")
+    val totalBytes: Long,
     @GraphQLDescription("Failed attempts since it was queued or retried")
     val tries: Int,
     @GraphQLDescription("Why the last attempt failed")
@@ -114,7 +127,9 @@ data class DownloadItemType(
                     sourceId = item.sourceId,
                     progressDone = item.progressDone,
                     progressTotal = item.progressTotal,
+                    progressUnit = item.progressUnit,
                     bytes = item.bytes,
+                    totalBytes = item.totalBytes,
                     tries = item.tries,
                     error = item.error,
                     addedAt = item.addedAt,
@@ -161,8 +176,28 @@ data class DownloadSettingsType(
     val autoDownload: Boolean,
     @GraphQLDescription("The folder downloads are saved in")
     val path: String,
+    @GraphQLDescription("The ffmpeg for HLS episodes; empty: looked for (MADOYOMI_FFMPEG, then PATH)")
+    val ffmpegPath: String,
+    @GraphQLDescription("The yt-dlp to fall back on; empty: looked for (MADOYOMI_YTDLP, then PATH)")
+    val ytDlpPath: String,
 ) {
-    constructor(s: DownloadSettings, path: String) : this(s.maxParallel, s.perSource, s.autoDownload, path)
+    constructor(s: DownloadSettings, path: String) : this(s.maxParallel, s.perSource, s.autoDownload, path, s.ffmpegPath, s.ytDlpPath)
+}
+
+@GraphQLDescription("A program anime downloads use, as the backend finds it now")
+data class DownloadToolType(
+    @GraphQLDescription("FFMPEG or YT_DLP")
+    val tool: DownloadTools.Tool,
+    @GraphQLDescription("Whether it was found and answered its version command")
+    val ok: Boolean,
+    val path: String?,
+    @GraphQLDescription("Where its path came from: SETTINGS, SYSTEM_PROPERTY, ENV or PATH")
+    val origin: DownloadTools.Origin?,
+    val version: String?,
+    @GraphQLDescription("Why it isn't usable")
+    val message: String?,
+) {
+    constructor(c: DownloadTools.Check) : this(c.tool, c.ok, c.path, c.origin, c.version, c.message)
 }
 
 private val applicationDirs: ApplicationDirs by injectLazy()
@@ -170,12 +205,6 @@ private val applicationDirs: ApplicationDirs by injectLazy()
 private fun settingsType(s: DownloadSettings) = DownloadSettingsType(s, File(applicationDirs.downloadsRoot).absolutePath)
 
 private fun userOf(env: DataFetchingEnvironment): Int = env.graphQlContext.getAttribute(JavalinSetup.Attribute.TachideskUser).requireUser()
-
-private fun requireManga(kind: ExtensionKind) {
-    if (kind == ExtensionKind.ANIME) {
-        throw MadoyomiException(ErrorCode.BAD_REQUEST, "Episode downloads aren't available yet", mapOf("field" to "kind"))
-    }
-}
 
 class DownloadQueueQuery {
     @RequireAuth
@@ -196,6 +225,21 @@ class DownloadQueueQuery {
     @RequireAuth
     @GraphQLDescription("The download settings")
     fun downloadSettings(): DownloadSettingsType = settingsType(DownloadSettingsStore.current())
+
+    @RequireAuth
+    @GraphQLDescription(
+        "ffmpeg and yt-dlp as anime downloads would use them now (each found and asked its version), or why not; an " +
+            "unsaved path to try in place of the settings' one with ffmpegPath/ytDlpPath",
+    )
+    fun downloadTools(
+        ffmpegPath: String? = null,
+        ytDlpPath: String? = null,
+    ): CompletableFuture<List<DownloadToolType>> =
+        future {
+            val saved = DownloadSettingsStore.current()
+            val settings = saved.copy(ffmpegPath = ffmpegPath ?: saved.ffmpegPath, ytDlpPath = ytDlpPath ?: saved.ytDlpPath)
+            DownloadTools.Tool.entries.map { DownloadToolType(DownloadTools.check(it, settings)) }
+        }
 
     companion object {
         const val DEFAULT_LIMIT = 50
@@ -274,6 +318,10 @@ class DownloadQueueMutation {
         val maxParallel: Int? = null,
         val perSource: Int? = null,
         val autoDownload: Boolean? = null,
+        @GraphQLDescription("The ffmpeg to use; empty: look for one")
+        val ffmpegPath: String? = null,
+        @GraphQLDescription("The yt-dlp to use; empty: look for one")
+        val ytDlpPath: String? = null,
     )
 
     data class SetDownloadSettingsPayload(
@@ -282,13 +330,17 @@ class DownloadQueueMutation {
     )
 
     @RequireAuth
-    @GraphQLDescription("Queues chapters for download, in reading order, after what is queued")
+    @GraphQLDescription("Queues chapters or episodes for download, in reading or watching order, after what is queued")
     fun enqueueDownloads(
         dataFetchingEnvironment: DataFetchingEnvironment,
         input: EnqueueDownloadsInput,
     ): EnqueueDownloadsPayload {
-        requireManga(input.kind)
-        val queued = MangaDownloads.enqueue(userOf(dataFetchingEnvironment), input.itemIds)
+        val userId = userOf(dataFetchingEnvironment)
+        val queued =
+            when (input.kind) {
+                ExtensionKind.MANGA -> MangaDownloads.enqueue(userId, input.itemIds)
+                ExtensionKind.ANIME -> AnimeDownloads.enqueue(userId, input.itemIds)
+            }
         return EnqueueDownloadsPayload(input.clientMutationId, queued, DownloadQueueType.now())
     }
 
@@ -327,15 +379,18 @@ class DownloadQueueMutation {
         ClearCompletedDownloadsPayload(input.clientMutationId, DownloadQueue.clearCompleted(input.kind))
 
     @RequireAuth
-    @GraphQLDescription("Deletes the downloads of chapters: queued ones are cancelled, downloaded files deleted")
+    @GraphQLDescription("Deletes the downloads of chapters or episodes: queued ones are cancelled, downloaded files deleted")
     fun deleteDownloads(
         dataFetchingEnvironment: DataFetchingEnvironment,
         input: DeleteDownloadsInput,
     ): CompletableFuture<DeleteDownloadsPayload?> {
-        requireManga(input.kind)
         val userId = userOf(dataFetchingEnvironment)
         return future {
-            val deleted = MangaDownloads.delete(userId, input.itemIds)
+            val deleted =
+                when (input.kind) {
+                    ExtensionKind.MANGA -> MangaDownloads.delete(userId, input.itemIds)
+                    ExtensionKind.ANIME -> AnimeDownloads.delete(input.itemIds)
+                }
             DeleteDownloadsPayload(input.clientMutationId, deleted, DownloadQueueType.now())
         }
     }
@@ -351,9 +406,31 @@ class DownloadQueueMutation {
                         maxParallel = input.maxParallel,
                         perSource = input.perSource,
                         autoDownload = input.autoDownload,
+                        ffmpegPath = input.ffmpegPath,
+                        ytDlpPath = input.ytDlpPath,
                     ),
                 ),
             ),
+        )
+
+    data class PlayDownloadedEpisodeInput(
+        val clientMutationId: String? = null,
+        val episodeId: Int,
+        @GraphQLDescription("Where to start, in seconds; null or 0 is the beginning")
+        val startSeconds: Double? = null,
+        @GraphQLDescription("Without startSeconds: from where it stopped (not watched, between 1 % and the watched threshold)")
+        val resume: Boolean? = null,
+    )
+
+    @RequireAuth
+    @GraphQLDescription(
+        "Plays a downloaded episode in mpv from its file (with its subtitle files), in the same session as playEpisode: " +
+            "progress, the watched mark and the next episode. NOT_FOUND if it isn't downloaded or its file is gone",
+    )
+    fun playDownloadedEpisode(input: PlayDownloadedEpisodeInput): PlaybackMutation.PlayEpisodePayload =
+        PlaybackMutation.PlayEpisodePayload(
+            input.clientMutationId,
+            PlaybackSessionType(AnimeDownloads.play(input.episodeId, input.startSeconds, input.resume == true)),
         )
 }
 
@@ -375,4 +452,30 @@ class DownloadQueueSubscription {
     companion object {
         const val THROTTLE_MS = 250L
     }
+}
+
+/** Whether an episode is downloaded (Stage 5: `EpisodeType.downloaded`), for a page of episodes in one query. */
+class EpisodeDownloadedDataLoader : KotlinDataLoader<Int, Boolean> {
+    override val dataLoaderName = "EpisodeDownloadedDataLoader"
+
+    override fun getDataLoader(graphQLContext: GraphQLContext): DataLoader<Int, Boolean> =
+        DataLoaderFactory.newDataLoader { ids ->
+            future {
+                val downloaded = AnimeDownloads.downloadedIds(ids)
+                ids.map { it in downloaded }
+            }
+        }
+}
+
+/** An anime's downloaded episodes (Stage 5: `AnimeType.downloadCount`, its seasons' for a Seasons entry). */
+class AnimeDownloadCountDataLoader : KotlinDataLoader<Int, Int> {
+    override val dataLoaderName = "AnimeDownloadCountDataLoader"
+
+    override fun getDataLoader(graphQLContext: GraphQLContext): DataLoader<Int, Int> =
+        DataLoaderFactory.newDataLoader { ids ->
+            future {
+                val counts = AnimeDownloads.counts(ids)
+                ids.map { counts[it] ?: 0 }
+            }
+        }
 }

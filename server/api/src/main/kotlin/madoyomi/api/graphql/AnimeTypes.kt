@@ -122,6 +122,10 @@ class AnimeType(
     fun lastSeenAt(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Long> =
         dataFetchingEnvironment.getValueFromDataLoader<Int, AnimeHistory.Stats>("AnimeStatsDataLoader", id).thenApply { it.lastSeenAt }
 
+    @GraphQLDescription("Episodes downloaded (Phase 6 Stage 5), a Seasons entry's seasons' included")
+    fun downloadCount(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Int> =
+        dataFetchingEnvironment.getValueFromDataLoader("AnimeDownloadCountDataLoader", id)
+
     fun parent(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<AnimeType?> =
         parentId?.let { dataFetchingEnvironment.getValueFromDataLoader("AnimeDataLoader", it) }
             ?: CompletableFuture.completedFuture(null)
@@ -176,6 +180,10 @@ class EpisodeType(
     val summary: String?,
     val previewUrl: String?,
 ) : Node {
+    @GraphQLDescription("Whether the episode is downloaded (Phase 6 Stage 5): playDownloadedEpisode plays its file")
+    fun downloaded(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Boolean> =
+        dataFetchingEnvironment.getValueFromDataLoader("EpisodeDownloadedDataLoader", id)
+
     constructor(row: ResultRow) : this(
         id = row[EpisodeTable.id].value,
         url = row[EpisodeTable.url],

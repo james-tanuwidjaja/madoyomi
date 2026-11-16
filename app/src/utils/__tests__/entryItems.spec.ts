@@ -40,7 +40,9 @@ describe("entry items", () => {
       bookmarked: true,
       filler: true,
       progress: { positionMs: 0, durationMs: 0 },
+      downloaded: false,
     });
+    expect(fromEpisode({ ...e, downloaded: true }).downloaded).toBe(true);
     // the stored position, or the live session's for the episode mpv plays
     const stopped = { ...e, lastSecondSeen: "752043", totalSeconds: "1500125" };
     expect(fromEpisode(stopped)).toMatchObject({

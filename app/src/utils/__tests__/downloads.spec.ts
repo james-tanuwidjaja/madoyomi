@@ -4,11 +4,18 @@ import {
   formatBytes,
   itemsOf,
   nextUnread,
+  nextUnwatched,
+  sizeText,
   percentOf,
   queueCounts,
   stateText,
 } from "../downloads";
-import { makeChapters, makeDownloadItem, makeDownloadQueue } from "../../test/fixtures";
+import {
+  makeChapters,
+  makeDownloadItem,
+  makeDownloadQueue,
+  makeEpisodes,
+} from "../../test/fixtures";
 
 /* The download queue's pure helpers (Phase 6 Stage 4). */
 describe("download helpers", () => {
@@ -84,5 +91,41 @@ describe("download helpers", () => {
     });
     expect(queueCounts(queue, "anime")).toMatchObject({ total: 1, active: 1, done: 1 });
     expect(queueCounts(undefined, "manga").total).toBe(0);
+  });
+
+  it("says how far an episode got in bytes, the episode's time or segments (Stage 5)", () => {
+    const item = (over: Parameters<typeof makeDownloadItem>[0]) =>
+      makeDownloadItem({ kind: "anime", state: "DOWNLOADING", ...over });
+    const bytes = item({
+      progressUnit: "BYTES",
+      progressDone: 400,
+      progressTotal: 1000,
+      bytes: 4_194_304,
+      totalBytes: 10_485_760,
+    });
+    expect(stateText(bytes)).toBe("Downloading");
+    expect(percentOf(bytes)).toBe(40);
+    expect(sizeText(bytes)).toBe("4.0 MB of 10.0 MB");
+    expect(sizeText({ ...bytes, state: "DONE" })).toBe("4.0 MB");
+    expect(sizeText({ ...bytes, bytes: 0 })).toBe("");
+    const time = item({ progressUnit: "SECONDS", progressDone: 75, progressTotal: 3725 });
+    expect(stateText(time)).toBe("Downloading 1:15/1:02:05");
+    expect(stateText(item({ progressUnit: "SEGMENTS", progressDone: 3, progressTotal: 90 }))).toBe(
+      "Downloading 3/90 segments",
+    );
+    expect(stateText(item({ progressUnit: "SECONDS", progressDone: 10, progressTotal: 0 }))).toBe(
+      "Downloading…",
+    );
+  });
+
+  it("chooses the next unwatched episodes in watching order, without the downloaded or queued ones", () => {
+    const episodes = makeEpisodes(5).map((e) => ({
+      ...e,
+      isWatched: e.id === 1001,
+      downloaded: e.id === 1003,
+    }));
+    const queued = new Map([[1004, makeDownloadItem({ kind: "anime", itemId: 1004 })]]);
+    expect(nextUnwatched([...episodes].reverse(), 2, queued)).toEqual([1002, 1005]);
+    expect(nextUnwatched(episodes, "all", new Map())).toEqual([1002, 1004, 1005]);
   });
 });

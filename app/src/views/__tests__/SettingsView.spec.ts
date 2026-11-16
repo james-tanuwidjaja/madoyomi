@@ -6,6 +6,8 @@ import type { QueryClient } from "@tanstack/vue-query";
 import { createQueryClient } from "../../api/realtime";
 import { ApiError } from "../../api/client";
 import type {
+  DownloadSettings,
+  DownloadTool,
   LibraryUpdateSettings,
   MpvCheck,
   PageCache,
@@ -37,6 +39,9 @@ const ops = vi.hoisted(() => ({
   fetchLibraryUpdateSettings: vi.fn(),
   setLibraryUpdateSettings: vi.fn(),
   fetchLibraryCheck: vi.fn(),
+  fetchDownloadSettings: vi.fn(),
+  setDownloadSettings: vi.fn(),
+  fetchDownloadTools: vi.fn(),
 }));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -62,6 +67,18 @@ let player: PlayerSettings;
 let reader: ReaderSettings;
 let cache: PageCache;
 let updateSettings: LibraryUpdateSettings;
+let downloadSettings: DownloadSettings;
+
+function toolFound(tool: DownloadTool["tool"], path?: string): DownloadTool {
+  return {
+    tool,
+    ok: true,
+    path: path ?? (tool === "FFMPEG" ? "C:\\bin\\ffmpeg.exe" : "C:\\bin\\yt-dlp.exe"),
+    origin: path ? "SETTINGS" : "ENV",
+    version: tool === "FFMPEG" ? "ffmpeg version 7.1" : "2025.10.22",
+    message: null,
+  };
+}
 
 function mpvFound(path: string | null): MpvCheck {
   return {
@@ -128,6 +145,20 @@ beforeEach(() => {
       (updateSettings = { ...updateSettings, ...patch }),
   );
   ops.fetchLibraryCheck.mockResolvedValue(makeLibraryCheck());
+  downloadSettings = {
+    maxParallel: 3,
+    perSource: 1,
+    autoDownload: false,
+    path: "D:\\data\\downloads",
+    ffmpegPath: "",
+    ytDlpPath: "",
+  };
+  ops.fetchDownloadSettings.mockImplementation(async () => downloadSettings);
+  ops.setDownloadSettings.mockImplementation(
+    async (patch: Partial<DownloadSettings>) =>
+      (downloadSettings = { ...downloadSettings, ...patch }),
+  );
+  ops.fetchDownloadTools.mockImplementation(async () => [toolFound("FFMPEG"), toolFound("YT_DLP")]);
   setBackendReady();
   useBackendStore().mode = "tauri";
 });
@@ -472,5 +503,43 @@ describe("SettingsView: Updates (Phase 6 Stage 3)", () => {
     expect(ops.setLibraryUpdateSettings).toHaveBeenLastCalledWith({ skipCompleted: false });
     expect(updateSettings).toMatchObject({ intervalHours: 12, notify: true, skipCompleted: false });
     expect(state("notify-switch")).toBe("checked");
+  });
+});
+
+describe("SettingsView: the download tools (Phase 6 Stage 5)", () => {
+  it("shows ffmpeg and yt-dlp as the backend finds them, saves a path and checks typed ones", async () => {
+    await mountSettings();
+    expect(ops.fetchDownloadTools).toHaveBeenCalledWith({});
+    const status = (t: string) => wrapper.find(`[data-testid="tool-status-${t}"]`);
+    expect(status("FFMPEG").text()).toContain("ffmpeg version 7.1");
+    expect(status("FFMPEG").text()).toContain("(from MADOYOMI_FFMPEG)");
+    expect(status("YT_DLP").text()).toContain("(from MADOYOMI_YTDLP)");
+
+    const input = wrapper.find('[data-testid="tool-input-FFMPEG"]');
+    await input.setValue('"D:\\tools\\ffmpeg.exe"');
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(ops.setDownloadSettings).toHaveBeenCalledWith({ ffmpegPath: "D:\\tools\\ffmpeg.exe" });
+
+    ops.fetchDownloadTools.mockResolvedValueOnce([
+      toolFound("FFMPEG"),
+      {
+        tool: "YT_DLP",
+        ok: false,
+        path: "C:\\nowhere\\yt-dlp.exe",
+        origin: "SETTINGS",
+        version: null,
+        message: "yt-dlp was not found at C:\\nowhere\\yt-dlp.exe (set in Settings → Downloads)",
+      },
+    ]);
+    await wrapper.find('[data-testid="tool-input-YT_DLP"]').setValue("C:\\nowhere\\yt-dlp.exe");
+    await wrapper.find('[data-action="check-YT_DLP"]').trigger("click");
+    await flushPromises();
+    expect(ops.fetchDownloadTools).toHaveBeenLastCalledWith({
+      ffmpegPath: "D:\\tools\\ffmpeg.exe",
+      ytDlpPath: "C:\\nowhere\\yt-dlp.exe",
+    });
+    expect(status("YT_DLP").classes()).toContain("danger");
+    expect(status("YT_DLP").text()).toContain("Settings → Downloads");
   });
 });

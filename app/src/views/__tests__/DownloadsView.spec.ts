@@ -17,6 +17,7 @@ const ops = vi.hoisted(() => ({
   reorderDownload: vi.fn(),
   deleteDownloads: vi.fn(),
   clearCompletedDownloads: vi.fn(),
+  playDownloadedEpisode: vi.fn(),
 }));
 
 vi.mock("../../api/operations", async (importOriginal) => ({
@@ -28,7 +29,8 @@ import DownloadsView from "../DownloadsView.vue";
 
 /*
  * Downloads (Phase 6 Stage 4) against mocked calls: the kind's queue with each row's state and actions, the actions
- * for the whole kind, moving rows, the completed list with Read and Delete, and the anime note.
+ * for the whole kind, moving rows, the completed list with Read and Delete. Stage 5: the anime view, its rows in
+ * bytes, time or segments, and Play for a downloaded episode.
  */
 let pinia: Pinia;
 let queryClient: QueryClient;
@@ -213,7 +215,7 @@ describe("DownloadsView", () => {
     useMediaKindStore().set("anime");
     await flushPromises();
     expect(rows()).toEqual([["Episode 1", "Queued"]]);
-    expect(wrapper.find('[data-testid="anime-note"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="anime-note"]').exists()).toBe(false);
     expect(ops.fetchCompletedDownloads).toHaveBeenLastCalledWith("anime", 0, 50, expect.anything());
 
     useMediaKindStore().set("manga");
@@ -221,5 +223,67 @@ describe("DownloadsView", () => {
     await flushPromises();
     expect(rows()).toEqual([]);
     expect(wrapper.find('[data-testid="queue-empty"]').exists()).toBe(true);
+  });
+
+  it("shows the anime queue in bytes, time or segments, and plays a downloaded episode", async () => {
+    queue = makeDownloadQueue(
+      [
+        makeDownloadItem({
+          id: 21,
+          kind: "anime",
+          itemId: 81,
+          itemName: "Episode 1",
+          state: "DOWNLOADING",
+          progressUnit: "BYTES",
+          progressDone: 250,
+          progressTotal: 1000,
+          bytes: 52_428_800,
+          totalBytes: 209_715_200,
+        }),
+        makeDownloadItem({
+          id: 22,
+          kind: "anime",
+          itemId: 82,
+          itemName: "Episode 2",
+          state: "DOWNLOADING",
+          progressUnit: "SECONDS",
+          progressDone: 600,
+          progressTotal: 1440,
+          bytes: 10_485_760,
+        }),
+      ],
+      { animeDone: 1 },
+    );
+    completed = [
+      makeDownloadItem({
+        id: 23,
+        kind: "anime",
+        entryId: 2,
+        itemId: 80,
+        itemName: "Episode 0",
+        state: "DONE",
+        bytes: 3_145_728,
+      }),
+    ];
+    ops.playDownloadedEpisode.mockResolvedValue({ id: "s1" });
+    useMediaKindStore().set("anime");
+    await mountDownloads();
+
+    expect(rows()).toEqual([
+      ["Episode 1", "Downloading · 25%"],
+      ["Episode 2", "Downloading 10:00/24:00"],
+    ]);
+    const [first, second] = wrapper.findAll('[data-testid="download-row-size"]');
+    expect(first!.text()).toBe("50.0 MB of 200 MB");
+    expect(second!.text()).toBe("10.0 MB");
+    expect(
+      wrapper.findAll('[role="progressbar"]').map((b) => b.attributes("aria-valuenow")),
+    ).toEqual(["25", "42"]);
+
+    const done = wrapper.find('[data-testid="completed-row"]');
+    expect(done.find('[data-action="read-download"]').exists()).toBe(false);
+    await done.find('[data-action="play-download"]').trigger("click");
+    await flushPromises();
+    expect(ops.playDownloadedEpisode).toHaveBeenCalledWith(80, undefined, true);
   });
 });

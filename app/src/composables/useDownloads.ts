@@ -24,7 +24,7 @@ import { byItem } from "../utils/downloads";
 import { queryKeys } from "./queryKeys";
 
 /*
- * The download queue (Phase 6 Stage 4): the queue (fetched once, then kept current by the `downloadsChanged`
+ * The download queue (Phase 6 Stages 4–5): the queue (fetched once, then kept current by the `downloadsChanged`
  * subscription in api/realtime.ts), the completed list of a kind in pages of `COMPLETED_PAGE`, the actions (queue,
  * pause, resume, retry, cancel, reorder, delete, clear), and Settings → Downloads. Every action writes the queue it
  * gets back into the cache, so the screen and the chapter rows change at once.
@@ -36,6 +36,8 @@ export const DEFAULT_DOWNLOAD_SETTINGS: Omit<DownloadSettings, "path"> = {
   maxParallel: 3,
   perSource: 1,
   autoDownload: false,
+  ffmpegPath: "",
+  ytDlpPath: "",
 };
 
 export function useDownloadQueue() {

@@ -1297,6 +1297,168 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.log(report.join("\n"));
   }, 300_000);
 
+  // Phase 6 Stage 5: an episode of KickAssAnime (HLS, ffmpeg) and of AnimeGG (a direct file) downloaded through the
+  // queue at the lowest preferred quality (the player settings', put back after), followed over the WebSocket, marked
+  // downloaded on the episode and the anime, then deleted. The tools' check first.
+  it("downloads an HLS and a direct episode over the queue, follows them over the WebSocket and deletes them", async (ctx) => {
+    type Item = { id: number; itemId: number; state: string; error: string | null };
+    type Queue = { items: Item[]; animeDone: number };
+    const report: string[] = [];
+
+    const tools = (
+      await client.gql<{
+        downloadTools: { tool: string; ok: boolean; path: string | null; message: string | null }[];
+      }>(operations.DOWNLOAD_TOOLS_QUERY, {})
+    ).downloadTools;
+    expect(tools.map((t) => t.tool)).toEqual(["FFMPEG", "YT_DLP"]);
+    report.push(...tools.map((t) => `${t.tool}: ${t.ok ? t.path : t.message}`));
+
+    const sources = (
+      await client.gql<{ animeSources: { nodes: SourceBase[] } }>(operations.ANIME_SOURCES_QUERY)
+    ).animeSources.nodes.filter((s) => s.extension.isTrusted && s.extension.isLoaded);
+    const wanted = ["KickAssAnime", "AnimeGG"]
+      .map((name) => sources.find((s) => s.name === name))
+      .filter((s): s is SourceBase => s !== undefined);
+    if (wanted.length === 0) return ctx.skip();
+
+    const playerBefore = (
+      await client.gql<{ playerSettings: { preferredQuality: string } }>(
+        operations.PLAYER_SETTINGS_QUERY,
+      )
+    ).playerSettings;
+    await client.gql(operations.SET_PLAYER_SETTINGS_MUTATION, {
+      patch: { preferredQuality: "P360" },
+    });
+
+    const events: Queue[] = [];
+    let onConnected!: () => void;
+    const connected = new Promise<void>((resolve) => (onConnected = resolve));
+    const ws = createSubscriptionClient({ onConnected: () => onConnected() });
+    try {
+      ws.subscribe<{ downloadsChanged: Queue }>(
+        operations.DOWNLOADS_CHANGED_SUBSCRIPTION,
+        {},
+        { next: (d) => events.push(d.downloadsChanged) },
+      );
+      ws.setEndpoint(client.subscriptionUrl());
+      await connected;
+      await expect.poll(() => events.length, { timeout: 10_000 }).toBeGreaterThan(0);
+
+      for (const source of wanted) {
+        const input = { source: source.id, type: "POPULAR", page: 1, query: null, filters: null };
+        const animes = (
+          await client.gql<{ fetchSourceAnime: { animes: { id: number }[] } }>(
+            operations.BROWSE_ANIME_MUTATION,
+            { input },
+          )
+        ).fetchSourceAnime.animes;
+        let animeId = 0;
+        let episode: { id: number; name: string } | null = null;
+        for (const a of animes.slice(0, 3)) {
+          const { data } = await client.gqlResult<{
+            fetchAnimeAndEpisodes: {
+              episodes: { id: number; name: string; sourceOrder: number }[];
+            };
+          }>(operations.FETCH_ANIME_AND_EPISODES_MUTATION, { id: a.id });
+          const list = [...(data?.fetchAnimeAndEpisodes.episodes ?? [])].sort(
+            (x, y) => x.sourceOrder - y.sourceOrder,
+          );
+          if (list.length > 0) {
+            animeId = a.id;
+            episode = list[0]!;
+            break;
+          }
+        }
+        if (!episode) {
+          report.push(`${source.name}: no Popular entry with episodes`);
+          continue;
+        }
+        // a download left from an earlier run goes first
+        await client.gql(operations.DELETE_DOWNLOADS_MUTATION, {
+          kind: "ANIME",
+          itemIds: [episode.id],
+        });
+        const doneBefore = events[events.length - 1]!.animeDone;
+        const queued = (
+          await client.gql<{ enqueueDownloads: { queued: number } }>(
+            operations.ENQUEUE_DOWNLOADS_MUTATION,
+            { kind: "ANIME", itemIds: [episode.id] },
+          )
+        ).enqueueDownloads;
+        expect(queued.queued).toBe(1);
+        const t = performance.now();
+        const id = episode.id;
+        await expect
+          .poll(
+            () => {
+              const last = events[events.length - 1]!;
+              const failed = last.items.find((i) => i.itemId === id && i.state === "FAILED");
+              if (failed) return `FAILED: ${failed.error}`;
+              return last.animeDone > doneBefore && !last.items.some((i) => i.itemId === id);
+            },
+            { timeout: 900_000, interval: 1000 },
+          )
+          .toBe(true);
+        const seconds = ((performance.now() - t) / 1000).toFixed(1);
+        expect(
+          events.some((e) => e.items.some((i) => i.itemId === id && i.state === "DOWNLOADING")),
+        ).toBe(true);
+
+        const done = (
+          await client.gql<{
+            completedDownloads: {
+              items: {
+                itemId: number;
+                bytes: string;
+                progressUnit: string;
+                progressTotal: number;
+              }[];
+            };
+          }>(operations.COMPLETED_DOWNLOADS_QUERY, { kind: "ANIME", limit: 10, offset: 0 })
+        ).completedDownloads.items.find((i) => i.itemId === id)!;
+        expect(Number(done.bytes)).toBeGreaterThan(100_000);
+        const marks = (
+          await client.gql<{
+            anime: {
+              downloadCount: number;
+              episodes: { nodes: { id: number; downloaded: boolean }[] };
+            };
+          }>(`{ anime(id: ${animeId}) { downloadCount episodes { nodes { id downloaded } } } }`)
+        ).anime;
+        expect(marks.downloadCount).toBeGreaterThanOrEqual(1);
+        expect(marks.episodes.nodes.find((n) => n.id === id)?.downloaded).toBe(true);
+        const how = { BYTES: "a direct file", SECONDS: "ffmpeg", SEGMENTS: "yt-dlp" }[
+          done.progressUnit
+        ];
+        report.push(
+          `${source.name} anime ${animeId} '${episode.name}': ${done.bytes} bytes through ${how} in ${seconds} s` +
+            (done.progressUnit === "SECONDS" ? ` (${done.progressTotal} s of video)` : ""),
+        );
+
+        const deleted = (
+          await client.gql<{ deleteDownloads: { deleted: number } }>(
+            operations.DELETE_DOWNLOADS_MUTATION,
+            { kind: "ANIME", itemIds: [id] },
+          )
+        ).deleteDownloads;
+        expect(deleted.deleted).toBe(1);
+        const after = (
+          await client.gql<{
+            anime: { episodes: { nodes: { id: number; downloaded: boolean }[] } };
+          }>(`{ anime(id: ${animeId}) { episodes { nodes { id downloaded } } } }`)
+        ).anime;
+        expect(after.episodes.nodes.find((n) => n.id === id)?.downloaded).toBe(false);
+      }
+    } finally {
+      ws.dispose();
+      await client.gql(operations.SET_PLAYER_SETTINGS_MUTATION, {
+        patch: { preferredQuality: playerBefore.preferredQuality },
+      });
+      await client.gql(operations.CLEAR_COMPLETED_DOWNLOADS_MUTATION, { kind: "ANIME" });
+    }
+    console.log(report.join("\n"));
+  }, 1_900_000);
+
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];
     let onConnected!: () => void;
