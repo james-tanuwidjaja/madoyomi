@@ -48,6 +48,14 @@ export function mangaSummary(r: BackupReport): string {
   ].join(", ");
 }
 
+/** The settings line of a report: "1 settings file, 3 sources' settings" (the exit run: it said "1 settings files"). */
+export function settingsSummary(r: BackupReport): string {
+  return [
+    plural(r.settingsFiles.length, "settings file"),
+    plural(r.sourcePreferences, "source's settings", "sources' settings"),
+  ].join(", ");
+}
+
 /** What the trust prompt starts with: the repos not added, the certificates not trusted, the extensions to reinstall. */
 export function restoreDefaults(r: BackupReport): {
   repos: string[];

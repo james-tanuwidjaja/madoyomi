@@ -13,7 +13,13 @@ import { validateBackup } from "../api/operations";
 import type { BackupReport, RestoreMode } from "../api/types";
 import { mediaKindOf } from "../api/types";
 import { useRestoreBackup } from "../composables/useBackups";
-import { animeSummary, mangaSummary, restoreDefaults, shortHash } from "../utils/backups";
+import {
+  animeSummary,
+  mangaSummary,
+  restoreDefaults,
+  settingsSummary,
+  shortHash,
+} from "../utils/backups";
 import { clockTime } from "../utils/updates";
 import ErrorNotice from "./ErrorNotice.vue";
 
@@ -133,10 +139,7 @@ async function confirm() {
             <dd data-testid="restore-manga">{{ mangaSummary(report) }}</dd>
             <template v-if="isMadoyomi">
               <dt>Settings</dt>
-              <dd>
-                {{ report.settingsFiles.length }} settings files,
-                {{ report.sourcePreferences }} sources' settings
-              </dd>
+              <dd data-testid="restore-settings-summary">{{ settingsSummary(report) }}</dd>
             </template>
           </dl>
 

@@ -85,7 +85,7 @@ Make Madoyomi something people can live in day to day: organize the library with
 - [x] Backup schema defined (Stage 6: `.madoyomi-backup`, gzipped protobuf, upstream's manga part with its field numbers and Madoyomi's from 20000 up, §9; round-trip tested and checked live)
 - [x] Manual + scheduled backup (keep last N) (Stage 6: Back up now, daily or weekly (off by default), the newest N scheduled kept; live with a 40 s interval and keep 3, §10)
 - [x] Restore (merge/replace) + extension reinstall with trust (Stage 6: merge by default, replace tested; the repos, certificates and extensions in a trust prompt; live: `p6-ui` restored into a fresh data dir with its 2 repos and 5 extensions reinstalled, §10)
-- [ ] Stretch: Aniyomi/Mihon backup import (Stage 6: a Mihon/Suwayomi `.tachibk`'s manga part restores (tested, and the `.tachibk` files are listed); an Aniyomi backup's anime part (fields 501–506) isn't read yet, §9)
+- [ ] Stretch: Aniyomi/Mihon backup import (Stage 6: a Mihon/Suwayomi `.tachibk`'s manga part restores (tested, and the `.tachibk` files are listed); an Aniyomi backup's anime part (fields 501–506) isn't read yet, §9. Stage 7, the exit run: left, not built: a stage of its own, §9 "Stage 7")
 
 ### Tests
 - [x] Update diff tests
@@ -94,9 +94,9 @@ Make Madoyomi something people can live in day to day: organize the library with
 
 ## 6. Exit criteria
 
-- [ ] New episodes/chapters appear in the Updates view after a scheduled check, with badges in the library.
-- [x] A downloaded anime episode (HLS source) and a downloaded manga chapter (CBZ) both open offline. (Checked with the sources cut off by a dead SOCKS proxy: Kingdom's chapters in Stage 4, "Oshi no Ko" Ep. 2 from KickAssAnime's HLS in Stage 5, §10; the exit run checks it again from a fresh data dir.)
-- [x] Backup → fresh install → restore gives back the same library, categories, progress and settings. (Stage 6: `p6-ui` backed up in the app and restored into a new data dir after the trust prompt; the databases compared table by table and the settings files value by value, §10; the exit run checks it again.)
+- [x] New episodes/chapters appear in the Updates view after a scheduled check, with badges in the library. (Stage 7, the exit run, from a fresh data dir (`p6-exit`) in `pnpm tauri dev`: One Piece's Episode 1180 (AnimeGG) and Kingdom's Chapter 893 (MangaPill) taken out of the database, the schedule turned on in Settings → Updates (every 6 h, shortened to 120 s): the scheduled check at 06:00:10 checked 3 entries, skipped the 3 completed ones and found 1 new episode and 1 new chapter, listed under Today in each kind's Updates, with "1 new" on both cards beside their badges (1,167 unwatched, 927 unread) and the sidebar's count, §10.)
+- [x] A downloaded anime episode (HLS source) and a downloaded manga chapter (CBZ) both open offline. (Checked with the sources cut off by a dead SOCKS proxy: Kingdom's chapters in Stage 4, "Oshi no Ko" Ep. 2 from KickAssAnime's HLS in Stage 5, §10. Stage 7, the exit run, from a fresh data dir: "Oshi no Ko" Ep. 2 (KickAssAnime's HLS through ffmpeg, 457 MB with its audio track) played in mpv from its file with its subtitles and audio (6 tracks) and marked watched, and Kingdom's Chapter 2 (a 38-page CBZ) read to its last page, while a chapter not downloaded failed with `SOURCE_FAILED`, §10.)
+- [x] Backup → fresh install → restore gives back the same library, categories, progress and settings. (Stage 6: `p6-ui` backed up in the app and restored into a new data dir after the trust prompt; the databases compared table by table and the settings files value by value, §10. Stage 7, the exit run: `p6-exit` backed up in the app and restored into a second fresh data dir (`p6-exit2`) after the trust prompt (2 repos, 3 extensions reinstalled, 7 s), the same in the app and table by table; then three changes made after the backup undone by Replace, §10.)
 
 ## 7. Risks & notes
 
@@ -160,6 +160,11 @@ Agreed with the user at the end of Phase 5 (phase-5 §9 "Stage 6"). Each stage e
      - the stretch: a Mihon/Suwayomi `.tachibk` restores its manga part; Aniyomi's anime part is not read (§9);
      - live in `pnpm tauri dev`: `p6-ui` backed up, restored into a fresh data dir (`p6-fresh`) with the trust prompt, compared; a 40 s schedule keeping 3 (§10). The live check found a stale list after the schedule pruned (fixed) and two small things (§10).
 7. **The exit run**: every §6 criterion from a fresh data dir, and a fix round.
+   - *Done* (2026-11-17). **Phase 6 is done:**
+     - every §6 criterion passed from a fresh data dir (`p6-exit`) in `pnpm tauri dev`, through the UI. The setup: both repos, AnimeGG, KickAssAnime and MangaPill, 3 anime and 3 manga, and two categories of each kind with a flag and a sort. Then a scheduled update check found an episode and a chapter taken out of the database; an HLS episode and a CBZ chapter opened with the sources cut off; and a backup was restored into a second fresh data dir (`p6-exit2`) after the trust prompt, with Merge, then with Replace (§10);
+     - also checked in the app: Stage 6's fixes (the list refreshing while a 40 s schedule prunes; a `.tachibk` labelled as one); History, the categories and Downloads after an app restart; four Stage 4–5 "Not checked" items (the next-episode toast playing a downloaded episode from its file, the audio track's own progress, the sidebar count with everything paused, the tool rows); the token kept out of the logs and the backups;
+     - the fix round: the restore dialog's "1 settings files" (`settingsSummary`), with 1 new app test (697 + 17). No server, shell or operation change;
+     - the stretch (Aniyomi's anime import) was left, not built (§9 "Stage 7").
 
 ## 9. Decision record
 
@@ -283,6 +288,25 @@ Decided in the stage (defaults, not asked):
 - **Replace** makes the library the backup's: entries not in it leave the library (nothing is deleted from the database, so their marks come back if they are added again), categories not in it are deleted, the backup's entries' marks, positions and memberships are reset and all history cleared, then the merge above gives the backup's state, with the backup's category order, flags and meta. Repos, certificates and extensions are only ever added, and the settings are written the same way in both modes.
 - **The status** (`madoyomiRestoreStatusChanged`): the step, how far it is within it (the manga's from upstream's own restore state), the entry's title, the problems, the times. One restore at a time; Settings shows it with a bar, and when it ends the app fetches everything again.
 - **The Aniyomi/Mihon import (the stretch):** a Mihon or Suwayomi `.tachibk` (upstream already reads Mihon's manga) restores its manga part through the same dialog, with nothing to trust. An Aniyomi backup's anime (its fields 501–506, `BackupAnime` with sources matched by id) isn't read yet: left for Phase 8 with the trackers, or the exit run's fix round if time allows.
+
+### Stage 7 (2026-11-17)
+
+Decided by the user:
+- **Phase 7's stage plan: six stages, the bundle first** (written into phase-7 §8):
+  1. the runtime and binaries;
+  2. the installer, with the code-signing and Windows-only decisions;
+  3. logs and diagnostics, with the downloads folder of one's choice (left from Stage 4);
+  4. the auto-updater;
+  5. the CI release;
+  6. the exit run on a clean Windows 11 machine.
+
+  The alternatives were the CI right after the bundle (so that later stages are built by it), or five stages with the logs in the installer's.
+
+Decided in the stage (defaults, not asked):
+- **The stretch is left.** Reading an Aniyomi backup's anime (fields 501–506) needs Aniyomi's current models researched, a mapping onto the anime restore and a test: a stage of its own, so the exit run kept to its criteria. A Mihon/Suwayomi `.tachibk` still restores its manga. Left for Phase 8 (with the trackers) or an extra stage when wanted.
+- **The restore dialog's settings line counts in words** ("1 settings file, 0 sources' settings"), as its anime and manga lines do (`settingsSummary`).
+- **The sidebar's Downloads count stays "downloading or queued".** With everything paused it goes away, while the page says "1 paused" (Stage 4's design, now looked at): a paused queue isn't work in progress.
+- **The audio track's progress isn't labelled as the audio part.** The bar starts again with the track's own time (Stage 5's fix, seen working). A label needs the backend to say which part is running, so it is left for later.
 
 ## 10. Findings log
 
@@ -494,3 +518,55 @@ Decided in the stage (defaults, not asked):
   - "Restore from a file…" through the native picker in the app (masked; the upload route is checked by the live spec, and the picker's flow by `SettingsView.spec.ts`);
   - a large library's backup and restore time (here 21.5 KB and about 20 s, mostly the extension downloads);
   - an Aniyomi backup's anime part (not built, §9).
+
+### Stage 7 (2026-11-17)
+
+- **Baseline before the stage** (main at `4e98aef`, Stage 6 merged as #44; branch `feat/phase-6-exit-run`, job 555, before any edit):
+  - server: `.\gradlew.bat build` green on the first run with **853** tests (core 703 with 8 skipped, AndroidCompat 7, ext-host 8, api 135); `tools/smoke-api.ps1 -NoBuild` 24/24;
+  - app: 71 files (70 + 1 skipped), **696 passed + 17 skipped**; `pnpm lint`, `pnpm typecheck`, `pnpm format:check` and `pnpm build` clean;
+  - the live spec: **17/17 with 109 documents** (the two episode downloads in 166 s);
+  - `cargo test` 18; `cargo build`, `cargo clippy --all-targets` and `cargo fmt --check` clean.
+- **The run, from a fresh data dir** (`tools/dev-data/agent/p6-exit`, gitignored), in `pnpm tauri dev`, through the UI (computer use). This device's own settings (the webview's localStorage: the sorts last chosen, the pinned source, auto-play on) were as earlier stages left them; everything else started at the backend's defaults:
+
+  | Check | Result |
+  |---|---|
+  | first start | healthy after 6.8 s; both Libraries empty; no `backups` folder at all (upstream's daily backup stays off on a fresh data dir) |
+  | the repos | the anime repo: "Added Yūzōnō as an anime repo (type detected), with 248 extensions"; the manga repo: Keiyoushi, 1692 extensions; both "Signing key trusted" |
+  | the extensions | MangaPill 1.6.1, AnimeGG 14.3 and KickAssAnime 14.64 installed, trusted by their repo's key (no prompt), loaded |
+  | the library | anime: "Oshi no Ko" and "Kaminaki Sekai no Kamisama Katsudou" (KickAssAnime, both completed), One Piece (AnimeGG, ongoing, 1,167 episodes); manga (MangaPill): Kingdom and Berserk (ongoing), Vinland Saga (completed) |
+  | categories | manga: Reading and Later made in the dialog (the tabs appeared), Kingdom and Berserk into Reading by Select → Set categories (Default 1, Reading 2), Reading's own sort Title; anime: Watching (flagged "New entries") and Favorites, One Piece and "Oshi no Ko" into Watching, Kaminaki into Favorites (Default's tab went away) |
+  | progress and history | "Oshi no Ko" Ep. 1 played in mpv (KickAssAnime HLS 1080p), seeked to 5:00 and quit at 5:10; Kingdom Chapter 1 read to 62/62 (Read) |
+  | Settings → Updates | the fresh-install defaults (off, skip completed on, the notification off); set to every 6 hours ("Next check at 11:58 AM") |
+  | **updates** | with the app stopped, One Piece's Episode 1180 (id 1190) and Kingdom's Chapter 893 (id 928) deleted (`h2sql.ps1`); restarted with `MADOYOMI_UPDATE_INTERVAL_SECONDS=120` ("every 120 s, next at 06:00:10"). At 06:00:10 the scheduled check ran 3 entries and skipped 3 (the completed ones), and found **1 new episode and 1 new chapter**. The anime Library: One Piece "1 new" with its badge 1,167; the manga Library: Kingdom "1 new" with 927; the sidebar's Updates count. Updates (anime): Today, One Piece, Episode 1180, 6:00 AM, Play; (manga): Kingdom, Chapter 893, Read. The header said "Checked just now: nothing new · Every 6 h, next at 6:04 AM", about the next check at 06:02 |
+  | downloads | "Oshi no Ko" Ep. 2 downloaded (ffmpeg, then its audio track: 457 MB in about 2 min) and Kingdom Chapter 2 (a 38-page CBZ, 10.0 MB); "Downloaded" in both lists, "↓ 1" on both cards |
+  | **offline** | with the app stopped, the dead SOCKS proxy set in `p6-exit\server.conf` (`true`, `127.0.0.1`, `9`). Kingdom Chapter 3 (not downloaded): "Couldn't open Chapter 3 … `SOURCE_FAILED` Connection refused: getsockopt". Chapter 2 (downloaded): 1/38, then to its last page. "Oshi no Ko" Ep. 2's Play: mpv on `…\downloads\anime\KickAssAnime (EN)\_Oshi no Ko_\Japanese_Ep. 2 - The Third Option.mkv` ("from a local file (a download)"), `sid=2 aid=1`, 6 tracks; a seek to 1300 s marked it watched. Auto-play then tried Ep. 3 (not downloaded) and showed the picker with "Couldn't play the next episode … `SOURCE_FAILED`". `server.conf` put back (`false`, `""`, `""`) |
+  | Stage 6's `.tachibk` label | an old `.tachibk` from `p6-ui` put in `p6-exit\backups`: listed as "6:06 AM · 15 KB · Mihon/Aniyomi backup (manga only)" |
+  | **backup** | Back up now: "Saved Madoyomi_2026-11-17_06-07-35.madoyomi-backup (61.6 KB)", "Manual". Its dialog: anime 3 entries, 1190 episodes (1 watched), 2 in history, 2 categories; manga 3 entries, 1557 chapters (2 read), 2 in history, 2 categories; "1 settings files, 0 sources' settings" (fixed, below) |
+  | after an app restart | History (anime): "Oshi no Ko" Ep. 2, 6:05 AM, Watched, "Next: Ep. 3"; (manga): Kingdom Chapter 2, 6:04 AM, Read, "Next: Chapter 3"; the categories, tabs and sorts as made; the Downloads screen's completed lists (Ep. 2, 457 MB; Chapter 2, 10.0 MB) |
+  | **Stage 6's list fix** | Automatic backups every day, keep 3; restarted with `MADOYOMI_BACKUP_INTERVAL_SECONDS=40`, Settings left open on Backup: scheduled backups at 06:09:30, 06:10:10, 06:10:50 and 06:11:30, and the 06:09:30 one left the list **by itself** when the fourth came; the manual one stayed. A Delete aimed at the 06:10:10 row just after the next prune found the list already refreshed (that row gone), so it took the next scheduled one, which worked; the schedule set back to Off |
+  | **restore into a second fresh data dir** | `p6-exit2` with only that backup in its `backups` folder: its dialog listed MangaPill (3 entries), AnimeGG (1) and KickAssAnime (2) as not installed but coming back with their extensions, Merge preselected, and the trust prompt with both repos and their keys and the three extensions to reinstall. **Trust and restore**: "Restored" with no problems, 7 s (06:15:01 to 06:15:08) |
+  | compared in the app | anime: Watching 2 / Favorites 1 with Title (Z to A), badges 1,167 and 10, "Oshi no Ko" Ep. 1 "1:16:50 left" and Ep. 2 Watched, "Categories: Watching", Watching's "New entries" flag; manga: Default 1 / Reading 2 / Later 0, Reading's Title (A to Z), Kingdom 926; both Histories as above; Settings → Updates every 6 hours. Not carried, by design: the "new" marks and the downloads |
+  | compared in the databases | `snapshot6.ps1` on both (both apps stopped; its two meta queries now `MM.*`/`CM.*`): the library entries with their episodes, marks and positions, the anime categories with their order, flags and meta, the memberships, the anime history, the library manga, the chapters' read, page and history sums, the manga categories with their flags, Reading's sort in its meta, the repos (trusted), the installed extensions (loaded) and the trusted keys: **all the same**, but the `CHAPTER_USER` row count (upstream makes one per restored chapter, Stage 6). `library-update.json` the same; `backup-settings.json` was written after the backup, so it is absent from the restore |
+  | **Replace** | in `p6-exit2`, after the backup: an anime category "Temp" made, "Oshi no Ko" Ep. 3 marked watched, Kaminaki removed from the library (2 anime). Restore → **Replace** (nothing to trust; 1.4 s): Temp gone, Kaminaki back in Favorites, Ep. 3 unwatched, Ep. 1's position and Ep. 2's mark as backed up; `snapshot6.ps1` the same as `p6-exit`'s again (but `CHAPTER_USER`) |
+  | Stage 4–5 leftovers | Ep. 3 downloaded on `p6-exit`: **Pause all** left "1 paused · 1 downloaded" with no sidebar count (it counts queued and downloading, §9); Resume all; the video's progress ("Downloading 24:24/25:14 · 440 MB"), then **the audio track's own** ("9:41/25:15 · 13.3 MB", the bar again), 504 MB in all. From the details page, Ep. 2 played from its file and a seek to its end: "ended (eof), next episode 3", and 10 s later **the toast played Ep. 3 from its download** ("episode 3 from its download (4 subtitles, 1 audio tracks)"). Settings → Downloads showed ffmpeg and yt-dlp found on PATH with their versions |
+  | the subtitle choice of a local file | the track ids of a download's subtitles change between sessions (mpv adds the files in no fixed order: English was id 2, 1 and 3), but the backend picked English, the source's first, each time (`track-list` over IPC) |
+  | the token | no `token=` in `sidecar.log`, `sidecar.1.log`, `madoyomi.log` or `mpv.log` of either data dir, nor in the dev output; no `token`, `password` or `socks` string in any of the four backups |
+
+- **Found and fixed:** the restore dialog said "1 settings files, 0 sources' settings": now `settingsSummary` ("1 settings file, 0 sources' settings"), checked in the app on the same backup, with a test in `backups.spec.ts` and the dialog's test.
+- **Found, left as designed:** the sidebar's Downloads count with everything paused; the audio track's row without a label (§9 "Stage 7").
+- **Not reproduced:** one Play of Ep. 2 from the Downloads screen ended (eof) 7 s after it started, while a scripted IPC client was timing out on mpv's pipe; the next two plays of the same file (from the details page) ran normally. Put down to the script; not rerun from the Downloads screen.
+- **Counts after the stage:**
+  - app: 71 files (70 + 1 skipped), **697 passed + 17 skipped** (1 new: `settingsSummary`; the dialog's test checks the line); `pnpm format`, `pnpm format:check`, `pnpm typecheck`, `pnpm lint` and `pnpm build` clean (jobs 586, 587: the first failed the dialog's test, where the new line's test id took the settings box's; renamed);
+  - server: no change, so not rebuilt: the baseline's **853** stand; smoke 24/24;
+  - the live spec: no operation changed, so not rerun: the baseline's **17/17 with 109 documents** stand;
+  - `cargo test` 18, not rerun: the shell didn't change.
+- **The tooling.** As in Stages 1–6, the agent's shell was the Linux VM and the Windows side ran through the job runner (jobs 554–590). New scratch: `tracklist.ps1` (mpv's `track-list` and `sid` over IPC); `snapshot6.ps1`'s meta queries fixed. The data dirs `p6-exit` (with three backups and the two downloads) and `p6-exit2` stay in the gitignored `tools/dev-data/agent`.
+- **Not checked, and why:**
+  - the stretch: not built (§9);
+  - the Windows toast: it stays off as on a fresh install, and Windows' notification popups are masked to the agent (Stage 3 had the user's word);
+  - a failed Delete (`NOT_FOUND`) in the app: the list had refreshed itself before the click; the refetch after a failure is in `SettingsView.spec.ts`;
+  - yt-dlp taking over, and DASH: as in Stage 5 (ffmpeg never failed);
+  - Show in Explorer and the native file picker: masked (as in Stage 6);
+  - a large library, a long queue, a full disk, the 6/12/24 h intervals in real time, sleep: as in Stages 3–5;
+  - "Watch again" for a finished last episode, a Seasons entry: as in Stage 2 (none in this library);
+  - the installed build (the toast's name, the bundled tools): Phase 7.
