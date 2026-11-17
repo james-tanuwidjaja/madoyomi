@@ -40,10 +40,16 @@
 .PARAMETER MangaRepo
   Manga repo index URL. Default: Keiyoushi's index.pb.
 
+.PARAMETER Java
+  The java.exe to run the server with. Default: tools\bin\jdk-21\bin\java.exe. Phase 7 checks the bundled runtime
+  with -Java app\src-tauri\resources\jre\bin\java.exe (tools\jlink.ps1).
+
 .EXAMPLE
   .\tools\smoke-api.ps1
 .EXAMPLE
   .\tools\smoke-api.ps1 -NoBuild -KeepDataDir
+.EXAMPLE
+  .\tools\smoke-api.ps1 -NoBuild -Java app\src-tauri\resources\jre\bin\java.exe
 #>
 [CmdletBinding()]
 param(
@@ -53,7 +59,8 @@ param(
     [switch]$KeepDataDir,
     [string]$AnimeRepo = 'https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.min.json',
     [string]$MangaRepo = 'https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb',
-    [int]$StartupTimeoutSec = 120
+    [int]$StartupTimeoutSec = 120,
+    [string]$Java
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,9 +68,10 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib\MadoyomiServer.ps1')
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$Jdk = Join-Path $RepoRoot 'tools\bin\jdk-21'
-$Java = Join-Path $Jdk 'bin\java.exe'
-if (-not (Test-Path -LiteralPath $Java)) { throw "JDK 21 not found at $Jdk" }
+if (-not $Java) { $Java = Join-Path $RepoRoot 'tools\bin\jdk-21\bin\java.exe' }
+$Java = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Java)
+if (-not (Test-Path -LiteralPath $Java)) { throw "java not found at $Java (JDK 21 in tools\bin\jdk-21, or -Java)" }
+Write-Host "java: $Java"
 
 $MangaPkg = 'eu.kanade.tachiyomi.extension.en.mangapill'
 $MangaSourceId = '8448310129093543312'

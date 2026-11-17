@@ -973,11 +973,15 @@ struct Launch {
 }
 
 fn resolve_launch(app: &AppHandle) -> Launch {
-    // Release builds will bundle the JRE and the jar as resources (Phase 7). Debug builds use the repo.
+    // Release builds bundle the JRE, the jar, mpv, ffmpeg and yt-dlp as resources beside the exe (Phase 7 Stage 1:
+    // tauri.release.conf.json, tools/build-release.ps1). Debug builds use the repo.
     let resources = if cfg!(debug_assertions) {
         None
     } else {
-        app.path().resource_dir().ok()
+        app.path()
+            .resource_dir()
+            .ok()
+            .map(|dir| without_verbatim_prefix(&dir))
     };
     let data_dir = resolve_data_dir(app);
     Launch {
@@ -1012,16 +1016,31 @@ fn dev_root() -> PathBuf {
     std::path::absolute(&root).unwrap_or(root)
 }
 
-/// `MADOYOMI_JAVA`, else the bundled JRE (release: `<resources>/jre`), else the repo's `tools/bin/jdk-21` (debug),
-/// else `java` from PATH.
+/// A Windows path without its `\\?\` prefix when it names a drive (`\\?\C:\…` → `C:\…`), so the paths the backend
+/// and mpv get look like the ones typed in a shell. A verbatim UNC path (`\\?\UNC\…`) is left as it is.
+fn without_verbatim_prefix(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// `MADOYOMI_JAVA`, else the bundled JRE (release: `<resources>/jre`, the jlink runtime of tools/jlink.ps1), else the
+/// repo's `tools/bin/jdk-21` (debug), else `java` from PATH.
 fn resolve_java(resources: Option<&Path>) -> PathBuf {
-    if let Some(java) = env_path("MADOYOMI_JAVA") {
+    java_from(env_path("MADOYOMI_JAVA"), resources, &dev_root())
+}
+
+/// [`resolve_java`] with its inputs given: the override, the resource dir, and the repo root.
+fn java_from(override_java: Option<PathBuf>, resources: Option<&Path>, dev_root: &Path) -> PathBuf {
+    if let Some(java) = override_java {
         return java;
     }
     let exe = if cfg!(windows) { "java.exe" } else { "java" };
     let candidate = match resources {
         Some(dir) => dir.join("jre").join("bin").join(exe),
-        None => dev_root()
+        None => dev_root
             .join("tools")
             .join("bin")
             .join("jdk-21")
@@ -1636,6 +1655,80 @@ mod tests {
             Some(custom)
         );
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn java_comes_from_the_override_then_the_bundled_runtime_or_the_repo_else_path() {
+        // Phase 7 Stage 1: MADOYOMI_JAVA, the jlink runtime in <resources>/jre (release) or tools/bin/jdk-21 (debug),
+        // else `java` from PATH.
+        let dir = std::env::temp_dir().join(format!("madoyomi-java-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let exe = if cfg!(windows) { "java.exe" } else { "java" };
+        let repo = dir.join("repo");
+        let resources = dir.join("resources");
+
+        assert_eq!(java_from(None, None, &repo), PathBuf::from(exe));
+        assert_eq!(java_from(None, Some(&resources), &repo), PathBuf::from(exe));
+
+        let jdk = repo.join("tools").join("bin").join("jdk-21").join("bin");
+        fs::create_dir_all(&jdk).unwrap();
+        File::create(jdk.join(exe)).unwrap();
+        assert_eq!(java_from(None, None, &repo), jdk.join(exe));
+        // a release build never runs the repo's JDK
+        assert_eq!(java_from(None, Some(&resources), &repo), PathBuf::from(exe));
+
+        let jre = resources.join("jre").join("bin");
+        fs::create_dir_all(&jre).unwrap();
+        File::create(jre.join(exe)).unwrap();
+        assert_eq!(java_from(None, Some(&resources), &repo), jre.join(exe));
+
+        let custom = dir.join("custom").join(exe);
+        assert_eq!(
+            java_from(Some(custom.clone()), Some(&resources), &repo),
+            custom
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_release_build_runs_its_bundled_jar_not_the_dev_build() {
+        // Phase 7 Stage 1: <resources>/server/Madoyomi-Server.jar, copied there by tools/build-release.ps1.
+        let dir = std::env::temp_dir().join(format!("madoyomi-bundled-jar-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let build = dir.join("build");
+        fs::create_dir_all(&build).unwrap();
+        File::create(build.join("Madoyomi-Server-v0.1.0.jar")).unwrap();
+        let resources = dir.join("resources");
+        let bundled = resources.join("server").join("Madoyomi-Server.jar");
+        fs::create_dir_all(bundled.parent().unwrap()).unwrap();
+        File::create(&bundled).unwrap();
+
+        assert_eq!(jar_from(None, Some(&resources), &build), Ok(bundled));
+        let custom = dir.join("custom.jar");
+        File::create(&custom).unwrap();
+        assert_eq!(
+            jar_from(Some(custom.clone()), Some(&resources), &build),
+            Ok(custom)
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn verbatim_drive_paths_lose_their_prefix() {
+        assert_eq!(
+            without_verbatim_prefix(Path::new(r"\\?\C:\Users\me\AppData\Local\Madoyomi")),
+            PathBuf::from(r"C:\Users\me\AppData\Local\Madoyomi")
+        );
+        for kept in [
+            r"\\?\UNC\server\share\Madoyomi",
+            r"C:\Program Files\Madoyomi",
+            "relative/dir",
+        ] {
+            assert_eq!(
+                without_verbatim_prefix(Path::new(kept)),
+                PathBuf::from(kept)
+            );
+        }
     }
 
     #[test]
