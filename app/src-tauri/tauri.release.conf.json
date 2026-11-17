@@ -5,10 +5,13 @@
       "resources/jre/": "jre/",
       "resources/server/Madoyomi-Server.jar": "server/Madoyomi-Server.jar",
       "resources/mpv/": "mpv/",
-      "resources/ffmpeg/ffmpeg.exe": "ffmpeg/ffmpeg.exe",
-      "resources/yt-dlp/yt-dlp.exe": "yt-dlp/yt-dlp.exe",
+      "resources/ffmpeg/": "ffmpeg/",
+      "resources/yt-dlp/": "yt-dlp/",
       "../../player/mpv.conf": "player/mpv.conf",
-      "../../player/input.conf": "player/input.conf"
+      "../../player/input.conf": "player/input.conf",
+      "../../LICENSE": "LICENSE",
+      "../../NOTICE": "NOTICE",
+      "../../THIRD_PARTY.md": "THIRD_PARTY.md"
     }
   }
 }

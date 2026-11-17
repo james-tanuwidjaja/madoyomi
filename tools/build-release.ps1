@@ -4,14 +4,19 @@
   `pnpm tauri build` with the bundle's resources.
 
 .DESCRIPTION
+  0. tools\version.ps1: VERSION and its copies (package.json, tauri.conf.json, Cargo.toml/Cargo.lock, the server's
+     Constants.kt) must match, or the build stops before anything is built (Phase 7 Stage 2).
   1. The server jar (tools\fetch-upstream-assets.ps1, then .\gradlew.bat :api:shadowJar with tools\bin\jdk-21),
-     copied to app\src-tauri\resources\server\Madoyomi-Server.jar.
+     copied to app\src-tauri\resources\server\Madoyomi-Server.jar. Its name must carry VERSION
+     (Madoyomi-Server-vX.Y.Z.jar), so a -NoJar build can't bundle a jar of another version.
   2. tools\jlink.ps1: the runtime in app\src-tauri\resources\jre.
-  3. tools\fetch-binaries.ps1: mpv, ffmpeg and yt-dlp (tools\binaries.json) in app\src-tauri\resources.
+  3. tools\fetch-binaries.ps1: mpv, ffmpeg and yt-dlp (tools\binaries.json) in app\src-tauri\resources, each
+     with its license texts (pinned too).
   4. mpv's config (player\mpv.conf, player\input.conf) is bundled from the repo as it is.
   5. `pnpm tauri build --config src-tauri/tauri.release.conf.json` in app\: the release exe with the resources
-     beside it (app\src-tauri\target\release) and the installers (target\release\bundle). The resources are in a
-     config of their own, so `pnpm tauri dev` and `cargo test` don't need them.
+     beside it (app\src-tauri\target\release) and the installers (target\release\bundle): NSIS per-user and the
+     MSI (the installer settings, which need no binaries, are in tauri.conf.json). The resources (with LICENSE,
+     NOTICE and THIRD_PARTY.md) are in a config of their own, so `pnpm tauri dev` and `cargo test` don't need them.
   Everything it writes is gitignored (app\src-tauri\resources, target, tools\bin). Don't run it while the app or a
   test server runs on the jar it rebuilds (Windows locks a running jar).
   Keep this file ASCII; it runs on Windows PowerShell 5.1 and PowerShell 7.
@@ -45,8 +50,16 @@ $total = [Diagnostics.Stopwatch]::StartNew()
 
 function Step([string]$Name) { Write-Output ("[{0:mm\:ss}] {1}" -f $total.Elapsed, $Name) }
 
+Step 'version'
+& (Join-Path $PSScriptRoot 'version.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'tools\version.ps1: the versions differ (see above); run .\tools\version.ps1 -Sync' }
+$version = (Get-Content -Raw -LiteralPath (Join-Path $RepoRoot 'VERSION')).Trim()
+
 Step 'server jar'
 $jar = Resolve-MadoyomiJar $RepoRoot '' -NoBuild:$NoJar
+if ((Split-Path $jar -Leaf) -ne "Madoyomi-Server-v$version.jar") {
+    throw "the server jar $jar is not version $version (Madoyomi-Server-v$version.jar): build it (without -NoJar)"
+}
 $serverDir = Join-Path $Resources 'server'
 New-Item -ItemType Directory -Force -Path $serverDir | Out-Null
 Copy-Item -LiteralPath $jar -Destination (Join-Path $serverDir 'Madoyomi-Server.jar') -Force
@@ -78,7 +91,8 @@ try {
 $release = Join-Path $RepoRoot 'app\src-tauri\target\release'
 Write-Output "  exe: $release\madoyomi.exe"
 if (-not $NoBundle) {
-    Get-ChildItem (Join-Path $release 'bundle') -Recurse -Include '*.exe', '*.msi' -ErrorAction SilentlyContinue |
+    # The bundle folder keeps older versions' installers: list this version's.
+    Get-ChildItem (Join-Path $release 'bundle') -Recurse -Include "*_${version}_*.exe", "*_${version}_*.msi" -ErrorAction SilentlyContinue |
         ForEach-Object { Write-Output ("  installer: {0} ({1:N1} MB)" -f $_.FullName, ($_.Length / 1MB)) }
 }
 Step 'done'
