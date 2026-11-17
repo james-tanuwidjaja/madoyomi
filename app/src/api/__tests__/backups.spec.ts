@@ -24,6 +24,7 @@ import {
   backupFileText,
   restoreDefaults,
   restoreStatusText,
+  settingsSummary,
 } from "../../utils/backups";
 import type { BackupReport, RestoreStatus } from "../types";
 
@@ -153,6 +154,19 @@ describe("backup wording", () => {
   it("words a report and picks the trust prompt's defaults", () => {
     expect(animeSummary(r)).toBe("1 entry, 1 episode (0 watched), 0 in history, 1 category");
     expect(restoreDefaults(r)).toEqual({ repos: ["a"], certificates: [], extensions: ["p"] });
+  });
+
+  it("words the settings line with singulars, as the exit run asked", () => {
+    const one = {
+      settingsFiles: ["library-update.json"],
+      sourcePreferences: 1,
+    } as unknown as BackupReport;
+    expect(settingsSummary(one)).toBe("1 settings file, 1 source's settings");
+    const many = {
+      settingsFiles: ["a.json", "b.json"],
+      sourcePreferences: 0,
+    } as unknown as BackupReport;
+    expect(settingsSummary(many)).toBe("2 settings files, 0 sources' settings");
   });
 
   it("words a file and a restore's status", () => {

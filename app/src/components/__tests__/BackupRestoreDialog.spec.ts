@@ -140,6 +140,9 @@ describe("BackupRestoreDialog", () => {
     expect(q('[data-testid="restore-manga"]')!.textContent).toBe(
       "7 entries, 950 chapters (20 read), 9 in history, 1 category",
     );
+    expect(q('[data-testid="restore-settings-summary"]')!.textContent).toBe(
+      "2 settings files, 2 sources' settings",
+    );
     expect(q('[data-testid="restore-missing"]')!.textContent).toContain("Gone (manga, 2 entries)");
     expect(d.textContent).toContain("full access to this PC");
     // only what isn't here yet is offered; what can't be reinstalled is off
