@@ -28,6 +28,17 @@ The full dependency set is in `server/gradle/libs.versions.toml` and the module 
 
 The Tauri app's Rust and npm dependencies are listed in `app/src-tauri/Cargo.lock` and `app/pnpm-lock.yaml`.
 
+## Bundled with release builds (Phase 7)
+
+Release builds (`tools/build-release.ps1`) bundle these programs and runtime beside the app. They are not in git: `tools/fetch-binaries.ps1` downloads the versions pinned in [`tools/binaries.json`](tools/binaries.json) and checks their SHA-256, and `tools/jlink.ps1` links the runtime from the JDK. Each runs as a separate program (mpv, ffmpeg, yt-dlp) or is the JVM the backend runs on. Their license files and the source links in the installer come in Phase 7 Stage 2.
+
+| Component | Version (pinned in Stage 1) | License | Source |
+|---|---|---|---|
+| Java runtime (jlink of Eclipse Temurin JDK 21) | 21.0.13+9, 22 modules | GPL-2.0 with the Classpath Exception | [adoptium/temurin21-binaries](https://github.com/adoptium/temurin21-binaries), [openjdk/jdk21u](https://github.com/openjdk/jdk21u) |
+| [mpv](https://mpv.io) (the mpv project's own Windows build, `x86_64-w64-mingw32`) | 0.41.0 | GPL-2.0-or-later; the build ships FFmpeg, libass, libplacebo and others as DLLs | [mpv-player/mpv v0.41.0](https://github.com/mpv-player/mpv/tree/v0.41.0) |
+| [FFmpeg](https://ffmpeg.org) (gyan.dev's essentials build, `ffmpeg.exe` only) | 9.0.2 | GPL-3.0-or-later (built with `--enable-gpl --enable-version3`) | [FFmpeg n9.0.2](https://github.com/FFmpeg/FFmpeg/tree/n9.0.2); the build's configuration in its `README.txt` |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) (`yt-dlp.exe`) | 2026.10.26 | Unlicense; the PyInstaller exe bundles Python (PSF-2.0) and other libraries | [yt-dlp 2026.10.26](https://github.com/yt-dlp/yt-dlp/tree/2026.10.26) |
+
 ## Not committed
 
 Upstream's Noto fonts (SIL Open Font License 1.1) and test images are restored by `tools/fetch-upstream-assets.ps1` and are not in git (see [server/UPSTREAM.md](server/UPSTREAM.md)).

@@ -10,7 +10,7 @@ pnpm test           # Vitest
 pnpm lint           # ESLint
 pnpm format         # Prettier
 pnpm typecheck      # vue-tsc
-pnpm tauri build    # NSIS/MSI installer
+pnpm tauri build    # NSIS/MSI installer without the bundled runtime and tools: use ..\tools\build-release.ps1
 cd src-tauri; cargo test; cargo clippy --all-targets   # Rust shell tests and lints
 ```
 
@@ -74,6 +74,8 @@ It validates every document in `src/api/operations/` against the server's schema
 - writes the backend's output and its own lifecycle lines to `<data dir>/logs/sidecar.log`.
 
 Environment overrides: `MADOYOMI_SIDECAR_JAR` (jar), `MADOYOMI_JAVA` (`java.exe`; default `../tools/bin/jdk-21`), `MADOYOMI_DATA_DIR` (default `%APPDATA%\Madoyomi`).
+
+**Release builds** (Phase 7 Stage 1) look beside the exe, in Tauri's resource dir (its `\\?\` prefix dropped): the jlink runtime in `jre/` (`../tools/jlink.ps1`), the jar as `server/Madoyomi-Server.jar`, and `mpv/`, `ffmpeg/`, `yt-dlp/` and `player/` (below). Nothing falls back to the repo, and `java` comes from PATH only when `jre/` is missing. The bundle's resources are in `src-tauri/tauri.release.conf.json`, merged with `--config` by `../tools/build-release.ps1` (which also builds the jar and the runtime and fetches the pinned tools into the gitignored `src-tauri/resources/`), so `pnpm tauri dev` and `cargo test` don't need them. `cargo test` covers where java, the jar, mpv, ffmpeg, yt-dlp and the player dir come from in both builds.
 
 mpv (Phase 4) is run by the backend, not the shell. Settings → Player can name the `mpv.exe` (Stage 5); it comes first. Otherwise the shell tells the backend where it is: `MADOYOMI_MPV` is passed on if set, else set to `../tools/bin/mpv/mpv.exe` when that exists (release: `resources/mpv/mpv.exe`), else left out, and the backend uses `mpv.exe` from PATH. `MADOYOMI_PLAYER_DIR` (mpv's config dir) is passed on if set, else set to `../player` (release: `resources/player`). `sidecar.log` has a `player:` line with both. The same for anime downloads (Phase 6 Stage 5): `MADOYOMI_FFMPEG` and `MADOYOMI_YTDLP` are passed on if set, else set to `../tools/bin/ffmpeg/ffmpeg.exe` and `../tools/bin/yt-dlp/yt-dlp.exe` when they exist (release: `resources/ffmpeg/ffmpeg.exe`, `resources/yt-dlp/yt-dlp.exe`), else left out (Settings → Downloads' path, then PATH); a `downloads:` line in `sidecar.log` says which. mpv is the JVM's child, so it is in the same Job Object and dies with the app.
 
