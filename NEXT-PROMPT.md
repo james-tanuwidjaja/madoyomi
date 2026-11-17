@@ -17,7 +17,7 @@ Where things stand (2026-11-17, Phase 7 Stage 2 done and merged by me before you
     - one version in `VERSION` (0.1.0): `tools/version.ps1` checks or writes `app/package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock` and `Constants.kt`; `build-release.ps1` runs it first and refuses a jar of another version;
     - the NSIS installer is per-user into `%LOCALAPPDATA%\Madoyomi` (no admin), publisher "Madoyomi contributors", with a Start Menu shortcut;
     - the uninstaller's box ("Delete my library, settings and downloads too", `app/src-tauri/installer/hooks.nsh` and `English.nsh`) removes the data dir (`MADOYOMI_DATA_DIR`, else `%APPDATA%\Madoyomi`, only with `server.conf` in it); `/REMOVEDATA` ticks it for `/S`;
-    - the MSI has a fixed upgrade code; after the stage I installed 0.1.0 and upgraded it to 0.1.1 on the dev desktop (one entry, the data kept: phase-7 §10 "Stage 2 follow-up"); its uninstall is Stage 6's;
+    - the MSI has a fixed upgrade code; after the stage I installed 0.1.0, upgraded it to 0.1.1 (one entry) and uninstalled it on the dev desktop, keeping the data (phase-7 §10 "Stage 2 follow-up");
     - every tool's license texts are pinned in `binaries.json` and installed beside it;
     - checked live: installed, ran with nothing on PATH, upgraded 0.1.0 → 0.1.1 keeping the data, uninstalled both ways. Installers: NSIS 275.1 MiB, MSI 301.1 MiB; installed 461.6 MiB in 255 files.
 - My decisions so far: no code signing for now; Windows-only; "remove data" removes everything; Tauri's icon for now. Open (not this stage's): the GPL source archive in releases (Stage 5), the icon.
@@ -35,7 +35,7 @@ Where things stand (2026-11-17, Phase 7 Stage 2 done and merged by me before you
 
 Gotchas (Phases 5–6's and Stages 1–2's still apply):
 - If your shell is a Linux VM (device_bash) rather than Windows, the Windows side runs through the agent job runner: ask me to start tools\dev-data\agent\start-runner.cmd (check runner.heartbeat is fresh).
-  - Each queue\NNN-name.ps1 runs once, hidden; its output is queue\NNN-name.log and its exit code queue\NNN-name.done (the last job was 659; check `ls queue | sort -n | tail` before picking one). **Jobs run in parallel**: wait for one's .done before queueing the next if they share anything. Write a job to a temp name and rename it to .ps1, or the runner may take it half-written. A job that pipes a long run through `Out-File` writes its log only at the end.
+  - Each queue\NNN-name.ps1 runs once, hidden; its output is queue\NNN-name.log and its exit code queue\NNN-name.done (the last job was 664; check `ls queue | sort -n | tail` before picking one). **Jobs run in parallel**: wait for one's .done before queueing the next if they share anything. Write a job to a temp name and rename it to .ps1, or the runner may take it half-written. A job that pipes a long run through `Out-File` writes its log only at the end.
   - Deleting files from the VM is off by default (`rm` fails with "Operation not permitted"); a job on the Windows side can move or delete (Stage 2 moved the 0.1.1 test jar out of `server/api/build` that way). Leave scratch files in the gitignored tools/dev-data.
   - Git runs there too. The branch switch is a job with `cmd /c "git switch main 2>&1"`, `git pull`, `git switch -c …`; copy queue\626-branch.ps1 with the new branch name.
   - **Don't write files into app/ while a check job reads it** (prettier, tests); `pnpm format` also rewrites app/README.md (its tables).
@@ -46,7 +46,7 @@ Gotchas (Phases 5–6's and Stages 1–2's still apply):
   - ipcdo.ps1 (mpv's pipe: `-Mute -Seek <s> -Wait <s> -Extra tracks -Quit`), tracklist.ps1, mem.ps1, seed-live.ps1, seed-live7.ps1 (`-Java <java.exe>`), h2sql.ps1, snapshot6.ps1;
   - Stage 2's: **inst7.ps1** (`-Action install -Setup <exe>`, `report`, `uninstall [-RemoveData] [-DataDir <dir>]`, `real`: the real data dirs' counts), **wininfo.ps1** (a window's controls through Win32, `-Keys` to press keys in it: for windows computer use can't be granted), **msiinfo.ps1** (an MSI's tables);
   - the installers in `installers\0.1.0b` (the final 0.1.0), `installers\0.1.1` (with its jar).
-- **The MSI 0.1.1 is installed on the dev desktop** (per-machine, `C:\Program Files\Madoyomi`, my own install on my real data dir): leave it. Don't install an NSIS build there (Tauri's NSIS installer uninstalls a WiX install first, behind a UAC prompt), and don't start the installed app from the Start Menu for tests (it opens my real data dir): run release builds with app-start7.ps1 (`-Exe app\src-tauri\target\release\madoyomi.exe -DataDir <scratch>`), or ask me.
+- **Nothing of Madoyomi is installed on the dev desktop now** (the MSI was uninstalled after Stage 2; my real data dir `%APPDATA%\Madoyomi` stays, with my library in it). For tests run release builds with app-start7.ps1 (`-Exe app\src-tauri\target\release\madoyomi.exe -DataDir <scratch>`); an installer test installs per-user (NSIS, inst7.ps1) and uninstalls at the end, and never starts the installed app without `MADOYOMI_DATA_DIR`.
 - Job templates in queue\ (copy them to a new number):
   - 654-check.ps1 (format, format:check, typecheck, lint, test, build);
   - 394-server.ps1 (ktlintFormat, then build with the test counts per module, then smoke: change its `394-*.out` names);
