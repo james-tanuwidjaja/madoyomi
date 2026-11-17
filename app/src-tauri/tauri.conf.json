@@ -27,12 +27,28 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
+    "publisher": "Madoyomi contributors",
+    "copyright": "Copyright (C) Madoyomi contributors. Licensed under the MPL-2.0.",
+    "shortDescription": "Anime and manga with Aniyomi and Mihon extensions",
+    "longDescription": "Madoyomi is a Windows desktop app for anime and manga that runs existing Aniyomi and Mihon extensions unchanged.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "installer/hooks.nsh",
+        "customLanguageFiles": {
+          "English": "installer/English.nsh"
+        }
+      },
+      "wix": {
+        "upgradeCode": "3f047ae9-ce0d-5d68-b160-749f913bed03"
+      }
+    }
   }
 }

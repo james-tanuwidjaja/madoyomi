@@ -1,5 +1,5 @@
 {
-  "comment": "Pinned third-party programs that release builds bundle (Phase 7 Stage 1). tools/fetch-binaries.ps1 downloads each url into tools/bin/downloads, checks its sha256 (and fails on a mismatch), and copies the files listed in take into app/src-tauri/resources/<dest>, where the shell looks for <dest>/<dest>.exe (sidecar.rs, tool_from). sha256From says where the pinned hash was checked. Bumping a version: change version, url, sha256 (and inner/take if the archive's layout changed), run the script, then the live checks in docs/phases/phase-7-packaging-release.md section 10.",
+  "comment": "Pinned third-party programs that release builds bundle (Phase 7 Stage 1). tools/fetch-binaries.ps1 downloads each url into tools/bin/downloads, checks its sha256 (and fails on a mismatch), and copies the files listed in take into app/src-tauri/resources/<dest>, where the shell looks for <dest>/<dest>.exe (sidecar.rs, tool_from). sha256From says where the pinned hash was checked. licenses: license texts fetched from the upstream tags and pinned by sha256 the same way, copied into <dest>/<as> (Phase 7 Stage 2; ffmpeg's LICENSE and README.txt come from its pinned zip through take). Bumping a version: change version, url, sha256 (and inner/take if the archive's layout changed, and the licenses' tags and hashes), run the script, then the live checks in docs/phases/phase-7-packaging-release.md section 10.",
   "tools": [
     {
       "name": "mpv",
@@ -13,7 +13,129 @@
       "inner": "mpv-git-2025-12-21-41f6a64-x86_64.zip",
       "take": ["mpv.exe", "mpv.com", "*.dll"],
       "dest": "mpv",
-      "versionArgs": ["--version"]
+      "versionArgs": ["--version"],
+      "licenses": [
+        {
+          "as": "Copyright",
+          "url": "https://raw.githubusercontent.com/mpv-player/mpv/v0.41.0/Copyright",
+          "sha256": "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23",
+          "covers": "mpv: which parts are GPL-2.0+ or LGPL-2.1+"
+        },
+        {
+          "as": "LICENSE.GPL",
+          "url": "https://raw.githubusercontent.com/mpv-player/mpv/v0.41.0/LICENSE.GPL",
+          "sha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6",
+          "covers": "GPL-2.0 text: mpv; FFmpeg in avcodec/avformat/... (built with --enable-gpl); FreeType's GPL option"
+        },
+        {
+          "as": "LICENSE.LGPL",
+          "url": "https://raw.githubusercontent.com/mpv-player/mpv/v0.41.0/LICENSE.LGPL",
+          "sha256": "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9",
+          "covers": "LGPL-2.1 text: libiconv-2.dll (libiconv 1.18)"
+        },
+        {
+          "as": "licenses/FFmpeg-LICENSE.md",
+          "url": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/LICENSE.md",
+          "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af",
+          "covers": "avcodec-62, avdevice-62, avfilter-11, avformat-62, avutil-60, swresample-6, swscale-9 (FFmpeg git-2025-12-21-1fcb201, GPL build)"
+        },
+        {
+          "as": "licenses/libass-COPYING.txt",
+          "url": "https://raw.githubusercontent.com/libass/libass/0.17.4/COPYING",
+          "sha256": "f7e30699d02798351e7f839e3d3bfeb29ce65e44efa7735c225464c4fd7dfe9c",
+          "covers": "libass-9.dll (ISC)"
+        },
+        {
+          "as": "licenses/dav1d-COPYING.txt",
+          "url": "https://raw.githubusercontent.com/videolan/dav1d/1.5.2/COPYING",
+          "sha256": "dd92c3c2247c5651606fc23a5e2d6a1ebc5ace9a3e49cbde0e12f05ad1cb1ee5",
+          "covers": "libdav1d.dll (BSD-2-Clause)"
+        },
+        {
+          "as": "licenses/FreeType-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/freetype/freetype/VER-2-14-1/LICENSE.TXT",
+          "sha256": "bd36c8b474855fa294c2ec5c184544478ef3720aad37d65a6296a4f264fd2d3b",
+          "covers": "libfreetype-6.dll (FreeType 2.14.1: FTL or GPL-2.0)"
+        },
+        {
+          "as": "licenses/FreeType-FTL.txt",
+          "url": "https://raw.githubusercontent.com/freetype/freetype/VER-2-14-1/docs/FTL.TXT",
+          "sha256": "5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f",
+          "covers": "libfreetype-6.dll (the FreeType License)"
+        },
+        {
+          "as": "licenses/fribidi-COPYING.txt",
+          "url": "https://raw.githubusercontent.com/fribidi/fribidi/v1.0.16/COPYING",
+          "sha256": "32434afcc8666ba060e111d715bfdb6c2d5dd8a35fa4d3ab8ad67d8f850d2f2b",
+          "covers": "libfribidi-0.dll (fribidi 1.0.16, LGPL-2.1+)"
+        },
+        {
+          "as": "licenses/harfbuzz-COPYING.txt",
+          "url": "https://raw.githubusercontent.com/harfbuzz/harfbuzz/12.2.0/COPYING",
+          "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64",
+          "covers": "libharfbuzz-0.dll (harfbuzz 12.2.0, MIT)"
+        },
+        {
+          "as": "licenses/lcms2-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/mm2/Little-CMS/lcms2.17/LICENSE",
+          "sha256": "6dbd60437f8ef91d8de1f08ad75882547fd4931bfcc3566a0735f28db1484d31",
+          "covers": "liblcms2.dll (MIT)"
+        },
+        {
+          "as": "licenses/libplacebo-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/haasn/libplacebo/v7.351.0/LICENSE",
+          "sha256": "b3aa400aca6d2ba1f0bd03bd98d03d1fe7489a3bbb26969d72016360af8a5c9d",
+          "covers": "libplacebo-358.dll (libplacebo v7.358.0, LGPL-2.1+)"
+        },
+        {
+          "as": "licenses/shaderc-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/google/shaderc/v2025.4/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "covers": "libshaderc_shared.dll (Apache-2.0)"
+        },
+        {
+          "as": "licenses/SPIRV-Cross-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/KhronosGroup/SPIRV-Cross/vulkan-sdk-1.4.328.0/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "covers": "libspirv-cross-c-shared.dll (Apache-2.0)"
+        },
+        {
+          "as": "licenses/Vulkan-Loader-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Loader/v1.4.335/LICENSE.txt",
+          "sha256": "43c0a37e6a0fa7ff3c843b3ec5a4fac84b712558ddac103fbd4c1649662a9ece",
+          "covers": "vulkan-1.dll (Apache-2.0)"
+        },
+        {
+          "as": "licenses/zlib-LICENSE.txt",
+          "url": "https://raw.githubusercontent.com/madler/zlib/v1.3.1/LICENSE",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243",
+          "covers": "zlib1.dll (zlib 1.3.1, Zlib)"
+        },
+        {
+          "as": "licenses/LuaJIT-COPYRIGHT.txt",
+          "url": "https://raw.githubusercontent.com/LuaJIT/LuaJIT/v2.1/COPYRIGHT",
+          "sha256": "6cda3076a8c09b31bb1f90da614ea89e7ee194589626eeac613e522849604e47",
+          "covers": "LuaJIT, linked into mpv.exe (MIT)"
+        },
+        {
+          "as": "licenses/GCC-COPYING.RUNTIME.txt",
+          "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/COPYING.RUNTIME",
+          "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+          "covers": "libgcc_s_seh-1.dll, libstdc++-6.dll, libssp-0.dll (GPL-3.0 with the GCC Runtime Library Exception)"
+        },
+        {
+          "as": "licenses/GCC-COPYING3.txt",
+          "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/COPYING3",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+          "covers": "GPL-3.0 text for the GCC runtime DLLs"
+        },
+        {
+          "as": "licenses/winpthreads-COPYING.txt",
+          "url": "https://raw.githubusercontent.com/mingw-w64/mingw-w64/v11.0.1/mingw-w64-libraries/winpthreads/COPYING",
+          "sha256": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177",
+          "covers": "libwinpthread-1.dll (MIT and ZPL-2.1)"
+        }
+      ]
     },
     {
       "name": "ffmpeg",
@@ -24,7 +146,7 @@
       "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
       "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
       "sha256From": "gyan.dev's ffmpeg-release-essentials.zip.sha256 (release-version 9.0.2) and GitHub's digest of the release asset, both matched by the download on 2026-11-17",
-      "take": ["ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe"],
+      "take": ["ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe", "ffmpeg-9.0.2-essentials_build/LICENSE", "ffmpeg-9.0.2-essentials_build/README.txt"],
       "dest": "ffmpeg",
       "versionArgs": ["-hide_banner", "-version"]
     },
@@ -39,7 +161,21 @@
       "sha256From": "the release's SHA2-256SUMS and GitHub's digest of the release asset, both matched by the download on 2026-11-17",
       "take": ["yt-dlp.exe"],
       "dest": "yt-dlp",
-      "versionArgs": ["--version"]
+      "versionArgs": ["--version"],
+      "licenses": [
+        {
+          "as": "LICENSE",
+          "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/LICENSE",
+          "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+          "covers": "yt-dlp (Unlicense)"
+        },
+        {
+          "as": "THIRD_PARTY_LICENSES.txt",
+          "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt",
+          "sha256": "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7",
+          "covers": "what the PyInstaller exe bundles (Python, OpenSSL, certifi, ...)"
+        }
+      ]
     }
   ]
 }
