@@ -389,7 +389,7 @@ object AnimeDownloads {
      * stopped, by the app's rule, [resumePoint]): Phase 4's session (progress saves, the watched mark, the next
      * episode), with the local file in place of the URL and its subtitle files as the external tracks. Nothing goes to
      * the source, and a failure isn't retried with fetched videos. `NOT_FOUND` when the episode isn't downloaded or its
-     * file is gone.
+     * file is gone; `DOWNLOADS_UNREACHABLE` when the whole downloads folder is (Phase 7 Stage 3).
      */
     fun play(
         episodeId: Int,
@@ -400,6 +400,8 @@ object AnimeDownloads {
             local(episodeId)
                 ?: throw MadoyomiException(ErrorCode.NOT_FOUND, "Episode $episodeId isn't downloaded", mapOf("episodeId" to episodeId))
         if (!local.file.isFile) {
+            // Phase 7 Stage 3: the whole folder gone (an unplugged drive) says so, rather than "the file is gone"
+            if (downloadsRootOverride == null) DownloadsFolder.requireReachable()
             throw MadoyomiException(
                 ErrorCode.NOT_FOUND,
                 "The downloaded file is gone: ${local.file.path}",

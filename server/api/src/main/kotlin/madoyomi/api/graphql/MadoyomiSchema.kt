@@ -27,6 +27,7 @@ class MadoyomiSchema : GraphQLSchemaContribution {
             LibraryUpdateQuery(),
             DownloadQueueQuery(),
             MadoyomiBackupQuery(),
+            DiagnosticsQuery(),
         )
     override val mutations: List<Any> =
         listOf(

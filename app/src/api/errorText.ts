@@ -29,6 +29,8 @@ const HINTS: Record<string, string> = {
   PLAYER_NOT_FOUND:
     "mpv wasn't found. Install mpv and put it on PATH, or set its path in Settings → Player.",
   PLAYER_FAILED: "mpv couldn't be started. The backend's log has the details.",
+  DOWNLOADS_UNREACHABLE:
+    "The downloads folder isn't reachable. Plug its drive back in, or choose another folder in Settings → Downloads.",
   NOT_FOUND: "It no longer exists on the backend.",
   BAD_REQUEST: "The backend refused the request.",
   UNAUTHORIZED: "The backend refused the app's token.",

@@ -11,3 +11,4 @@ export * from "./history";
 export * from "./updates";
 export * from "./downloads";
 export * from "./backups";
+export * from "./diagnostics";

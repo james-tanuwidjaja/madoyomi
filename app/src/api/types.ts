@@ -43,6 +43,7 @@ export const SERVER_ERROR_CODES = [
   "EXTENSION_INCOMPATIBLE",
   "PLAYER_NOT_FOUND",
   "PLAYER_FAILED",
+  "DOWNLOADS_UNREACHABLE",
   "BAD_REQUEST",
   "UNAUTHORIZED",
   "FORBIDDEN",
@@ -892,6 +893,36 @@ export interface DownloadQueue {
   animeDone: number;
   /** Epoch milliseconds of the last item done (0: none in the completed list): the completed list is fetched again. */
   lastFinishedAt: number;
+  /** Phase 7 Stage 3: why nothing new starts (the downloads folder is moving or out of reach), or null. */
+  heldBecause: string | null;
+}
+
+/** What happens to what is downloaded when the downloads folder changes (the user picks, each time). */
+export type DownloadsFolderMode = "MOVE" | "START_EMPTY";
+
+/** The downloads folder (Phase 7 Stage 3, Settings → Downloads). */
+export interface DownloadsFolder {
+  path: string;
+  /** The data dir's downloads folder. */
+  defaultPath: string;
+  isDefault: boolean;
+  /** False when the folder isn't there (an unplugged drive). */
+  reachable: boolean;
+  /** The last change since the backend started. */
+  change: {
+    mode: DownloadsFolderMode;
+    state: "MOVING" | "DONE" | "FAILED";
+    from: string;
+    to: string;
+    filesDone: number;
+    filesTotal: number;
+    bytesDone: number;
+    bytesTotal: number;
+    /** FAILED: why; DONE: what was left behind, if anything. */
+    message: string | null;
+    startedAt: number;
+    finishedAt: number | null;
+  } | null;
 }
 
 export interface CompletedDownloadsPage {

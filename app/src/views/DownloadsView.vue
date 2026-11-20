@@ -147,6 +147,15 @@ function finishedText(item: DownloadItem) {
     </template>
 
     <ErrorNotice v-if="error" title="Couldn't change the downloads" :error="error" />
+    <p
+      v-if="queue.data.value?.heldBecause && items.length"
+      class="held"
+      role="status"
+      data-testid="queue-held"
+    >
+      Waiting: {{ queue.data.value.heldBecause }}.
+      <RouterLink to="/settings">Settings → Downloads</RouterLink>
+    </p>
     <ErrorNotice
       v-if="queue.isError.value"
       title="Couldn't load the download queue"
@@ -513,6 +522,16 @@ function finishedText(item: DownloadItem) {
 .icon {
   min-width: 2rem;
   padding-inline: var(--space-1);
+}
+
+.held {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
 }
 
 .muted {

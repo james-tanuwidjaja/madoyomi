@@ -240,6 +240,35 @@ class PlaybackApiTest : AnimeApiTest() {
     }
 
     @Test
+    fun `each session writes its own mpv log, and only the last ten are kept (Phase 7 Stage 3)`() {
+        val episodeId = episode(PlaySource())
+        val log = PlaybackSessions.dirs().log
+        val logs = log.parentFile
+        logs.listFiles()?.filter { it.name.startsWith("mpv.") }?.forEach { it.delete() }
+        File(logs, "mpv.12.log").writeText("left by a higher limit")
+        val ids =
+            (1..PlaybackSessions.MPV_LOGS_KEPT + 2).map {
+                val id = play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String
+                recordOf(id)
+                id
+            }
+        graphql("mutation { stopPlayback(input: {}) { session { id } } }").assertNoErrors()
+
+        val kept =
+            logs
+                .listFiles()!!
+                .filter { it.name.startsWith("mpv.") }
+                .map { it.name }
+                .sorted()
+        assertEquals((listOf("mpv.log") + (1 until PlaybackSessions.MPV_LOGS_KEPT).map { "mpv.$it.log" }).sorted(), kept)
+        // the newest session is mpv.log, the one before mpv.1.log, …; each starts with its own header
+        ids.reversed().take(PlaybackSessions.MPV_LOGS_KEPT).forEachIndexed { n, id ->
+            val file = if (n == 0) log else File(logs, "mpv.$n.log")
+            assertTrue(file.readText().startsWith("# Madoyomi playback $id at "), "${file.name} is session $id")
+        }
+    }
+
+    @Test
     fun `mpv exiting by itself ends the session with its exit code, and an early exit is retried once`() {
         fake("madoyomi.api.FakeMpv\$Exits")
         val source = PlaySource()

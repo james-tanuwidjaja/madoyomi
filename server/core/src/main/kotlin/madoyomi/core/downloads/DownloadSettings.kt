@@ -36,6 +36,11 @@ data class DownloadSettings(
     val ffmpegPath: String = "",
     /** Stage 5: the yt-dlp to fall back on when ffmpeg fails ("": [DownloadTools]' own search). */
     val ytDlpPath: String = "",
+    /**
+     * Phase 7 Stage 3: the downloads folder of one's choice, an absolute path ("": `<data dir>/downloads`). Changed only
+     * through [DownloadsFolder.change], which moves what is downloaded or starts an empty folder.
+     */
+    val folder: String = "",
 ) {
     /** Only the fields that aren't null change ([DownloadSettingsStore.update]); a blank path clears it. */
     data class Patch(
@@ -80,15 +85,33 @@ object DownloadSettingsStore {
     @Volatile
     var onChange: ((DownloadSettings) -> Unit)? = null
 
-    fun file(): File = fileOverride ?: File(applicationDirs.dataRoot, FILE_NAME)
+    fun file(): File = fileFor(applicationDirs.dataRoot)
 
+    /** The settings file of the data dir [dataRoot] (Phase 7 Stage 3: `ApplicationDirs` asks before it is injected). */
+    fun fileFor(dataRoot: String): File = fileOverride ?: File(dataRoot, FILE_NAME)
+
+    fun current(): DownloadSettings = currentAt(file())
+
+    /** The settings in [file] (read once, then kept until it changes or another file is asked for). */
     @Synchronized
-    fun current(): DownloadSettings {
-        val file = file().absoluteFile
-        loaded?.let { (f, s) -> if (f == file) return s }
-        val settings = read(file)
-        loaded = file to settings
+    fun currentAt(file: File): DownloadSettings {
+        val absolute = file.absoluteFile
+        loaded?.let { (f, s) -> if (f == absolute) return s }
+        val settings = read(absolute)
+        loaded = absolute to settings
         return settings
+    }
+
+    /** Phase 7 Stage 3: records the downloads folder ([DownloadsFolder.change] only; "" is the default). */
+    internal fun setFolder(folder: String) {
+        synchronized(this) {
+            val before = current()
+            if (before.folder == folder) return
+            val next = before.copy(folder = folder)
+            write(file().absoluteFile, next)
+            loaded = file().absoluteFile to next
+        }
+        logger.info { "downloads folder: ${folder.ifEmpty { "(the data dir's downloads)" }}" }
     }
 
     /** Applies [patch] (validated first: nothing changes if a field is wrong), writes the file, returns the result. */

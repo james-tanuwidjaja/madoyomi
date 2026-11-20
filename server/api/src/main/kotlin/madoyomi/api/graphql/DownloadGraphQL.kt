@@ -22,6 +22,9 @@ import madoyomi.core.downloads.DownloadQueue
 import madoyomi.core.downloads.DownloadSettings
 import madoyomi.core.downloads.DownloadSettingsStore
 import madoyomi.core.downloads.DownloadTools
+import madoyomi.core.downloads.DownloadsFolder
+import madoyomi.core.downloads.DownloadsFolderChangeState
+import madoyomi.core.downloads.DownloadsFolderMode
 import madoyomi.core.downloads.MangaDownloads
 import madoyomi.exthost.ExtensionKind
 import org.dataloader.DataLoader
@@ -149,6 +152,8 @@ data class DownloadQueueType(
     val animeDone: Int,
     @GraphQLDescription("Epoch milliseconds of the last item done; 0 if none is in the completed list")
     val lastFinishedAt: Long,
+    @GraphQLDescription("Why nothing new starts now (the downloads folder is moving or out of reach), or null. Phase 7 Stage 3")
+    val heldBecause: String? = null,
 ) {
     companion object {
         fun now(): DownloadQueueType =
@@ -157,8 +162,63 @@ data class DownloadQueueType(
                 mangaDone = DownloadQueue.count(DownloadItemState.DONE, ExtensionKind.MANGA).toInt(),
                 animeDone = DownloadQueue.count(DownloadItemState.DONE, ExtensionKind.ANIME).toInt(),
                 lastFinishedAt = DownloadQueue.lastFinishedAt(null),
+                heldBecause = DownloadsFolder.blockReason(),
             )
     }
+}
+
+@GraphQLDescription("The downloads folder (Phase 7 Stage 3): where it is, whether it is there, and its last change")
+data class DownloadsFolderType(
+    @GraphQLDescription("The folder, absolute")
+    val path: String,
+    @GraphQLDescription("The data dir's downloads folder, the default")
+    val defaultPath: String,
+    val isDefault: Boolean,
+    @GraphQLDescription("Whether the folder is there (a folder on an unplugged drive isn't)")
+    val reachable: Boolean,
+    @GraphQLDescription("The last change of folder since the backend started, or null")
+    val change: DownloadsFolderChangeType?,
+) {
+    constructor(s: DownloadsFolder.Status) : this(
+        s.path,
+        s.defaultPath,
+        s.isDefault,
+        s.reachable,
+        s.change?.let(::DownloadsFolderChangeType),
+    )
+}
+
+@GraphQLDescription("A change of downloads folder: moving what is downloaded, or starting an empty folder")
+data class DownloadsFolderChangeType(
+    val mode: DownloadsFolderMode,
+    @GraphQLDescription("MOVING, then DONE or FAILED")
+    val state: DownloadsFolderChangeState,
+    val from: String,
+    val to: String,
+    val filesDone: Int,
+    val filesTotal: Int,
+    @GraphQLDescription("Bytes moved so far")
+    val bytesDone: Long,
+    val bytesTotal: Long,
+    @GraphQLDescription("FAILED: why; DONE: what was left behind, if anything")
+    val message: String?,
+    @GraphQLDescription("Epoch milliseconds")
+    val startedAt: Long,
+    val finishedAt: Long?,
+) {
+    constructor(c: DownloadsFolder.Change) : this(
+        c.mode,
+        c.state,
+        c.from,
+        c.to,
+        c.filesDone,
+        c.filesTotal,
+        c.bytesDone,
+        c.bytesTotal,
+        c.message,
+        c.startedAt,
+        c.finishedAt,
+    )
 }
 
 data class CompletedDownloadsType(
@@ -225,6 +285,10 @@ class DownloadQueueQuery {
     @RequireAuth
     @GraphQLDescription("The download settings")
     fun downloadSettings(): DownloadSettingsType = settingsType(DownloadSettingsStore.current())
+
+    @RequireAuth
+    @GraphQLDescription("The downloads folder: where it is, whether it is there, and how its last change went (Phase 7 Stage 3)")
+    fun downloadsFolder(): DownloadsFolderType = DownloadsFolderType(DownloadsFolder.status())
 
     @RequireAuth
     @GraphQLDescription(
@@ -412,6 +476,31 @@ class DownloadQueueMutation {
                 ),
             ),
         )
+
+    data class SetDownloadsFolderInput(
+        val clientMutationId: String? = null,
+        @GraphQLDescription("The new folder, an absolute path; null or empty: the data dir's downloads folder")
+        val path: String? = null,
+        @GraphQLDescription("MOVE what is downloaded there, or START_EMPTY (the old files stay where they are, forgotten)")
+        val mode: DownloadsFolderMode,
+    )
+
+    data class SetDownloadsFolderPayload(
+        val clientMutationId: String?,
+        val downloadsFolder: DownloadsFolderType,
+    )
+
+    @RequireAuth
+    @GraphQLDescription(
+        "Changes the downloads folder (Phase 7 Stage 3). The new folder must be empty or new, and nothing queued or " +
+            "downloading (BAD_REQUEST names what is wrong). MOVE moves everything downloaded (copied and then deleted " +
+            "across drives); START_EMPTY leaves the old files and forgets them. It goes on in the background: follow " +
+            "downloadsFolder.change",
+    )
+    fun setDownloadsFolder(input: SetDownloadsFolderInput): SetDownloadsFolderPayload {
+        DownloadsFolder.change(input.path, input.mode)
+        return SetDownloadsFolderPayload(input.clientMutationId, DownloadsFolderType(DownloadsFolder.status()))
+    }
 
     data class PlayDownloadedEpisodeInput(
         val clientMutationId: String? = null,

@@ -147,6 +147,7 @@ beforeEach(() => {
     mangaDone: 0,
     animeDone: 0,
     lastFinishedAt: 0,
+    heldBecause: null,
   });
   stored = makeAnime();
   episodes = makeEpisodes(3);

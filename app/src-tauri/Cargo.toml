@@ -27,6 +27,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The per-session API token passed to the backend (src/sidecar.rs).
 getrandom = "0.3"
+# Export logs (src/diagnostics.rs, Phase 7 Stage 3): the save dialog and folder picker, the zip, and the backend's
+# gzipped logs unpacked into it.
+tauri-plugin-dialog = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
 
 [target.'cfg(windows)'.dependencies]
 # Job object so the JVM sidecar dies with the app, even on a crash (src/sidecar.rs).

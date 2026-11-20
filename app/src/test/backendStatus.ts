@@ -16,6 +16,9 @@ export function backendStatus(overrides: Partial<BackendStatus> = {}): BackendSt
     retryInMs: null,
     dataDir: "C:\\Users\\me\\AppData\\Roaming\\Madoyomi",
     logDir: "C:\\Users\\me\\AppData\\Roaming\\Madoyomi\\logs",
+    recentCrashes: 0,
+    crashCount: 0,
+    crashAlert: false,
     ...overrides,
   };
 }

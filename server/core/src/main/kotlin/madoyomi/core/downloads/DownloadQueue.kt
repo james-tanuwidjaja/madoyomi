@@ -494,6 +494,12 @@ object DownloadQueue {
         wake.trySend(Unit)
     }
 
+    /** Phase 7 Stage 3: tells the listeners and the workers that something changed outside (the downloads folder). */
+    fun refresh() {
+        changed()
+        wakeUp()
+    }
+
     private fun changed() {
         _changes.value += 1
     }
@@ -514,6 +520,9 @@ object DownloadQueue {
     }
 
     private const val IDLE_MS = 60_000L
+
+    /** How often a held queue looks again whether the downloads folder is back. */
+    private const val HOLD_MS = 5_000L
 
     /** Starts what the limits allow; returns how long to wait before looking again (a retry or a stagger due). */
     private fun schedule(): Long {
@@ -536,6 +545,8 @@ object DownloadQueue {
                         .orderBy(DownloadTable.position to SortOrder.ASC, DownloadTable.id to SortOrder.ASC)
                         .map(::toItem)
                 }
+            // Phase 7 Stage 3: the downloads folder is moving or out of reach: nothing starts, the items stay queued
+            if (queued.isNotEmpty() && DownloadsFolder.blockReason() != null) return HOLD_MS
             for (item in queued) {
                 if (running.size >= settings.maxParallel) break
                 if (running.containsKey(item.id)) continue

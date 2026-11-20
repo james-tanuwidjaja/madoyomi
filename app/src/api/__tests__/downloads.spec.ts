@@ -71,6 +71,7 @@ describe("download operations", () => {
       mangaDone: 3,
       animeDone: 0,
       lastFinishedAt: 1_700_000_005_000,
+      heldBecause: null,
     });
   });
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useBackendStore } from "../stores/backend";
+import ExportLogs from "./ExportLogs.vue";
 
 /** What the backend is doing while it isn't ready: starting, restarting, failed. Used full-screen and as overlay. */
 const backend = useBackendStore();
@@ -75,9 +76,11 @@ const showLogs = computed(() => backend.mode === "tauri" && !!backend.status?.lo
         {{ view === "failed" ? "Retry" : "Restart now" }}
       </button>
       <button v-if="showLogs" type="button" class="btn logs-button" @click="backend.openLogs()">
-        Open logs
+        Open logs folder
       </button>
     </div>
+    <!-- Phase 7 Stage 3: when the shell gave up, the crash dialog's Export logs is here -->
+    <ExportLogs v-if="showLogs && view === 'failed'" compact />
   </section>
 </template>
 
