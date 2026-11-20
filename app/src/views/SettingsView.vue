@@ -56,6 +56,8 @@ import {
 } from "../composables/useBackups";
 import { BACKUP_INTERVALS, BACKUP_KEEP, backupFileText, restoreStatusText } from "../utils/backups";
 import ErrorNotice from "../components/ErrorNotice.vue";
+import DownloadsFolderRow from "../components/DownloadsFolderRow.vue";
+import ExportLogs from "../components/ExportLogs.vue";
 import PageLayout from "../components/PageLayout.vue";
 
 /*
@@ -616,27 +618,7 @@ const unknown = computed(
               <SwitchThumb class="switch-thumb" />
             </SwitchRoot>
           </div>
-          <div class="row">
-            <div class="text">
-              <span>Download folder</span>
-              <span class="summary">
-                Chapters are saved as CBZ files under manga/, episodes under anime/ with their
-                subtitles beside them.
-              </span>
-            </div>
-            <div class="path-actions">
-              <code class="path" data-testid="downloads-path">{{ downloads.path }}</code>
-              <button
-                v-if="backend.mode === 'tauri'"
-                type="button"
-                class="btn"
-                data-action="open-downloads"
-                @click="revealFolder(downloads.path)"
-              >
-                Show in Explorer
-              </button>
-            </div>
-          </div>
+          <DownloadsFolderRow :fallback-path="downloads.path" />
           <div v-for="t in TOOLS" :key="t.key" class="row mpv-row" :data-testid="`tool-${t.tool}`">
             <label class="text" :for="`settings-${t.key}`">
               <span>{{ t.label }}</span>
@@ -1185,15 +1167,27 @@ const unknown = computed(
             <div class="text">
               <span>Log folder</span>
               <span class="summary">
-                sidecar.log (the app's view of the backend) and madoyomi.log (the backend's own).
+                sidecar.log (the app's view of the backend), madoyomi.log (the backend's own) and
+                mpv.log (each playback session's), with the earlier ones beside them.
               </span>
             </div>
             <div class="path-actions">
               <code class="path" data-testid="backend-log-dir">{{ status.logDir }}</code>
               <button type="button" class="btn" data-action="open-logs" @click="backend.openLogs()">
-                Open logs
+                Open logs folder
               </button>
             </div>
+          </div>
+          <div class="row" data-testid="export-logs-row">
+            <div class="text">
+              <span>Export logs</span>
+              <span class="summary">
+                A zip of the logs with the versions, repos, extensions and settings, for a bug
+                report. Your user name, the app's token and passwords are taken out; your library
+                only if you tick the box.
+              </span>
+            </div>
+            <ExportLogs />
           </div>
         </template>
         <p v-else class="row muted" data-testid="backend-external">

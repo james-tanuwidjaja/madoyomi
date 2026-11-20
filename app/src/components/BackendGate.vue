@@ -2,6 +2,7 @@
 import { onMounted } from "vue";
 import { useBackendStore } from "../stores/backend";
 import BackendStatusPanel from "./BackendStatusPanel.vue";
+import CrashDialog from "./CrashDialog.vue";
 
 /**
  * Shows the app (the slot) once the backend is ready. Before that, a full-screen splash or error. After it has been
@@ -27,6 +28,7 @@ onMounted(() => void backend.init());
   <div v-else class="screen">
     <BackendStatusPanel />
   </div>
+  <CrashDialog />
 </template>
 
 <style scoped>

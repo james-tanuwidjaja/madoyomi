@@ -9,6 +9,7 @@ import type {
   BackupFile,
   BackupSettings,
   DownloadSettings,
+  DownloadsFolder,
   DownloadTool,
   LibraryUpdateSettings,
   MpvCheck,
@@ -52,6 +53,9 @@ const ops = vi.hoisted(() => ({
   fetchRestoreStatus: vi.fn(),
   uploadBackup: vi.fn(),
   validateBackup: vi.fn(),
+  fetchDownloadsFolder: vi.fn(),
+  setDownloadsFolder: vi.fn(),
+  fetchDiagnostics: vi.fn(),
 }));
 vi.mock("../../api/operations", async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -80,6 +84,7 @@ let updateSettings: LibraryUpdateSettings;
 let downloadSettings: DownloadSettings;
 let backupFiles: BackupFile[];
 let backupSettings: BackupSettings;
+let folder: DownloadsFolder;
 const manualBackup: BackupFile = {
   name: "Madoyomi_2026-11-16_21-00-00.madoyomi-backup",
   path: "D:\\data\\backups\\Madoyomi_2026-11-16_21-00-00.madoyomi-backup",
@@ -210,6 +215,15 @@ beforeEach(() => {
     startedAt: 0,
     finishedAt: 0,
   });
+  folder = {
+    path: "D:\\data\\downloads",
+    defaultPath: "D:\\data\\downloads",
+    isDefault: true,
+    reachable: true,
+    change: null,
+  };
+  ops.fetchDownloadsFolder.mockImplementation(async () => folder);
+  ops.fetchDiagnostics.mockResolvedValue('{"backend":{}}');
   setBackendReady();
   useBackendStore().mode = "tauri";
 });
@@ -695,6 +709,182 @@ describe("SettingsView: Backup (Phase 6 Stage 6)", () => {
     expect(status.text()).toContain("Restored, with 1 problem");
     expect(wrapper.find('[data-testid="restore-problems"]').text()).toBe(
       "Repo Keiyoushi: no answer",
+    );
+  });
+});
+
+describe("SettingsView: logs and the downloads folder (Phase 7 Stage 3)", () => {
+  const bodyFind = (selector: string) => document.querySelector<HTMLElement>(selector);
+
+  it("exports the logs, with the library only when its box is ticked, and shows the file", async () => {
+    await mountSettings();
+    const row = wrapper.find("[data-testid='export-logs-row']");
+    expect(row.text()).toContain("Your user name, the app's token and passwords are taken out");
+    const box = row.find<HTMLInputElement>("[data-testid='export-include-library']");
+    expect(box.element.checked).toBe(false);
+
+    shell.invoke.mockResolvedValueOnce({
+      path: "C:\\Users\\me\\Downloads\\Madoyomi-logs-2026-11-20-1448.zip",
+      bytes: 51_200,
+      files: ["README.txt", "about.json", "diagnostics.json", "logs/sidecar.log"],
+    });
+    await row.find("[data-action='export-logs']").trigger("click");
+    await flushPromises();
+    expect(ops.fetchDiagnostics).toHaveBeenCalledWith(false, expect.anything());
+    expect(shell.invoke).toHaveBeenCalledWith("export_logs", { diagnostics: '{"backend":{}}' });
+    expect(row.find("[data-testid='export-result']").text()).toContain(
+      "Saved Madoyomi-logs-2026-11-20-1448.zip (50 KB, 4 files).",
+    );
+
+    await box.setValue(true);
+    shell.invoke.mockResolvedValueOnce(null); // the dialog was cancelled
+    await row.find("[data-action='export-logs']").trigger("click");
+    await flushPromises();
+    expect(ops.fetchDiagnostics).toHaveBeenLastCalledWith(true, expect.anything());
+
+    shell.invoke.mockRejectedValueOnce("could not write D:\\x.zip: denied");
+    await row.find("[data-action='export-logs']").trigger("click");
+    await flushPromises();
+    expect(row.find("[data-testid='export-error']").text()).toContain("could not write");
+  });
+
+  it("changes the downloads folder: picks one, asks what to do with the downloads, and moves them", async () => {
+    await mountSettings();
+    expect(wrapper.find("[data-testid='downloads-path']").text()).toBe("D:\\data\\downloads");
+    expect(wrapper.find("[data-action='default-downloads-folder']").exists()).toBe(false);
+
+    shell.invoke.mockImplementation(async (cmd: string) =>
+      cmd === "pick_folder" ? "E:\\Anime" : undefined,
+    );
+    await wrapper.find("[data-action='change-downloads-folder']").trigger("click");
+    await flushPromises();
+    expect(shell.invoke).toHaveBeenCalledWith("pick_folder", {
+      title: "Choose the downloads folder",
+      start: "D:\\data\\downloads",
+    });
+    expect(bodyFind("[data-testid='folder-dialog']")?.textContent).toContain("E:\\Anime");
+    expect(bodyFind("[data-testid='folder-mode-move']")).not.toBeNull();
+    expect((bodyFind("[data-testid='folder-mode-move']") as HTMLInputElement).checked).toBe(true);
+
+    const moving: DownloadsFolder = {
+      ...folder,
+      change: {
+        mode: "MOVE",
+        state: "MOVING",
+        from: "D:\\data\\downloads",
+        to: "E:\\Anime",
+        filesDone: 2,
+        filesTotal: 8,
+        bytesDone: 1024 * 1024,
+        bytesTotal: 4 * 1024 * 1024,
+        message: null,
+        startedAt: 1,
+        finishedAt: null,
+      },
+    };
+    ops.setDownloadsFolder.mockResolvedValue(moving);
+    folder = moving;
+    bodyFind("[data-action='confirm-folder']")!.click();
+    await flushPromises();
+    expect(ops.setDownloadsFolder).toHaveBeenCalledWith("E:\\Anime", "MOVE");
+    expect(bodyFind("[data-testid='folder-dialog']")).toBeNull();
+    expect(wrapper.find("[data-testid='folder-moving']").text()).toContain(
+      "2 of 8 files · 1.0 MB of 4.0 MB",
+    );
+    expect(
+      wrapper.find("[data-action='change-downloads-folder']").attributes("disabled"),
+    ).toBeDefined();
+
+    folder = {
+      ...folder,
+      path: "E:\\Anime",
+      isDefault: false,
+      change: {
+        ...moving.change!,
+        state: "DONE",
+        filesDone: 8,
+        bytesDone: 4 * 1024 * 1024,
+        finishedAt: 2,
+      },
+    };
+    await vi.waitFor(
+      async () => {
+        await flushPromises();
+        expect(wrapper.find("[data-testid='folder-done']").exists()).toBe(true);
+      },
+      { timeout: 3000 },
+    );
+    expect(wrapper.find("[data-testid='folder-done']").text()).toBe(
+      "Moved 8 files (4.0 MB) to the new folder.",
+    );
+    expect(wrapper.find("[data-testid='downloads-path']").text()).toBe("E:\\Anime");
+
+    // back to the default, leaving the files: START_EMPTY
+    await wrapper.find("[data-action='default-downloads-folder']").trigger("click");
+    await flushPromises();
+    expect(bodyFind("[data-testid='folder-dialog']")?.textContent).toContain("D:\\data\\downloads");
+    (bodyFind("[data-testid='folder-mode-empty']") as HTMLInputElement).click();
+    await flushPromises();
+    ops.setDownloadsFolder.mockRejectedValueOnce(
+      new ApiError({
+        code: "BAD_REQUEST",
+        kind: "graphql",
+        message: "Pause the downloads first: 2 are queued or downloading",
+      }),
+    );
+    bodyFind("[data-action='confirm-folder']")!.click();
+    await flushPromises();
+    expect(ops.setDownloadsFolder).toHaveBeenLastCalledWith(null, "START_EMPTY");
+    expect(bodyFind("[data-testid='folder-dialog']")?.textContent).toContain(
+      "Pause the downloads first",
+    );
+  });
+
+  it("says when the folder isn't reachable, and only an empty start is offered then", async () => {
+    folder = { ...folder, path: "F:\\Gone", isDefault: false, reachable: false };
+    await mountSettings();
+    expect(wrapper.find("[data-testid='folder-unreachable']").text()).toContain("isn't reachable");
+    expect(wrapper.find("[data-action='open-downloads']").attributes("disabled")).toBeDefined();
+
+    await wrapper.find("[data-action='default-downloads-folder']").trigger("click");
+    await flushPromises();
+    const move = bodyFind("[data-testid='folder-mode-move']") as HTMLInputElement;
+    expect(move.disabled).toBe(true);
+    expect((bodyFind("[data-testid='folder-mode-empty']") as HTMLInputElement).checked).toBe(true);
+    (bodyFind("[data-action='cancel-folder']") as HTMLElement).click();
+    await flushPromises();
+
+    // the drive is back: the warning goes by itself (the folder is asked again every 5 s while it is gone)
+    folder = { ...folder, reachable: true };
+    await vi.waitFor(
+      async () => {
+        await flushPromises();
+        expect(wrapper.find("[data-testid='folder-unreachable']").exists()).toBe(false);
+      },
+      { timeout: 8000, interval: 200 },
+    );
+  }, 15_000);
+
+  it("shows a failed change", async () => {
+    folder = {
+      ...folder,
+      change: {
+        mode: "MOVE",
+        state: "FAILED",
+        from: "D:\\data\\downloads",
+        to: "E:\\Anime",
+        filesDone: 3,
+        filesTotal: 8,
+        bytesDone: 0,
+        bytesTotal: 0,
+        message: "Copying to E:\\Anime failed: not enough space",
+        startedAt: 1,
+        finishedAt: 2,
+      },
+    };
+    await mountSettings();
+    expect(wrapper.find("[data-testid='folder-failed']").text()).toContain(
+      "nothing moved: Copying to E:\\Anime failed: not enough space",
     );
   });
 });

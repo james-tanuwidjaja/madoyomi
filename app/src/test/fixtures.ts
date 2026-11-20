@@ -337,5 +337,5 @@ export function makeDownloadQueue(
   items: DownloadItem[] = [],
   overrides: Partial<DownloadQueue> = {},
 ): DownloadQueue {
-  return { items, mangaDone: 0, animeDone: 0, lastFinishedAt: 0, ...overrides };
+  return { items, mangaDone: 0, animeDone: 0, lastFinishedAt: 0, heldBecause: null, ...overrides };
 }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import madoyomi.core.downloads.DownloadQueue
 import madoyomi.core.downloads.DownloadSettingsStore
+import madoyomi.core.downloads.DownloadsFolder
 import madoyomi.core.downloads.MangaChapterDownloader
 import madoyomi.core.reader.PageCache
 import madoyomi.core.reader.ReaderSettingsStore
@@ -141,6 +142,9 @@ class MangaDownloadApiTest : ApiGraphQLTest() {
     @AfterEach
     fun dropDownloads() {
         runBlocking { DownloadQueue.stop() }
+        runBlocking { DownloadsFolder.awaitChange() }
+        DownloadsFolder.reset()
+        DownloadsFolder.forceCopy = false
         File(applicationDirs.mangaDownloadsRoot).deleteRecursively()
         staging.deleteRecursively()
         MangaChapterDownloader.stagingRootOverride = null
@@ -328,5 +332,207 @@ class MangaDownloadApiTest : ApiGraphQLTest() {
                 .dataPath("clearCompletedDownloads", "cleared"),
         )
         assertTrue(cbzOf(mangaId, chapters[0]).isFile)
+    }
+
+    // --- Phase 7 Stage 3: the downloads folder of one's choice ---
+
+    private val folderFields =
+        "path defaultPath isDefault reachable change { mode state from to filesDone filesTotal bytesDone bytesTotal message }"
+
+    private fun folder() = graphql("{ downloadsFolder { $folderFields } }").assertNoErrors().dataPath("downloadsFolder") as Map<*, *>
+
+    private fun setFolder(
+        path: String?,
+        mode: String,
+    ) = graphql(
+        "mutation(\$path: String) { setDownloadsFolder(input: {path: \$path, mode: $mode}) { downloadsFolder { $folderFields } } }",
+        mapOf("path" to path),
+    )
+
+    /** Changes the folder and waits for the change to end; returns the change. */
+    private fun changeFolder(
+        path: String?,
+        mode: String,
+    ): Map<*, *> {
+        setFolder(path, mode).assertNoErrors()
+        runBlocking { DownloadsFolder.awaitChange() }
+        return folder()["change"] as Map<*, *>
+    }
+
+    private fun readOffline(
+        mangaId: Int,
+        chapterId: Int,
+        pages: Int,
+    ) {
+        offline = true
+        requests.clear()
+        val list =
+            graphql("mutation { fetchChapterPages(input: {chapterId: $chapterId}) { pages } }")
+                .assertNoErrors()
+                .dataPath("fetchChapterPages", "pages") as List<*>
+        assertEquals(pages, list.size)
+        for (i in 0 until pages) {
+            val (stream, _) = runBlocking { UpstreamPage.getPageImage(mangaId = mangaId, chapterId = chapterId, index = i) }
+            assertContentEquals(png(i), stream.use { it.readBytes() })
+        }
+        assertEquals(emptyList(), requests.toList(), "read from the CBZ, nothing went to the source")
+        offline = false
+    }
+
+    private fun tempFolder(name: String): File = Files.createTempDirectory("madoyomi-$name").toFile().also { it.deleteOnExit() }
+
+    @Test
+    fun `moving the downloads folder moves the files, and the reader and new downloads follow it`() {
+        File(applicationDirs.downloadsRoot).deleteRecursively()
+        val (mangaId, chapters) = manga(PagesSource(2), "Folder move", 3)
+        download(chapters[0])
+        val oldCbz = cbzOf(mangaId, chapters[0])
+        val defaultRoot = File(applicationDirs.downloadsRoot).absoluteFile
+        // something else in the folder: an anime episode with its subtitle, and an empty folder
+        val anime = File(defaultRoot, "anime/Src (EN)/Show").apply { mkdirs() }
+        File(anime, "Ep 1.mkv").writeBytes(ByteArray(4096) { it.toByte() })
+        File(anime, "Ep 1.en.vtt").writeText("WEBVTT")
+        File(defaultRoot, "anime/Empty").mkdirs()
+        val before = folder()
+        assertEquals(true, before["isDefault"])
+        assertEquals(true, before["reachable"])
+        assertEquals(defaultRoot.path, before["path"])
+
+        val target = File(tempFolder("move"), "Madoyomi downloads")
+        val change = changeFolder(target.path, "MOVE")
+        assertEquals("DONE", change["state"], "$change")
+        assertEquals("MOVE", change["mode"])
+        assertTrue((change["filesTotal"] as Int) >= 3, "$change")
+        assertEquals(change["filesTotal"], change["filesDone"])
+        val after = folder()
+        assertEquals(target.path, after["path"])
+        assertEquals(false, after["isDefault"])
+        assertEquals(defaultRoot.path, after["defaultPath"])
+        assertEquals(target.path, File(applicationDirs.downloadsRoot).absolutePath)
+
+        val newCbz = cbzOf(mangaId, chapters[0])
+        assertTrue(newCbz.absoluteFile.startsWith(target), "the CBZ is in the new folder: $newCbz")
+        assertTrue(newCbz.isFile)
+        assertFalse(oldCbz.exists(), "and gone from the old one")
+        assertTrue(File(target, "anime/Src (EN)/Show/Ep 1.mkv").length() == 4096L)
+        assertTrue(File(target, "anime/Src (EN)/Show/Ep 1.en.vtt").isFile)
+        assertTrue(File(target, "anime/Empty").isDirectory)
+        assertEquals(emptyList(), defaultRoot.list()!!.toList(), "the old folder is empty")
+        assertEquals(true, graphql("{ chapter(id: ${chapters[0]}) { isDownloaded } }").assertNoErrors().dataPath("chapter", "isDownloaded"))
+        readOffline(mangaId, chapters[0], 2)
+
+        // a new download goes to the new folder
+        download(chapters[1])
+        assertTrue(cbzOf(mangaId, chapters[1]).absoluteFile.startsWith(target))
+
+        // back to the default, copying as across drives this time
+        DownloadsFolder.forceCopy = true
+        val back = changeFolder(null, "MOVE")
+        assertEquals("DONE", back["state"], "$back")
+        assertEquals(true, folder()["isDefault"])
+        assertTrue(cbzOf(mangaId, chapters[1]).absoluteFile.startsWith(defaultRoot))
+        assertTrue(File(defaultRoot, "anime/Empty").isDirectory, "empty folders are copied too")
+        assertEquals(emptyList(), target.list()!!.toList(), "the copies' originals are deleted")
+        readOffline(mangaId, chapters[1], 2)
+    }
+
+    @Test
+    fun `starting an empty folder leaves the old files and forgets them`() {
+        val (mangaId, chapters) = manga(PagesSource(2), "Folder empty", 2)
+        download(chapters[0])
+        val oldCbz = cbzOf(mangaId, chapters[0])
+        val target = tempFolder("empty")
+
+        val change = changeFolder(target.path, "START_EMPTY")
+        assertEquals("DONE", change["state"], "$change")
+        assertEquals(target.path, folder()["path"])
+        assertTrue(oldCbz.isFile, "the old file stays where it was")
+        assertEquals(
+            false,
+            graphql("{ chapter(id: ${chapters[0]}) { isDownloaded } }").assertNoErrors().dataPath("chapter", "isDownloaded"),
+        )
+        assertEquals(0, graphql("{ downloadQueue { mangaDone } }").assertNoErrors().dataPath("downloadQueue", "mangaDone"))
+
+        // downloading it again writes into the new folder
+        download(chapters[0])
+        assertTrue(cbzOf(mangaId, chapters[0]).absoluteFile.startsWith(target))
+        oldCbz.parentFile.parentFile.deleteRecursively()
+    }
+
+    @Test
+    fun `a downloads folder that is gone is an error for the reader, the queue waits, and nothing is unmarked`() {
+        val (mangaId, chapters) = manga(PagesSource(2), "Folder gone", 2)
+        download(chapters[0])
+        val target = File(tempFolder("gone"), "drive")
+        changeFolder(target.path, "MOVE")
+        val unplugged = File(target.parentFile, "unplugged")
+        assertTrue(target.renameTo(unplugged), "the drive is unplugged")
+
+        val gone = folder()
+        assertEquals(target.path, gone["path"], "still the chosen folder, not the default")
+        assertEquals(false, gone["reachable"])
+        val read = graphql("mutation { fetchChapterPages(input: {chapterId: ${chapters[0]}}) { pages } }")
+        assertEquals("DOWNLOADS_UNREACHABLE", read.errorCode, "${read.errors}")
+        assertEquals(true, graphql("{ chapter(id: ${chapters[0]}) { isDownloaded } }").assertNoErrors().dataPath("chapter", "isDownloaded"))
+
+        // a new download waits instead of failing
+        graphql("mutation { enqueueDownloads(input: {kind: MANGA, itemIds: [${chapters[1]}]}) { queued } }").assertNoErrors()
+        DownloadQueue.start()
+        Thread.sleep(500)
+        val queue = graphql("{ downloadQueue { heldBecause items { state } } }").assertNoErrors().dataPath("downloadQueue") as Map<*, *>
+        assertEquals("QUEUED", queue.path("items", "0", "state"))
+        assertTrue((queue["heldBecause"] as String).contains("isn't reachable"), "$queue")
+        assertFalse(File(applicationDirs.dataRoot, "downloads").walkTopDown().any { it.name == "Folder gone" }, "nothing in the default")
+
+        // moving is refused (nothing to move from), and so is anything while a download is queued
+        val noMove = setFolder(tempFolder("other").path, "MOVE")
+        assertEquals("BAD_REQUEST", noMove.errorCode)
+        assertTrue(noMove.errors!![0].message.contains("start an empty folder instead"), noMove.errors!![0].message)
+        val refused = setFolder(tempFolder("other").path, "START_EMPTY")
+        assertEquals("BAD_REQUEST", refused.errorCode)
+        assertTrue(refused.errors!![0].message.contains("Pause the downloads first"), refused.errors!![0].message)
+
+        // plugged back in: the queue goes on and the reader reads
+        assertTrue(unplugged.renameTo(target))
+        runBlocking { DownloadQueue.awaitIdle(20_000) }
+        assertTrue(cbzOf(mangaId, chapters[1]).absoluteFile.startsWith(target))
+        assertEquals(true, folder()["reachable"])
+        readOffline(mangaId, chapters[0], 2)
+        changeFolder(null, "MOVE")
+    }
+
+    @Test
+    fun `a new folder must be empty, absolute and apart from the old one, with nothing downloading`() {
+        val (_, chapters) = manga(PagesSource(2), "Folder checks", 1)
+        val full = tempFolder("full").also { File(it, "something.txt").writeText("x") }
+        val withIgnored = tempFolder("ignored").also { File(it, "desktop.ini").writeText("x") }
+        val root = File(applicationDirs.downloadsRoot).absoluteFile.also { it.mkdirs() }
+
+        fun refusal(
+            path: String?,
+            mode: String = "MOVE",
+        ): String {
+            val r = setFolder(path, mode)
+            assertEquals("BAD_REQUEST", r.errorCode, "$path: ${r.errors}")
+            return r.errors!![0].message
+        }
+        assertTrue(refusal(full.path).contains("Choose an empty folder"))
+        assertTrue(refusal("relative\\folder").contains("full path"))
+        assertTrue(refusal(File(root, "manga/inside").path).contains("inside"))
+        assertTrue(refusal(root.path).contains("already"))
+        assertTrue(refusal(null).contains("already"))
+        assertTrue(refusal(File(applicationDirs.dataRoot, "elsewhere").path).contains("data folder"))
+        File(full, "file.txt").writeText("x")
+        assertTrue(refusal(File(full, "file.txt").path).contains("not a folder"))
+        assertEquals(true, folder()["isDefault"])
+
+        runBlocking { DownloadQueue.stop() }
+        graphql("mutation { enqueueDownloads(input: {kind: MANGA, itemIds: [${chapters[0]}]}) { queued } }").assertNoErrors()
+        assertTrue(refusal(withIgnored.path).contains("Pause the downloads first"))
+        graphql("mutation { pauseDownloads(input: {kind: MANGA}) { changed } }").assertNoErrors()
+        // paused is fine, and a folder with only Explorer's files counts as empty
+        assertEquals("DONE", changeFolder(withIgnored.path, "MOVE")["state"])
+        assertEquals(withIgnored.path, folder()["path"])
+        changeFolder(null, "MOVE")
     }
 }

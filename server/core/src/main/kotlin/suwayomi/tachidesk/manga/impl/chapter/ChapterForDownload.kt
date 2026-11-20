@@ -14,6 +14,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.github.reactivecircus.cache4k.Cache
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import madoyomi.core.downloads.DownloadsFolder
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -183,6 +184,9 @@ private class ChapterForDownload(
 
         log.debug { "isMarkedAsDownloaded= $isMarkedAsDownloaded, dbPageCount= $dbPageCount, downloadPageCount= $downloadPageCount" }
 
+        // Madoyomi: a downloaded chapter whose downloads folder is gone (an unplugged drive, Phase 7 Stage 3) is an
+        // error, not a reset of its download marks and a fetch from the source (upstream resets it)
+        if (!doesDownloadExist && isMarkedAsDownloaded) DownloadsFolder.requireReachable()
         return if (!doesDownloadExist) {
             log.debug { "reset download status and fetch page list" }
             refreshChapterPageList(mangaId, chapterId, chapterEntry)

@@ -29,6 +29,12 @@ export interface BackendStatus {
   retryInMs: number | null;
   dataDir: string;
   logDir: string;
+  /** Phase 7 Stage 3: the backend's crashes in the last 10 minutes (as of the last one). */
+  recentCrashes: number;
+  /** Its crashes since the app started (the crash dialog shows again only after a new one). */
+  crashCount: number;
+  /** 3 crashes or more in 10 minutes: the crash dialog. */
+  crashAlert: boolean;
 }
 
 /** What the API client needs. The token stays in memory only. */
@@ -119,6 +125,9 @@ export const useBackendStore = defineStore("backend", () => {
       retryInMs: null,
       dataDir: "",
       logDir: "",
+      recentCrashes: 0,
+      crashCount: 0,
+      crashAlert: false,
     };
     status.value = base;
     try {
@@ -152,7 +161,7 @@ export const useBackendStore = defineStore("backend", () => {
     else if (mode.value === "external") await connectExternal();
   }
 
-  /** Shows the shell's `sidecar.log` in Explorer. */
+  /** Shows the log folder in Explorer (`sidecar.log` selected). */
   async function openLogs() {
     if (mode.value === "tauri") await invoke("open_backend_logs");
   }

@@ -1611,6 +1611,89 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.log(report.join("\n"));
   }, 600_000);
 
+  // Phase 7 Stage 3: what Export logs gets from the backend, and the downloads folder of one's choice.
+  it("reads the backend's diagnostics without the token, and the library only when asked", async () => {
+    const plain = (
+      await client.gql<{ diagnostics: string }>(operations.DIAGNOSTICS_QUERY, {
+        includeLibrary: false,
+      })
+    ).diagnostics;
+    const report = JSON.parse(plain) as {
+      backend: { version: string };
+      repos: { indexUrl: string; kind: string }[];
+      extensions: { pkgName: string; kind: string }[];
+      settings: Record<string, unknown> & { "server.conf": Record<string, unknown> };
+      library: unknown;
+    };
+    expect(report.backend.version).toMatch(/^v\d+\.\d+\.\d+/);
+    expect(report.repos.length).toBeGreaterThan(0);
+    expect(report.extensions.length).toBeGreaterThan(0);
+    expect(report.settings["server.conf"].authPassword).toBe("[REDACTED]");
+    expect(report.settings["server.conf"].socksProxyPassword).toBe("[REDACTED]");
+    expect(typeof report.library).toBe("string");
+    expect(plain).not.toContain(token!);
+
+    const withLibrary = (
+      await client.gql<{ diagnostics: string }>(operations.DIAGNOSTICS_QUERY, {
+        includeLibrary: true,
+      })
+    ).diagnostics;
+    const library = (JSON.parse(withLibrary) as { library: { manga: unknown[]; anime: unknown[] } })
+      .library;
+    expect(Array.isArray(library.manga)).toBe(true);
+    expect(Array.isArray(library.anime)).toBe(true);
+    expect(withLibrary).not.toContain(token!);
+  });
+
+  it("moves the downloads folder to an empty folder and back, refusing a folder that isn't empty", async () => {
+    type Folder = {
+      path: string;
+      defaultPath: string;
+      isDefault: boolean;
+      reachable: boolean;
+      change: { state: string; mode: string; filesTotal: number; message: string | null } | null;
+    };
+    const read = async () =>
+      (await client.gql<{ downloadsFolder: Folder }>(operations.DOWNLOADS_FOLDER_QUERY))
+        .downloadsFolder;
+    const set = (path: string | null, mode: string) =>
+      client.gql<{ setDownloadsFolder: { downloadsFolder: Folder } }>(
+        operations.SET_DOWNLOADS_FOLDER_MUTATION,
+        { path, mode },
+      );
+    const settle = async () => {
+      await expect
+        .poll(async () => (await read()).change?.state, { timeout: 120_000 })
+        .not.toBe("MOVING");
+      return read();
+    };
+    const before = await read();
+    expect(before.isDefault).toBe(true);
+    expect(before.reachable).toBe(true);
+
+    // the data dir itself holds files: refused, nothing changes
+    const dataDir = before.defaultPath.replace(/[\\/]downloads$/, "");
+    const refused = await set(dataDir, "MOVE").catch((e: unknown) => e);
+    expect((refused as ApiError).code).toBe("BAD_REQUEST");
+
+    const target = `${dataDir}-live-downloads-${Date.now()}`;
+    await set(target, "MOVE");
+    const moved = await settle();
+    expect(moved.change?.state, moved.change?.message ?? "").toBe("DONE");
+    expect(moved.path).toBe(target);
+    expect(moved.isDefault).toBe(false);
+    const queue = await client.gql<{ downloadQueue: { heldBecause: string | null } }>(
+      operations.DOWNLOAD_QUEUE_QUERY,
+    );
+    expect(queue.downloadQueue.heldBecause).toBeNull();
+
+    await set(null, "MOVE");
+    const back = await settle();
+    expect(back.change?.state, back.change?.message ?? "").toBe("DONE");
+    expect(back.isDefault).toBe(true);
+    expect(back.change?.filesTotal).toBe(moved.change?.filesTotal);
+  }, 300_000);
+
   it("receives extensionStoreRefreshed over the WebSocket after a refresh", async () => {
     const received: { indexUrl: string; ok: boolean }[] = [];
     let onConnected!: () => void;

@@ -19,8 +19,15 @@
 //! The token is generated once per app session and kept across restarts. Only the port changes, so the UI asks for
 //! [`get_backend_info`] again after each `healthy`. The token is never logged and never sent in an event.
 //!
-//! The backend's stdout and stderr and the shell's own lifecycle lines go to `<dataDir>/logs/sidecar.log` (the
-//! previous session's file is kept as `sidecar.1.log`). The server writes its own log to `<dataDir>/logs/madoyomi.log`.
+//! The backend's stdout and stderr, the shell's own lifecycle lines and the UI's uncaught errors go to
+//! `<dataDir>/logs/sidecar.log`. It rolls at every app start and past [`LOG_LIMIT`], keeping [`LOGS_KEPT`] files
+//! (`sidecar.log`, `sidecar.1.log`, `sidecar.2.log`; Phase 7 Stage 3). The server writes its own log to
+//! `<dataDir>/logs/madoyomi.log` (rolled by logback), mpv one per session (`mpv.log`, `mpv.1.log` …), and a JVM crash
+//! its `hs_err_pid*.log` there too (the backend's working directory is the log folder).
+//!
+//! Crashes are counted (Phase 7 Stage 3): every run that ends without the app asking. [`Status::recent_crashes`] is
+//! how many happened in the last [`CRASH_WINDOW`], and the UI shows its crash dialog (Export logs, Open logs folder)
+//! once there are [`CRASH_ALERT`] of them, or when the supervisor gives up (`failed`).
 //!
 //! On Windows every child is put into one Job Object with `KILL_ON_JOB_CLOSE`, so the JVM is killed even when this
 //! process crashes or is killed from Task Manager. The backend owns mpv (Phase 4): mpv is the JVM's child, so it is
@@ -63,8 +70,16 @@ const BACKOFF_MAX: Duration = Duration::from_secs(30);
 const STOP_GRACE: Duration = Duration::from_secs(5);
 /// The server's exit code for a usage error. A restart would fail the same way.
 const EXIT_USAGE: i32 = 2;
-/// `sidecar.log` is rotated to `sidecar.1.log` when it grows past this.
+/// `sidecar.log` rolls over when it grows past this (and at every app start).
 const LOG_LIMIT: u64 = 10 * 1024 * 1024;
+/// sidecar logs kept: `sidecar.log`, `sidecar.1.log` and `sidecar.2.log` (30 MB at most).
+const LOGS_KEPT: u32 = 3;
+/// Crashes within this long count together for the crash dialog.
+const CRASH_WINDOW: Duration = Duration::from_secs(10 * 60);
+/// Crashes within [`CRASH_WINDOW`] that bring up the crash dialog while the backend still restarts.
+pub const CRASH_ALERT: u32 = 3;
+/// The longest UI error line kept in `sidecar.log`.
+const UI_LOG_MAX: usize = 4000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -100,6 +115,12 @@ pub struct Status {
     pub retry_in_ms: Option<u64>,
     pub data_dir: String,
     pub log_dir: String,
+    /// Runs that ended without the app asking, in the last [`CRASH_WINDOW`] (as of the last one).
+    pub recent_crashes: u32,
+    /// Runs that ended without the app asking since the app started.
+    pub crash_count: u32,
+    /// [`CRASH_ALERT`] crashes or more in the last [`CRASH_WINDOW`]: the UI's crash dialog.
+    pub crash_alert: bool,
 }
 
 /// What the UI needs to call the API. Only [`get_backend_info`] returns the token.
@@ -138,6 +159,9 @@ impl Backend {
                 retry_in_ms: None,
                 data_dir: launch.data_dir.display().to_string(),
                 log_dir: launch.log_dir.display().to_string(),
+                recent_crashes: 0,
+                crash_count: 0,
+                crash_alert: false,
             }),
             status_changed: Condvar::new(),
             signal: Mutex::new(Signal::default()),
@@ -220,6 +244,28 @@ impl Backend {
     }
 }
 
+impl Backend {
+    /// The status now (without the token).
+    pub(crate) fn status(&self) -> Status {
+        self.shared.status.lock().unwrap().clone()
+    }
+
+    /// The API token, to keep it out of an export (never logged, never sent in an event).
+    pub(crate) fn token(&self) -> &str {
+        &self.token
+    }
+
+    /// The folder of `sidecar.log`, `madoyomi.log` and mpv's logs.
+    pub(crate) fn log_dir(&self) -> PathBuf {
+        self.shared
+            .log
+            .path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default()
+    }
+}
+
 impl Drop for Backend {
     fn drop(&mut self) {
         self.stop();
@@ -254,6 +300,33 @@ pub fn restart_backend(backend: tauri::State<'_, Backend>) {
         backend.shared.signal.lock().unwrap().retry = true;
         backend.shared.signal_changed.notify_all();
     }
+}
+
+/// A line from the UI (an uncaught error) into `sidecar.log`, tagged `[ui]`, cut at [`UI_LOG_MAX`] characters and
+/// without the token.
+#[tauri::command]
+pub fn log_from_ui(backend: tauri::State<'_, Backend>, level: String, message: String) {
+    backend
+        .shared
+        .log
+        .ui(&ui_line(&level, &message, &backend.token));
+}
+
+fn ui_line(level: &str, message: &str, token: &str) -> String {
+    let level: String = level
+        .chars()
+        .take_while(char::is_ascii_alphabetic)
+        .take(8)
+        .collect();
+    let mut text = if token.is_empty() {
+        message.to_owned()
+    } else {
+        message.replace(token, "[token]")
+    };
+    if text.chars().count() > UI_LOG_MAX {
+        text = text.chars().take(UI_LOG_MAX).collect::<String>() + " …";
+    }
+    format!("{}: {}", level.to_lowercase(), text.replace('\n', "\n    "))
 }
 
 /// Shows `sidecar.log` (or the log folder) in Explorer.
@@ -434,6 +507,7 @@ enum Decision {
 
 fn supervise(shared: &Shared, launch: &Launch, token: &str, group: &ProcessGroup) {
     let mut failures = 0u32;
+    let mut crashes = Crashes::default();
     loop {
         let failure = match run_once(shared, launch, token, group, failures + 1) {
             Outcome::Shutdown => return,
@@ -443,6 +517,18 @@ fn supervise(shared: &Shared, launch: &Launch, token: &str, group: &ProcessGroup
             return;
         }
         shared.log.shell(&failure.error);
+        let (recent, total) = crashes.record(Instant::now());
+        if recent >= CRASH_ALERT {
+            shared.log.shell(&format!(
+                "{recent} crashes in the last {} min ({total} since the app started)",
+                CRASH_WINDOW.as_secs() / 60
+            ));
+        }
+        let count = |s: &mut Status| {
+            s.recent_crashes = recent;
+            s.crash_count = total;
+            s.crash_alert = recent >= CRASH_ALERT;
+        };
         let decision = if failure.fatal {
             failures += 1;
             Decision::GiveUp
@@ -458,6 +544,7 @@ fn supervise(shared: &Shared, launch: &Launch, token: &str, group: &ProcessGroup
                     delay.as_millis()
                 ));
                 shared.transition(State::Restarting, |s| {
+                    count(s);
                     s.attempt = failures;
                     s.error = Some(failure.error);
                     s.exit_code = failure.exit_code;
@@ -470,6 +557,7 @@ fn supervise(shared: &Shared, launch: &Launch, token: &str, group: &ProcessGroup
                     .log
                     .shell("not restarting again; waiting for a retry from the UI");
                 shared.transition(State::Failed, |s| {
+                    count(s);
                     s.attempt = failures;
                     s.error = Some(failure.error);
                     s.exit_code = failure.exit_code;
@@ -482,6 +570,27 @@ fn supervise(shared: &Shared, launch: &Launch, token: &str, group: &ProcessGroup
             Wake::Retry => failures = 0,
             Wake::Timeout => {}
         }
+    }
+}
+
+/// When the backend crashed, to count the crashes of the last [`CRASH_WINDOW`].
+#[derive(Default)]
+struct Crashes {
+    times: Vec<Instant>,
+    total: u32,
+}
+
+impl Crashes {
+    /// Records a crash at `now`; returns the crashes within [`CRASH_WINDOW`] before it (itself included) and in all.
+    fn record(&mut self, now: Instant) -> (u32, u32) {
+        self.total += 1;
+        self.times
+            .retain(|t| now.saturating_duration_since(*t) < CRASH_WINDOW);
+        self.times.push(now);
+        (
+            u32::try_from(self.times.len()).unwrap_or(u32::MAX),
+            self.total,
+        )
     }
 }
 
@@ -933,7 +1042,7 @@ fn new_token() -> Result<String, String> {
 }
 
 /// `2026-11-06T21:55:15.123Z`
-fn utc_timestamp(t: SystemTime) -> String {
+pub(crate) fn utc_timestamp(t: SystemTime) -> String {
     let d = t.duration_since(UNIX_EPOCH).unwrap_or_default();
     let secs = d.as_secs();
     let (y, m, day) = civil_from_days(i64::try_from(secs / 86_400).unwrap_or(0));
@@ -1186,30 +1295,34 @@ fn newest_server_jar(dir: &Path) -> Option<PathBuf> {
 
 struct SidecarLog {
     path: PathBuf,
+    limit: u64,
+    keep: u32,
     file: Mutex<Option<(File, u64)>>,
 }
 
 impl SidecarLog {
-    /// Opens `<dir>/sidecar.log`, keeping the previous one as `sidecar.1.log`. Logging is best effort.
+    /// Opens `<dir>/sidecar.log` after rolling the earlier ones over (`sidecar.1.log` …). Logging is best effort.
     fn open(dir: &Path) -> Self {
+        Self::open_with(dir, LOG_LIMIT, LOGS_KEPT)
+    }
+
+    fn open_with(dir: &Path, limit: u64, keep: u32) -> Self {
         let path = dir.join("sidecar.log");
         let file = fs::create_dir_all(dir)
-            .and_then(|()| Self::rotate_and_open(&path))
+            .and_then(|()| Self::rotate_and_open(&path, keep))
             .map_err(|e| eprintln!("[sidecar] cannot write {}: {e}", path.display()))
             .ok()
             .map(|f| (f, 0));
         Self {
             path,
+            limit,
+            keep,
             file: Mutex::new(file),
         }
     }
 
-    fn rotate_and_open(path: &Path) -> io::Result<File> {
-        if path.exists() {
-            let old = path.with_file_name("sidecar.1.log");
-            let _ = fs::remove_file(&old);
-            fs::rename(path, &old)?;
-        }
+    fn rotate_and_open(path: &Path, keep: u32) -> io::Result<File> {
+        rotate_numbered(path, keep)?;
         OpenOptions::new().create(true).append(true).open(path)
     }
 
@@ -1219,6 +1332,10 @@ impl SidecarLog {
 
     fn backend(&self, msg: &str) {
         self.write("backend", msg);
+    }
+
+    fn ui(&self, msg: &str) {
+        self.write("ui", msg);
     }
 
     fn write(&self, tag: &str, msg: &str) {
@@ -1233,10 +1350,45 @@ impl SidecarLog {
         if file.write_all(line.as_bytes()).is_ok() {
             *written += line.len() as u64;
         }
-        if *written > LOG_LIMIT {
-            *guard = Self::rotate_and_open(&self.path).ok().map(|f| (f, 0));
+        if *written > self.limit {
+            // the file is closed before it is renamed (Windows can't rename an open file)
+            *guard = None;
+            *guard = Self::rotate_and_open(&self.path, self.keep)
+                .ok()
+                .map(|f| (f, 0));
         }
     }
+}
+
+/// `<stem>.<n>.<ext>` beside `path` (`sidecar.log`, 2 → `sidecar.2.log`); 0 is `path` itself.
+fn numbered(path: &Path, n: u32) -> PathBuf {
+    if n == 0 {
+        return path.to_path_buf();
+    }
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("log");
+    let name = match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) => format!("{stem}.{n}.{ext}"),
+        None => format!("{stem}.{n}"),
+    };
+    path.with_file_name(name)
+}
+
+/// Makes room for a new `path`: the oldest of `keep` files goes, each other moves up a number, `path` becomes `.1`.
+fn rotate_numbered(path: &Path, keep: u32) -> io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if keep <= 1 {
+        return fs::remove_file(path);
+    }
+    let _ = fs::remove_file(numbered(path, keep - 1));
+    for n in (1..keep - 1).rev() {
+        let from = numbered(path, n);
+        if from.exists() {
+            fs::rename(&from, numbered(path, n + 1))?;
+        }
+    }
+    fs::rename(path, numbered(path, 1))
 }
 
 // --- process group ---
@@ -1522,6 +1674,97 @@ mod tests {
         let mut lines = Vec::new();
         for_each_line(&b"one\r\ntwo\n\xffthree"[..], |l| lines.push(l.to_string()));
         assert_eq!(lines, ["one", "two", "\u{fffd}three"]);
+    }
+
+    #[test]
+    fn the_log_rolls_at_start_and_past_its_limit_keeping_three() {
+        let dir = std::env::temp_dir().join(format!("madoyomi-log-{}", new_token().unwrap()));
+        let names = || {
+            let mut n: Vec<String> = fs::read_dir(&dir)
+                .unwrap()
+                .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                .collect();
+            n.sort();
+            n
+        };
+        // three app starts: each starts a new file, the two before are kept
+        for session in 1..=4 {
+            let log = SidecarLog::open_with(&dir, 10_000, 3);
+            log.shell(&format!("session {session}"));
+        }
+        assert_eq!(names(), ["sidecar.1.log", "sidecar.2.log", "sidecar.log"]);
+        let read = |name: &str| fs::read_to_string(dir.join(name)).unwrap();
+        assert!(read("sidecar.log").contains("[shell] session 4"));
+        assert!(read("sidecar.1.log").contains("session 3"));
+        assert!(read("sidecar.2.log").contains("session 2"));
+
+        // past the limit it rolls while running, and no file grows far past it
+        let log = SidecarLog::open_with(&dir, 1_000, 3);
+        for i in 0..100 {
+            log.backend(&format!("line {i:03} {}", "x".repeat(40)));
+        }
+        assert_eq!(names(), ["sidecar.1.log", "sidecar.2.log", "sidecar.log"]);
+        for name in names() {
+            let len = fs::metadata(dir.join(&name)).unwrap().len();
+            assert!(len <= 1_000 + 100, "{name} is {len} bytes");
+        }
+        assert!(read("sidecar.log").contains("line 099"));
+        assert!(
+            !read("sidecar.2.log").contains("session 4"),
+            "the oldest went"
+        );
+        drop(log);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn numbered_logs_shift_up_and_the_oldest_goes() {
+        let dir = std::env::temp_dir().join(format!("madoyomi-num-{}", new_token().unwrap()));
+        fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("x.log");
+        assert_eq!(numbered(&log, 0), log);
+        assert_eq!(numbered(&log, 2), dir.join("x.2.log"));
+        rotate_numbered(&log, 3).unwrap(); // nothing to rotate
+        fs::write(&log, "a").unwrap();
+        rotate_numbered(&log, 3).unwrap();
+        fs::write(&log, "b").unwrap();
+        rotate_numbered(&log, 3).unwrap();
+        fs::write(&log, "c").unwrap();
+        rotate_numbered(&log, 3).unwrap();
+        assert!(!log.exists());
+        assert_eq!(fs::read_to_string(dir.join("x.1.log")).unwrap(), "c");
+        assert_eq!(fs::read_to_string(dir.join("x.2.log")).unwrap(), "b");
+        assert!(!dir.join("x.3.log").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn crashes_count_within_ten_minutes() {
+        let mut crashes = Crashes::default();
+        let t0 = Instant::now();
+        assert_eq!(crashes.record(t0), (1, 1));
+        assert_eq!(crashes.record(t0 + Duration::from_secs(4 * 60)), (2, 2));
+        // the third within 10 min of the first brings up the dialog
+        let third = crashes.record(t0 + Duration::from_secs(9 * 60));
+        assert_eq!(third, (3, 3));
+        assert!(third.0 >= CRASH_ALERT);
+        // later the first two are out of the window
+        assert_eq!(crashes.record(t0 + Duration::from_secs(14 * 60)), (2, 4));
+        assert_eq!(crashes.record(t0 + Duration::from_secs(40 * 60)), (1, 5));
+    }
+
+    #[test]
+    fn ui_lines_lose_the_token_and_are_cut() {
+        let token = "ab12".repeat(16);
+        let line = ui_line(
+            "Error<script>",
+            &format!("GET /x?token={token} failed\nat y"),
+            &token,
+        );
+        assert_eq!(line, "error: GET /x?token=[token] failed\n    at y");
+        let long = ui_line("warn", &"é".repeat(5000), "");
+        assert_eq!(long.chars().count(), "warn: ".len() + UI_LOG_MAX + 2);
+        assert!(!ui_line("error", "no token here", "").contains("[token]"));
     }
 
     #[test]

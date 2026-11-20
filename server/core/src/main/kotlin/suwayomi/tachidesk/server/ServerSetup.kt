@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import madoyomi.core.MadoyomiFeatures
+import madoyomi.core.downloads.DownloadsFolder
 import madoyomi.core.repo.RepoService
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.cef.network.CefCookieManager
@@ -91,8 +92,11 @@ class ApplicationDirs(
     val tempRoot: String = "${System.getProperty("java.io.tmpdir")}/Madoyomi",
 ) {
     val extensionsRoot = "$dataRoot/extensions"
+
+    // Madoyomi: the downloads folder of one's choice (Phase 7 Stage 3, downloads.json), then upstream's setting, then
+    // the default; never the default in place of a chosen folder that is gone (upstream: downloadsPath or the default)
     val downloadsRoot
-        get() = serverConfig.downloadsPath.value.ifBlank { "$dataRoot/downloads" }
+        get() = DownloadsFolder.root(dataRoot, serverConfig.downloadsPath.value)
     val localMangaRoot
         get() = serverConfig.localSourcePath.value.ifBlank { "$dataRoot/local" }
     val webUIRoot = "$dataRoot/webUI"
@@ -250,7 +254,8 @@ fun applicationSetup() {
         applicationDirs.extensionsRoot,
         applicationDirs.extensionsRoot + "/icon",
         applicationDirs.tempThumbnailCacheRoot,
-        applicationDirs.downloadsRoot,
+        // Madoyomi: the default downloads folder only; a chosen one that is gone stays gone (upstream: downloadsRoot)
+        DownloadsFolder.defaultRoot(applicationDirs.dataRoot),
         applicationDirs.localMangaRoot,
     ).forEach { File(it).mkdirs() }
 

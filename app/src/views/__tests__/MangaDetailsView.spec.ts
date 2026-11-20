@@ -64,6 +64,7 @@ beforeEach(() => {
     mangaDone: 0,
     animeDone: 0,
     lastFinishedAt: 0,
+    heldBecause: null,
   });
   ops.fetchManga.mockImplementation(async () => stored);
   ops.fetchChapters.mockImplementation(async () => chapters);

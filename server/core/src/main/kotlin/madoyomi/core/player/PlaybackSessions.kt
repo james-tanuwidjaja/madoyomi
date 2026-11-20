@@ -19,11 +19,13 @@ import madoyomi.core.anime.model.table.AnimeTable
 import madoyomi.core.anime.model.table.EpisodeTable
 import madoyomi.core.error.ErrorCode
 import madoyomi.core.error.MadoyomiException
+import madoyomi.core.logs.LogFiles
 import suwayomi.tachidesk.server.ApplicationDirs
 import uy.kohesive.injekt.injectLazy
 import java.io.File
 import java.io.IOException
 import java.net.URI
+import java.time.Instant
 import java.util.Properties
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -34,7 +36,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * The backend owns mpv (Phase 4 §9): one playback session at a time, in mpv's own window.
  *
  * - [play] resolves the video right before the launch (URLs expire), builds the command ([MpvCommand]), stops the
- *   current session and starts mpv. mpv's output goes to `<data dir>/logs/mpv.log` (the last session's).
+ *   current session and starts mpv. mpv's output goes to `<data dir>/logs/mpv.log`, one file per session: the
+ *   earlier ones move to `mpv.1.log` … (the last [MPV_LOGS_KEPT] kept, Phase 7 Stage 3, [LogFiles]).
  * - The process is a child of the JVM, so it is in the Tauri shell's Job Object too: when the app dies, mpv dies.
  *   A normal backend exit stops it from a shutdown hook.
  * - A backend that crashed and was restarted by the shell left its mpv running, with nothing tracking it. Each session
@@ -58,6 +61,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object PlaybackSessions {
     private val logger = KotlinLogging.logger {}
+
+    /** mpv's logs kept: this session's `mpv.log` and the nine before it. */
+    const val MPV_LOGS_KEPT = 10
     private val applicationDirs: ApplicationDirs by injectLazy()
 
     enum class State { RUNNING, EXITED, STOPPED }
@@ -243,11 +249,15 @@ object PlaybackSessions {
             cancelRetryLocked()
             stopLocked()
             include.writeText(built.include, Charsets.UTF_8)
+            // Phase 7 Stage 3: one log per session, the last MPV_LOGS_KEPT kept (mpv.log, mpv.1.log, …)
+            LogFiles.rotate(dirs.log, MPV_LOGS_KEPT)
+            runCatching { dirs.log.writeText("# Madoyomi playback $id at ${Instant.now()}: ${command.first()}\n", Charsets.UTF_8) }
+                .onFailure { logger.warn { "playback $id: could not start ${dirs.log.name}: ${it.message}" } }
             val process =
                 try {
                     ProcessBuilder(command + built.args)
                         .redirectErrorStream(true)
-                        .redirectOutput(dirs.log)
+                        .redirectOutput(ProcessBuilder.Redirect.appendTo(dirs.log))
                         .also { scrubEnvironment(it.environment()) }
                         .start()
                 } catch (e: IOException) {

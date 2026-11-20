@@ -1,4 +1,4 @@
-import { computed, toValue, type MaybeRefOrGetter } from "vue";
+import { computed, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import {
   changeDownloads,
@@ -8,8 +8,10 @@ import {
   fetchCompletedDownloads,
   fetchDownloadQueue,
   fetchDownloadSettings,
+  fetchDownloadsFolder,
   reorderDownload,
   setDownloadSettings,
+  setDownloadsFolder,
   type DownloadAction,
 } from "../api/operations";
 import type {
@@ -17,6 +19,8 @@ import type {
   DownloadItem,
   DownloadQueue,
   DownloadSettings,
+  DownloadsFolder,
+  DownloadsFolderMode,
   MediaKind,
 } from "../api/types";
 import { useBackendStore } from "../stores/backend";
@@ -180,5 +184,58 @@ export function useSetDownloadSettings() {
       void queryClient.invalidateQueries({ queryKey: key });
     },
     onSuccess: (settings) => queryClient.setQueryData(key, settings),
+  });
+}
+
+/** How often the downloads folder is asked again while its files move. */
+export const FOLDER_MOVE_POLL_MS = 500;
+
+/** How often a downloads folder that isn't reachable is asked again (the backend's queue looks every 5 s too). */
+export const FOLDER_GONE_POLL_MS = 5_000;
+
+/**
+ * The downloads folder (Phase 7 Stage 3): fetched again every {@link FOLDER_MOVE_POLL_MS} while its files move, and every
+ * {@link FOLDER_GONE_POLL_MS} while it isn't reachable (found live: the warning stayed after the drive was back). When a
+ * change ends, everything the API serves is fetched again: the downloaded marks, the counts, the queue, the path.
+ */
+export function useDownloadsFolder() {
+  const backend = useBackendStore();
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: queryKeys.downloadsFolder(),
+    queryFn: ({ signal }) => fetchDownloadsFolder(signal),
+    enabled: computed(() => backend.ready),
+    staleTime: 30_000,
+    // while files move, and while the folder is out of reach (it is noticed when its drive is back, as the queue does)
+    refetchInterval: (q) =>
+      q.state.data?.change?.state === "MOVING"
+        ? FOLDER_MOVE_POLL_MS
+        : q.state.data?.reachable === false
+          ? FOLDER_GONE_POLL_MS
+          : false,
+  });
+  watch(
+    () => query.data.value?.change,
+    (change, before) => {
+      if (before?.state === "MOVING" && change && change.state !== "MOVING") {
+        void queryClient.invalidateQueries({ queryKey: ["api"] });
+      }
+    },
+  );
+  return query;
+}
+
+/** Changes the downloads folder; the change goes on in the backend, followed by {@link useDownloadsFolder}. */
+export function useSetDownloadsFolder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { path: string | null; mode: DownloadsFolderMode }) =>
+      setDownloadsFolder(v.path, v.mode),
+    onSuccess: (folder) => {
+      queryClient.setQueryData<DownloadsFolder>(queryKeys.downloadsFolder(), folder);
+      // a change that ended at once (nothing to move) refreshes now; a moving one when it ends
+      if (folder.change?.state !== "MOVING")
+        void queryClient.invalidateQueries({ queryKey: ["api"] });
+    },
   });
 }

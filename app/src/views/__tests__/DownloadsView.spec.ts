@@ -128,6 +128,17 @@ describe("DownloadsView", () => {
     );
   });
 
+  it("says why the queue waits when the downloads folder is out of reach (Phase 7 Stage 3)", async () => {
+    await mountDownloads();
+    expect(wrapper.find('[data-testid="queue-held"]').exists()).toBe(false);
+    queue = { ...queue, heldBecause: "The downloads folder isn't reachable: F:\\Gone" };
+    queryClient.setQueryData(queryKeys.downloadQueue(), queue);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="queue-held"]').text()).toBe(
+      "Waiting: The downloads folder isn't reachable: F:\\Gone. Settings → Downloads",
+    );
+  });
+
   it("pauses, resumes, retries, moves and cancels rows", async () => {
     await mountDownloads();
     const row = (i: number) => wrapper.findAll('[data-testid="download-row"]')[i]!;

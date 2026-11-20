@@ -129,8 +129,27 @@ describe("BackendGate", () => {
 
     await screen.find(".retry-button").trigger("click");
     expect(shell.invoke).toHaveBeenCalledWith("restart_backend");
+    expect(screen.find(".logs-button").text()).toBe("Open logs folder");
     await screen.find(".logs-button").trigger("click");
     expect(shell.invoke).toHaveBeenCalledWith("open_backend_logs");
+
+    // Phase 7 Stage 3: Export logs, without the backend's report (it isn't running)
+    expect(screen.find("[data-testid='export-without-backend']").exists()).toBe(true);
+    await screen.find("[data-action='export-logs']").trigger("click");
+    await flushPromises();
+    expect(shell.invoke).toHaveBeenCalledWith("export_logs", { diagnostics: null });
+  });
+
+  it("brings up the crash dialog over a running app after three crashes in ten minutes", async () => {
+    const wrapper = await mountGate();
+    await emit(healthyStatus(2));
+    expect(document.querySelector("[data-testid='crash-dialog']")).toBeNull();
+    await emit({ ...healthyStatus(3), recentCrashes: 3, crashCount: 3, crashAlert: true });
+    expect(wrapper.find(".app-content").exists()).toBe(true);
+    expect(document.querySelector("[data-testid='crash-dialog']")?.textContent).toContain(
+      "The backend keeps stopping",
+    );
+    wrapper.unmount();
   });
 
   it("renders the app with a banner in a plain browser", async () => {

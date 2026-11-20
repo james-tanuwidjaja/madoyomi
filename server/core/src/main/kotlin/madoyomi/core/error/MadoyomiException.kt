@@ -60,6 +60,12 @@ enum class ErrorCode(
     /** mpv could not be started, or a playback session failed (`details.cause`). Phase 4. */
     PLAYER_FAILED(500),
 
+    /**
+     * The downloads folder isn't there (an unplugged drive, `details.path`): downloaded chapters and episodes can't be
+     * read or played from it until it is back or another folder is chosen. Phase 7 Stage 3.
+     */
+    DOWNLOADS_UNREACHABLE(503),
+
     /** The request itself is invalid: a GraphQL syntax or validation error, a bad argument. */
     BAD_REQUEST(400),
 

@@ -6,6 +6,8 @@ import type {
   DownloadQueue,
   DownloadSettings,
   DownloadTool,
+  DownloadsFolder,
+  DownloadsFolderMode,
   ExtensionKind,
   LongString,
   MediaKind,
@@ -19,7 +21,8 @@ import { extensionKindOf, mediaKindOf } from "../types";
  * `downloadsChanged` subscription is in ./subscriptions), the completed list of a kind (the last finished first, paged
  * by offset), queueing chapters or episodes, pause, resume, retry, cancel and reorder, deleting downloads (the files),
  * clearing the completed list, and Settings → Downloads. Stage 5: the tools' check (`downloadTools`) and playing a
- * downloaded episode (`playDownloadedEpisode`).
+ * downloaded episode (`playDownloadedEpisode`). Phase 7 Stage 3: the downloads folder of one's choice
+ * (`downloadsFolder`, `setDownloadsFolder`) and why the queue waits (`heldBecause`).
  */
 
 export const DOWNLOAD_ITEM_FIELDS = /* GraphQL */ `
@@ -51,6 +54,7 @@ export const DOWNLOAD_QUEUE_FIELDS = /* GraphQL */ `
     mangaDone
     animeDone
     lastFinishedAt
+    heldBecause
   }
   ${DOWNLOAD_ITEM_FIELDS}
 `;
@@ -190,6 +194,44 @@ export const DOWNLOAD_TOOLS_QUERY = /* GraphQL */ `
   }
 `;
 
+const DOWNLOADS_FOLDER_FIELDS = `
+  path
+  defaultPath
+  isDefault
+  reachable
+  change {
+    mode
+    state
+    from
+    to
+    filesDone
+    filesTotal
+    bytesDone
+    bytesTotal
+    message
+    startedAt
+    finishedAt
+  }
+`;
+
+export const DOWNLOADS_FOLDER_QUERY = /* GraphQL */ `
+  query DownloadsFolder {
+    downloadsFolder {
+      ${DOWNLOADS_FOLDER_FIELDS}
+    }
+  }
+`;
+
+export const SET_DOWNLOADS_FOLDER_MUTATION = /* GraphQL */ `
+  mutation SetDownloadsFolder($path: String, $mode: DownloadsFolderMode!) {
+    setDownloadsFolder(input: { path: $path, mode: $mode }) {
+      downloadsFolder {
+        ${DOWNLOADS_FOLDER_FIELDS}
+      }
+    }
+  }
+`;
+
 export const PLAY_DOWNLOADED_EPISODE_MUTATION = /* GraphQL */ `
   mutation PlayDownloadedEpisode($episodeId: Int!, $startSeconds: Float, $resume: Boolean) {
     playDownloadedEpisode(
@@ -228,6 +270,7 @@ export interface DownloadQueueNode {
   mangaDone: number;
   animeDone: number;
   lastFinishedAt: LongString;
+  heldBecause?: string | null;
 }
 
 export function toDownloadItem(n: DownloadItemNode): DownloadItem {
@@ -247,6 +290,7 @@ export function toDownloadQueue(n: DownloadQueueNode): DownloadQueue {
     mangaDone: n.mangaDone,
     animeDone: n.animeDone,
     lastFinishedAt: Number(n.lastFinishedAt),
+    heldBecause: n.heldBecause ?? null,
   };
 }
 
@@ -378,6 +422,63 @@ export async function fetchDownloadTools(
       { signal },
     )
   ).downloadTools;
+}
+
+interface DownloadsFolderNode extends Omit<DownloadsFolder, "change"> {
+  change:
+    | (Omit<
+        NonNullable<DownloadsFolder["change"]>,
+        "bytesDone" | "bytesTotal" | "startedAt" | "finishedAt"
+      > & {
+        bytesDone: LongString;
+        bytesTotal: LongString;
+        startedAt: LongString;
+        finishedAt: LongString | null;
+      })
+    | null;
+}
+
+function toDownloadsFolder(n: DownloadsFolderNode): DownloadsFolder {
+  return {
+    ...n,
+    change: n.change && {
+      ...n.change,
+      bytesDone: Number(n.change.bytesDone),
+      bytesTotal: Number(n.change.bytesTotal),
+      startedAt: Number(n.change.startedAt),
+      finishedAt: n.change.finishedAt == null ? null : Number(n.change.finishedAt),
+    },
+  };
+}
+
+/** The downloads folder: where it is, whether it is there, and its last change (Phase 7 Stage 3). */
+export async function fetchDownloadsFolder(signal?: AbortSignal): Promise<DownloadsFolder> {
+  return toDownloadsFolder(
+    (
+      await api.gql<{ downloadsFolder: DownloadsFolderNode }>(DOWNLOADS_FOLDER_QUERY, undefined, {
+        signal,
+      })
+    ).downloadsFolder,
+  );
+}
+
+/**
+ * Makes `path` the downloads folder (null: the default one), moving what is downloaded (`MOVE`) or leaving it where it
+ * is and forgetting it (`START_EMPTY`). The backend checks first (an empty folder, nothing downloading), then moves in
+ * the background: follow {@link fetchDownloadsFolder}'s `change`.
+ */
+export async function setDownloadsFolder(
+  path: string | null,
+  mode: DownloadsFolderMode,
+): Promise<DownloadsFolder> {
+  return toDownloadsFolder(
+    (
+      await api.gql<{ setDownloadsFolder: { downloadsFolder: DownloadsFolderNode } }>(
+        SET_DOWNLOADS_FOLDER_MUTATION,
+        { path, mode },
+      )
+    ).setDownloadsFolder.downloadsFolder,
+  );
 }
 
 /**
