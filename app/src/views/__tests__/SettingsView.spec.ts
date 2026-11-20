@@ -888,3 +888,70 @@ describe("SettingsView: logs and the downloads folder (Phase 7 Stage 3)", () => 
     );
   });
 });
+
+describe("SettingsView: app updates (Phase 7 Stage 4)", () => {
+  const appSettings = {
+    checkOnStart: false,
+    skippedVersion: null,
+    currentVersion: "0.1.0",
+    install: "nsis",
+    releasesUrl: "https://github.com/james-tanuwidjaja/madoyomi/releases/latest",
+  };
+  let checkOnStart: boolean;
+  let check: () => Promise<unknown>;
+
+  beforeEach(() => {
+    checkOnStart = false;
+    check = async () => ({ result: "upToDate", currentVersion: "0.1.0" });
+    shell.invoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "get_app_update_settings") return { ...appSettings, checkOnStart };
+      if (cmd === "set_app_update_check") {
+        checkOnStart = args?.checkOnStart === true;
+        return { ...appSettings, checkOnStart };
+      }
+      if (cmd === "check_app_update") return check();
+      return undefined;
+    });
+  });
+
+  const appSwitch = () => wrapper.find("[data-testid='app-update-switch']");
+
+  it("shows the check off by default under General, and turns it on", async () => {
+    await mountSettings();
+    expect(wrapper.find("#settings-general").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Check for app updates");
+    expect(appSwitch().attributes("data-state")).toBe("unchecked");
+    expect(wrapper.find("[data-testid='app-version']").text()).toBe("0.1.0");
+
+    await appSwitch().trigger("click");
+    await flushPromises();
+    expect(shell.invoke).toHaveBeenCalledWith("set_app_update_check", { checkOnStart: true });
+    expect(appSwitch().attributes("data-state")).toBe("checked");
+  });
+
+  it("checks now and says it is up to date", async () => {
+    await mountSettings();
+    await wrapper.find("[data-action='check-app-update']").trigger("click");
+    await flushPromises();
+    expect(shell.invoke).toHaveBeenCalledWith("check_app_update", { onStart: false });
+    expect(wrapper.find("[data-testid='app-check-result']").text()).toBe(
+      "Madoyomi 0.1.0 is the newest version.",
+    );
+  });
+
+  it("shows a failed check, offline included", async () => {
+    check = () => Promise.reject("Couldn't reach the update feed (offline?): dns error");
+    await mountSettings();
+    await wrapper.find("[data-action='check-app-update']").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid='app-version-row'] [role='alert']").text()).toContain(
+      "Couldn't reach the update feed",
+    );
+  });
+
+  it("is not shown without the shell", async () => {
+    useBackendStore().mode = "external";
+    await mountSettings();
+    expect(appSwitch().exists()).toBe(false);
+  });
+});

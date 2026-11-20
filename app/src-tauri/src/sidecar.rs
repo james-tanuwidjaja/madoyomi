@@ -255,6 +255,16 @@ impl Backend {
         &self.token
     }
 
+    /// A `[shell]` line in `sidecar.log` (Phase 7 Stage 4: the app's updater says what it does).
+    pub(crate) fn log_shell(&self, msg: &str) {
+        self.shared.log.shell(msg);
+    }
+
+    /// The data dir the backend runs on (`MADOYOMI_DATA_DIR`, else `%APPDATA%\Madoyomi`).
+    pub(crate) fn data_dir(&self) -> PathBuf {
+        PathBuf::from(&self.shared.status.lock().unwrap().data_dir)
+    }
+
     /// The folder of `sidecar.log`, `madoyomi.log` and mpv's logs.
     pub(crate) fn log_dir(&self) -> PathBuf {
         self.shared
@@ -1106,8 +1116,13 @@ fn env_path(name: &str) -> Option<PathBuf> {
     Some(std::path::absolute(&path).unwrap_or(path))
 }
 
-/// `MADOYOMI_DATA_DIR`, else `%APPDATA%\Madoyomi` (the server's own default), else Tauri's app data dir.
+/// `--data-dir <path>` on the command line, else `MADOYOMI_DATA_DIR`, else `%APPDATA%\Madoyomi` (the server's own
+/// default), else Tauri's app data dir. The argument (Phase 7 Stage 4) survives the updater's restart, which passes
+/// the app's arguments on but starts it with the user's own environment.
 fn resolve_data_dir(app: &AppHandle) -> PathBuf {
+    if let Some(dir) = data_dir_arg(std::env::args_os().skip(1)) {
+        return std::path::absolute(&dir).unwrap_or(dir);
+    }
     if let Some(dir) = env_path("MADOYOMI_DATA_DIR") {
         return dir;
     }
@@ -1117,6 +1132,21 @@ fn resolve_data_dir(app: &AppHandle) -> PathBuf {
     app.path()
         .app_data_dir()
         .unwrap_or_else(|_| PathBuf::from("Madoyomi"))
+}
+
+/// The path after `--data-dir` (or in `--data-dir=<path>`); the last one wins, an empty one counts as none.
+fn data_dir_arg(args: impl IntoIterator<Item = std::ffi::OsString>) -> Option<PathBuf> {
+    let mut found = None;
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        let text = arg.to_string_lossy();
+        if text == "--data-dir" {
+            found = args.next().map(PathBuf::from);
+        } else if let Some(value) = text.strip_prefix("--data-dir=") {
+            found = Some(PathBuf::from(value));
+        }
+    }
+    found.filter(|p| !p.as_os_str().is_empty())
 }
 
 /// The repo root in debug builds (`app/src-tauri/../..`).
@@ -1782,6 +1812,26 @@ mod tests {
         assert_eq!(utc_timestamp(t), "2023-11-14T22:13:20.123Z");
         let leap = UNIX_EPOCH + Duration::from_secs(951_782_400); // 2000-02-29
         assert_eq!(utc_timestamp(leap), "2000-02-29T00:00:00.000Z");
+    }
+
+    #[test]
+    fn the_data_dir_argument_is_read_in_both_spellings() {
+        let args = |a: &[&str]| a.iter().map(std::ffi::OsString::from).collect::<Vec<_>>();
+        assert_eq!(data_dir_arg(args(&[])), None);
+        assert_eq!(
+            data_dir_arg(args(&["--data-dir", r"D:\scratch\p7"])),
+            Some(PathBuf::from(r"D:\scratch\p7"))
+        );
+        assert_eq!(
+            data_dir_arg(args(&["--other", r"--data-dir=D:\a b"])),
+            Some(PathBuf::from(r"D:\a b"))
+        );
+        assert_eq!(
+            data_dir_arg(args(&["--data-dir", "one", "--data-dir=two"])),
+            Some(PathBuf::from("two"))
+        );
+        assert_eq!(data_dir_arg(args(&["--data-dir"])), None);
+        assert_eq!(data_dir_arg(args(&["--data-dir="])), None);
     }
 
     #[test]

@@ -1,5 +1,6 @@
 mod diagnostics;
 mod sidecar;
+mod updater;
 
 use tauri::{Manager, RunEvent};
 
@@ -10,6 +11,9 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         // Phase 7 Stage 3: the save dialog of Export logs and the downloads folder picker, used from Rust only.
         .plugin(tauri_plugin_dialog::init())
+        // Phase 7 Stage 4: the app's own updates (src/updater.rs), driven from Rust; the feed and the key in tauri.conf.json.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::AppUpdates::new())
         .setup(|app| {
             // Start the JVM backend right away. The UI follows it through the `backend-status` event and
             // `get_backend_status`, and gets `{ baseUrl, token }` from `get_backend_info` once it is healthy.
@@ -24,6 +28,12 @@ pub fn run() {
             sidecar::log_from_ui,
             diagnostics::export_logs,
             diagnostics::pick_folder,
+            updater::get_app_update_settings,
+            updater::set_app_update_check,
+            updater::skip_app_update,
+            updater::check_app_update,
+            updater::install_app_update,
+            updater::restart_app,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

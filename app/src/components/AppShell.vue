@@ -11,6 +11,7 @@ import { useDownloadQueue } from "../composables/useDownloads";
 import { queueCounts } from "../utils/downloads";
 import NavIcon from "./NavIcon.vue";
 import ShellFooter from "./ShellFooter.vue";
+import AppUpdateDialog from "./AppUpdateDialog.vue";
 
 /**
  * The app shell (Phase 3 step 9): a Fluent-like navigation pane with the anime/manga switch, and the page (the slot)
@@ -139,6 +140,8 @@ watch(
     <main class="content">
       <slot />
     </main>
+    <!-- Phase 7 Stage 4: the app's own update, checked on start when the setting is on -->
+    <AppUpdateDialog />
   </div>
 </template>
 
