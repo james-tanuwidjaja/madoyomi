@@ -25,6 +25,7 @@ import {
   useSetReaderSettings,
 } from "../composables/useReaderSettings";
 import { useSources } from "../composables/useSources";
+import { useAppUpdateStore } from "../stores/appUpdate";
 import {
   useLibraryCheck,
   useLibraryUpdateSettings,
@@ -97,6 +98,50 @@ const playerSettings = usePlayerSettings();
 const languages = usePlayerLanguages();
 const setPlayer = useSetPlayerSettings();
 const player = computed(() => playerSettings.data.value ?? null);
+
+/**
+ * General → App updates (Phase 7 Stage 4): "Check for app updates" (on start; off by default, the user's decision),
+ * Check now and the version. Apart from Updates below, which is the library's new-items check.
+ */
+const appUpdates = useAppUpdateStore();
+
+const appManaged = computed(() => backend.mode === "tauri");
+watch(
+  appManaged,
+  (managed) => {
+    if (managed && !appUpdates.settings) void appUpdates.loadSettings();
+  },
+  { immediate: true },
+);
+const appCheckSaving = ref(false);
+const appCheckError = ref<string | null>(null);
+async function setAppCheck(on: boolean) {
+  appCheckSaving.value = true;
+  appCheckError.value = null;
+  try {
+    await appUpdates.setCheckOnStart(on);
+  } catch (e) {
+    appCheckError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    appCheckSaving.value = false;
+  }
+}
+const appCheckSummary = computed(() => {
+  const s = appUpdates.settings;
+  if (!s) return "";
+  if (s.install === "msi")
+    return "Installed with the MSI installer: a new version is announced, then downloaded from its release page.";
+  if (s.install === "none")
+    return "This build isn't installed, so it doesn't check by itself (Check now still works).";
+  return "When Madoyomi starts, it looks for a new version and asks before installing it.";
+});
+const appCheckResult = computed(() => {
+  const r = appUpdates.lastCheck;
+  if (!r) return "";
+  if (r.result === "upToDate") return `Madoyomi ${r.currentVersion} is the newest version.`;
+  if (r.result === "available") return `Madoyomi ${r.update.version} is out.`;
+  return "";
+});
 
 const updateSettings = useLibraryUpdateSettings();
 const setUpdates = useSetLibraryUpdateSettings();
@@ -458,6 +503,52 @@ const unknown = computed(
           </div>
           <span class="value" data-testid="language">English</span>
         </div>
+        <template v-if="appManaged">
+          <div class="row">
+            <div class="text">
+              <span id="settings-app-updates">Check for app updates</span>
+              <span class="summary">{{ appCheckSummary }}</span>
+            </div>
+            <SwitchRoot
+              :model-value="appUpdates.settings?.checkOnStart ?? false"
+              :disabled="!appUpdates.settings || appCheckSaving"
+              class="switch"
+              aria-labelledby="settings-app-updates"
+              data-testid="app-update-switch"
+              @update:model-value="(v: boolean) => setAppCheck(v)"
+            >
+              <SwitchThumb class="switch-thumb" />
+            </SwitchRoot>
+          </div>
+          <div class="row" data-testid="app-version-row">
+            <div class="text">
+              <span>Version</span>
+              <span v-if="appUpdates.checkError" class="summary app-check-error" role="alert">
+                {{ appUpdates.checkError }}
+              </span>
+              <span v-else-if="appCheckError" class="summary app-check-error" role="alert">
+                {{ appCheckError }}
+              </span>
+              <span v-else-if="appCheckResult" class="summary" data-testid="app-check-result">
+                {{ appCheckResult }}
+              </span>
+            </div>
+            <div class="path-actions">
+              <span class="value" data-testid="app-version">{{
+                appUpdates.settings?.currentVersion ?? ""
+              }}</span>
+              <button
+                type="button"
+                class="btn"
+                data-action="check-app-update"
+                :disabled="appUpdates.checking"
+                @click="appUpdates.checkNow()"
+              >
+                {{ appUpdates.checking ? "Checking…" : "Check now" }}
+              </button>
+            </div>
+          </div>
+        </template>
       </div>
     </section>
 
@@ -1273,6 +1364,11 @@ h2 {
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.app-check-error {
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
 }
 
 .summary {
