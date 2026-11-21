@@ -19,6 +19,7 @@ import { episodeProgress, formatClock, resumePoint } from "../utils/progress";
 import {
   bestOf,
   firstPlayable,
+  hosterLabel,
   initialPick,
   matchChoice,
   preferencePick,
@@ -243,7 +244,7 @@ const busy = computed(() => play.isPending.value);
             :data-index="h.index"
           >
             <header class="hoster-head">
-              <span class="hoster-name">{{ h.name }}</span>
+              <span v-if="hosterLabel(h.name)" class="hoster-name">{{ hosterLabel(h.name) }}</span>
               <span v-if="h.state === 'READY'" class="muted">
                 {{ h.videos.length }} {{ h.videos.length === 1 ? "video" : "videos" }}
               </span>
@@ -277,7 +278,7 @@ const busy = computed(() => play.isPending.value);
             </p>
             <ErrorNotice
               v-if="videos.hosterErrors.value[h.index]"
-              :title="`Couldn't load ${h.name}`"
+              :title="`Couldn't load ${hosterLabel(h.name) ?? 'the videos'}`"
               :error="videos.hosterErrors.value[h.index]"
             />
             <label

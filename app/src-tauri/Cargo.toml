@@ -1,6 +1,6 @@
 [package]
 name = "madoyomi"
-version = "0.1.0"
+version = "0.1.1"
 description = "Madoyomi: anime & manga desktop app running Aniyomi/Mihon extensions"
 authors = ["James Tanuwidjaja"]
 license = "MPL-2.0"

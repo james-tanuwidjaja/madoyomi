@@ -5,6 +5,7 @@ import { noVideoError } from "../../composables/usePlayback";
 import {
   bestOf,
   firstPlayable,
+  hosterLabel,
   initialPick,
   matchChoice,
   preferencePick,
@@ -226,5 +227,13 @@ describe("the preference (Phase 4 Stage 5)", () => {
     expect(pick).toMatchObject({ hosterName: "Filemoon", videoIndex: 0 });
     expect(bestOf(sorted()[1]!)?.index).toBe(0);
     expect(bestOf(hoster(0, { videos: [] }))).toBeNull();
+  });
+});
+
+describe("hosterLabel (Phase 7 Stage 6)", () => {
+  it("shows a hoster's own name, and none for the backend's placeholder of a source without hosters", () => {
+    expect(hosterLabel("VidStreaming")).toBe("VidStreaming");
+    expect(hosterLabel("no_hoster_list")).toBeNull();
+    expect(hosterLabel("  ")).toBeNull();
   });
 });
