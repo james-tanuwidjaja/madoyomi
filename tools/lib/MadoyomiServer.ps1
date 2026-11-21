@@ -9,7 +9,7 @@
     $script:proc                                the server process
     $script:passed, $script:failed              Step/Skip bookkeeping (Reset-MadoyomiSteps)
 
-  Server:     Resolve-MadoyomiJar, Start-MadoyomiServer, Stop-MadoyomiServer, Get-MadoyomiServerLog
+  Server:     Get-MadoyomiJdk, Resolve-MadoyomiJar, Start-MadoyomiServer, Stop-MadoyomiServer, Get-MadoyomiServerLog
   Steps:      Reset-MadoyomiSteps, Step, Skip, Assert
   HTTP:       Invoke-Http, Gql, GqlData, ErrorText
   WebSocket:  WsOpen, WsSend, WsRecv, WsClose (graphql-transport-ws), InstallWithProgress
@@ -19,6 +19,15 @@
 
 # --- server ---
 
+# The JDK 21 the build uses: MADOYOMI_JDK when set, else tools\bin\jdk-21 (the dev desktop's), else JAVA_HOME (CI's
+# actions/setup-java, Phase 7 Stage 5). It must be a full JDK (jlink.ps1 needs its jmods).
+function Get-MadoyomiJdk([string]$RepoRoot) {
+    if ($env:MADOYOMI_JDK) { return $env:MADOYOMI_JDK }
+    $local = Join-Path $RepoRoot 'tools\bin\jdk-21'
+    if ((Test-Path -LiteralPath $local) -or -not $env:JAVA_HOME) { return $local }
+    return $env:JAVA_HOME
+}
+
 # The server jar: $Jar if given, else the newest server\api\build\Madoyomi-Server-*.jar, built first unless -NoBuild.
 function Resolve-MadoyomiJar([string]$RepoRoot, [string]$Jar, [switch]$NoBuild) {
     $serverDir = Join-Path $RepoRoot 'server'
@@ -26,7 +35,7 @@ function Resolve-MadoyomiJar([string]$RepoRoot, [string]$Jar, [switch]$NoBuild) 
         if (-not $NoBuild) {
             # build output goes to the host: in a function, anything else on the pipeline is the return value
             & (Join-Path $RepoRoot 'tools\fetch-upstream-assets.ps1') | Out-Host
-            $env:JAVA_HOME = Join-Path $RepoRoot 'tools\bin\jdk-21'
+            $env:JAVA_HOME = Get-MadoyomiJdk $RepoRoot
             Push-Location $serverDir
             $eap = $ErrorActionPreference
             # a javac warning on stderr must not abort the script (PowerShell 5.1 with 'Stop')

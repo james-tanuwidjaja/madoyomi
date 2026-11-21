@@ -1,0 +1,266 @@
+# The release build (Phase 7 Stage 5; RELEASING.md has the whole checklist).
+#
+# - A pushed tag vX.Y.Z (it must be v + VERSION) runs the tests, builds the signed release and uploads the NSIS
+#   installer, its updater signature, the MSI, latest.json and SHA256SUMS.txt to a DRAFT release, with the notes
+#   from CHANGELOG.md's "## X.Y.Z" section. Publishing the draft is done by hand.
+# - Run workflow (workflow_dispatch) is a dry run: the same tests and signed build, the small files kept as the run's
+#   artifact, no release.
+# Windows only (phase-7 section 9, Stage 2). The toolchain is the dev desktop's (README "Prerequisites"); the JDK's
+# patch is pinned because the jlink runtime is at its 60 MB cap. The updater's key comes only from the secrets
+# TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, as environment variables of the steps that need
+# them. Actions are pinned by commit (the tag in the comment).
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Test, build and draft the release
+    runs-on: windows-latest
+    timeout-minutes: 150
+    permissions:
+      contents: write # gh release create/upload
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      JAVA_VERSION: "21.0.13"
+      NODE_VERSION: "26.13.0"
+      PNPM_VERSION: "12.16.1"
+      RUST_VERSION: "1.99.1"
+      CARGO_TERM_COLOR: never
+      FORCE_COLOR: "0"
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }} (Temurin)
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          java-package: jdk
+
+      - name: Set up Gradle (cache)
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+          cache-read-only: false
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Set up pnpm ${{ env.PNPM_VERSION }} (store cache)
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          cache: true
+          cache_dependency_path: app/pnpm-lock.yaml
+          package_json_file: app/package.json
+
+      - name: Set up Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: Cache the pinned downloads (mpv, ffmpeg, yt-dlp, license texts)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tools/bin/downloads
+          key: binaries-${{ hashFiles('tools/binaries.json') }}
+
+      - name: Cache the test APKs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tools/apks
+          key: test-apks-${{ hashFiles('tools/fetch-test-apks.ps1') }}
+
+      - name: Version and tag
+        id: version
+        run: |
+          $v = (Get-Content -Raw VERSION).Trim()
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\version.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'tools\version.ps1: VERSION and its copies differ' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\version.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'tools\version.ps1 -SelfTest failed' }
+          $release = $env:GITHUB_REF_TYPE -eq 'tag'
+          if ($release -and $env:GITHUB_REF_NAME -ne "v$v") {
+            throw "the tag $env:GITHUB_REF_NAME doesn't match VERSION ($v): tag v$v, or change VERSION with tools\version.ps1 -Set"
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "release=$($release.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "Madoyomi **$v** ($(if ($release) { "release, tag $env:GITHUB_REF_NAME" } else { 'dry run' })), commit ``$env:GITHUB_SHA``" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Release notes (CHANGELOG.md)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          RELEASE: ${{ steps.version.outputs.release }}
+        run: |
+          node tools/release-notes.mjs $env:VERSION --repo $env:GITHUB_REPOSITORY --notes "$env:RUNNER_TEMP\notes.txt" --body "$env:RUNNER_TEMP\body.md"
+          if ($LASTEXITCODE -ne 0) {
+            if ($env:RELEASE -eq 'true') { throw "CHANGELOG.md needs a '## $env:VERSION' section" }
+            Write-Output "::warning::no '## $env:VERSION' section in CHANGELOG.md; the dry run uses a placeholder"
+            "Madoyomi $env:VERSION (dry run)" | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\notes.txt"
+            "Madoyomi $env:VERSION (dry run)" | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\body.md"
+          }
+
+      - name: Install the app's dependencies
+        working-directory: app
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch the upstream assets and the test APKs (pinned by SHA-256)
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\fetch-upstream-assets.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'tools\fetch-upstream-assets.ps1 failed' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\fetch-test-apks.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'tools\fetch-test-apks.ps1 failed' }
+
+      - name: "Tests: server (gradlew build)"
+        working-directory: server
+        run: |
+          .\gradlew.bat build --continue --console=plain
+          $code = $LASTEXITCODE
+          $rows = foreach ($m in 'core', 'AndroidCompat', 'ext-host', 'api') {
+            $t = 0; $f = 0; $e = 0; $s = 0
+            Get-ChildItem "$m\build\test-results\test\*.xml" -ErrorAction SilentlyContinue | ForEach-Object {
+              [xml]$x = Get-Content -Raw $_.FullName
+              $t += [int]$x.testsuite.tests; $f += [int]$x.testsuite.failures; $e += [int]$x.testsuite.errors; $s += [int]$x.testsuite.skipped
+            }
+            "| $m | $t | $f | $e | $s |"
+          }
+          "`n**Server tests** (gradlew build, exit code $code)`n`n| module | tests | failures | errors | skipped |`n|---|---|---|---|---|" >> $env:GITHUB_STEP_SUMMARY
+          $rows >> $env:GITHUB_STEP_SUMMARY
+          $rows | ForEach-Object { Write-Output $_ }
+          if ($code -ne 0) { throw "gradlew build failed ($code)" }
+
+      - name: "Tests: app (lint, format, types, vitest, build)"
+        working-directory: app
+        run: |
+          foreach ($c in 'lint', 'format:check', 'typecheck', 'test', 'build') {
+            Write-Output "::group::pnpm $c"
+            pnpm $c
+            $code = $LASTEXITCODE
+            Write-Output '::endgroup::'
+            if ($code -ne 0) { throw "pnpm $c failed ($code)" }
+          }
+
+      - name: "Tests: shell (cargo fmt, clippy, test)"
+        working-directory: app/src-tauri
+        run: |
+          cargo fmt --check
+          if ($LASTEXITCODE -ne 0) { throw 'cargo fmt --check failed' }
+          cargo clippy --all-targets --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw 'cargo clippy failed' }
+          cargo test --locked
+          if ($LASTEXITCODE -ne 0) { throw 'cargo test failed' }
+
+      - name: Build the signed release (tools/build-release.ps1)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY -or -not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
+            throw 'the repo secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are needed (RELEASING.md)'
+          }
+          $url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/v$env:VERSION/Madoyomi_$($env:VERSION)_x64-setup.exe"
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\build-release.ps1 -NotesFile "$env:RUNNER_TEMP\notes.txt" -DownloadUrl $url
+          if ($LASTEXITCODE -ne 0) { throw "tools\build-release.ps1 failed ($LASTEXITCODE)" }
+
+      - name: Collect and check the release files
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'release'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $b = 'app\src-tauri\target\release\bundle'
+          $setup = "Madoyomi_$($env:VERSION)_x64-setup.exe"
+          foreach ($f in "$b\nsis\$setup", "$b\nsis\$setup.sig", "$b\msi\Madoyomi_$($env:VERSION)_x64_en-US.msi", "$b\nsis\latest.json") {
+            Copy-Item -LiteralPath $f -Destination $out
+          }
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools\check-release.ps1 -Dir $out -Version $env:VERSION -Repo $env:GITHUB_REPOSITORY -WriteSums
+          if ($LASTEXITCODE -ne 0) { throw 'tools\check-release.ps1 failed' }
+          "`n**Release files**`n`n| file | size |`n|---|---|" >> $env:GITHUB_STEP_SUMMARY
+          Get-ChildItem $out | ForEach-Object { '| {0} | {1:N1} MiB |' -f $_.Name, ($_.Length / 1MB) } >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Scan the outputs for the key and its password
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $paths = @("$env:RUNNER_TEMP\release", "$env:RUNNER_TEMP\notes.txt", "$env:RUNNER_TEMP\body.md", 'app\src-tauri\target\release\bundle', 'app\src-tauri\target\release\nsis', 'app\src-tauri\target\release\wix') | Where-Object { Test-Path $_ }
+          node tools/scan-secrets.mjs --env TAURI_SIGNING_PRIVATE_KEY --env TAURI_SIGNING_PRIVATE_KEY_PASSWORD @paths
+          if ($LASTEXITCODE -ne 0) { throw 'the key or its password is in an output: nothing is uploaded' }
+
+      - name: Upload to the draft release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $tag = "v$env:VERSION"
+          $files = Get-ChildItem "$env:RUNNER_TEMP\release" | ForEach-Object { $_.FullName }
+          $existing = gh release view $tag --json isDraft 2>$null | ConvertFrom-Json
+          if ($LASTEXITCODE -eq 0 -and $existing) {
+            if (-not $existing.isDraft) { throw "$tag is already published: bump VERSION for a new release" }
+            Write-Output "$tag is a draft already: replacing its files and notes"
+            gh release upload $tag @files --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'gh release upload failed' }
+            gh release edit $tag --title "Madoyomi $env:VERSION" --notes-file "$env:RUNNER_TEMP\body.md"
+          } else {
+            gh release create $tag @files --draft --verify-tag --title "Madoyomi $env:VERSION" --notes-file "$env:RUNNER_TEMP\body.md"
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'gh release create/edit failed' }
+          $r = gh release view $tag --json url,isDraft,assets | ConvertFrom-Json
+          "`n**Draft release** $($r.url) (draft: $($r.isDraft))`n" >> $env:GITHUB_STEP_SUMMARY
+          $r.assets | ForEach-Object { '- {0} ({1} bytes)' -f $_.name, $_.size } >> $env:GITHUB_STEP_SUMMARY
+
+      # The installers stay out of the artifact (577 MiB together; a private repo's artifact storage is small).
+      - name: Gather the small files (dry run)
+        if: steps.version.outputs.release != 'true'
+        run: |
+          $a = Join-Path $env:RUNNER_TEMP 'small'
+          New-Item -ItemType Directory -Force $a | Out-Null
+          Get-ChildItem "$env:RUNNER_TEMP\release" -Include 'latest.json', '*.sig', 'SHA256SUMS.txt' -Recurse | Copy-Item -Destination $a
+          Copy-Item "$env:RUNNER_TEMP\body.md" $a
+
+      - name: Keep the small files (dry run)
+        if: steps.version.outputs.release != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: madoyomi-${{ steps.version.outputs.version }}-dry-run
+          retention-days: 7
+          path: ${{ runner.temp }}/small
+
+      - name: Keep the test reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            server/*/build/reports/tests/
+            server/*/build/test-results/test/*.xml
