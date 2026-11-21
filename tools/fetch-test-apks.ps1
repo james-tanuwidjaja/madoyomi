@@ -42,8 +42,11 @@ $Apks = @(
     }
     @{
         File = 'tachiyomi-en.mangapill-v1.6.1.apk'
-        Url  = 'https://github.com/keiyoushi/extensions/releases/download/eac81a2-0/tachiyomi-en.mangapill-v1.6.1.apk'
-        Sha  = '7bf4a03e1b50a1965b01533703ddbff7ebf5849ca0c7f6eaae3386d581289abe'
+        # Keiyoushi rebuilds its APKs into new release tags and deletes the old ones: when this 404s, take the URL from
+        # https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json (apkUrl) and its SHA-256 (GitHub's digest).
+        # Re-pinned in Phase 7 Stage 5 (eac81a2-0 was gone): the same 1.6.1, rebuilt on 2026-11-08.
+        Url  = 'https://github.com/keiyoushi/extensions/releases/download/b035310-1/tachiyomi-en.mangapill-v1.6.1.apk'
+        Sha  = '76b64e6bd9ff371b6fc26a0a1f61c2e8cfe4bd87dde8e89587228e167f832521'
     }
 )
 
