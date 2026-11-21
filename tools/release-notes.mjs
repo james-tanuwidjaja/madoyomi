@@ -3,7 +3,7 @@
 //
 //   node tools/release-notes.mjs [X.Y.Z] [--notes <file>] [--body <file>] [--repo owner/name]
 //
-// The version defaults to the repo's VERSION. The section is everything under a heading "## X.Y.Z" (also
+// The version defaults to the repo's VERSION. The section (tools/lib/changelog.mjs) is everything under a heading "## X.Y.Z" (also
 // "## [X.Y.Z]", "## X.Y.Z - 2026-11-21" or "## X.Y.Z (2026-11-21)") up to the next "## " heading. It fails (exit 1)
 // when the section is missing or empty, so a release can't go out without notes.
 //   --notes <file>  writes the section as it is: build-release.ps1 -NotesFile puts it into latest.json, and the
@@ -15,6 +15,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { changelogSection } from './lib/changelog.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -36,14 +37,8 @@ function fail(msg) {
   process.exit(1);
 }
 
-const changelog = readFileSync(join(repoRoot, 'CHANGELOG.md'), 'utf8').replace(/\r\n/g, '\n');
-const esc = version.replace(/\./g, '\\.');
-const heading = new RegExp(`^## \\[?${esc}\\]?(?:\\s*(?:-|\\(|$).*)?$`, 'm');
-const m = heading.exec(changelog);
-if (!m) fail(`no "## ${version}" section in CHANGELOG.md`);
-const rest = changelog.slice(m.index + m[0].length);
-const next = rest.search(/^## /m);
-const section = (next === -1 ? rest : rest.slice(0, next)).trim();
+const section = changelogSection(readFileSync(join(repoRoot, 'CHANGELOG.md'), 'utf8'), version);
+if (section === null) fail(`no "## ${version}" section in CHANGELOG.md`);
 if (!section) fail(`the "## ${version}" section of CHANGELOG.md is empty`);
 
 if (!opts.notes && !opts.body) {

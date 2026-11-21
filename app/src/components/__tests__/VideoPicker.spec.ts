@@ -163,6 +163,16 @@ describe("VideoPicker", () => {
     expect(document.activeElement).toBe(action("confirm-play"));
   });
 
+  it("shows no server name for a source without hosters, only its videos (Phase 7 Stage 6)", async () => {
+    ops.fetchEpisodeVideos.mockResolvedValue([hoster(0, { name: "no_hoster_list" })]);
+    await open();
+
+    expect(qa(".hoster-name")).toHaveLength(0);
+    expect(hosterEl(0).textContent).not.toContain("no_hoster_list");
+    expect(hosterEl(0).textContent).toContain("2 videos");
+    expect(qa('[data-testid="picker-video"]')).toHaveLength(2);
+  });
+
   it("says it is fetching, and shows a failed fetch with Try again", async () => {
     let fail!: (e: unknown) => void;
     ops.fetchEpisodeVideos.mockImplementationOnce(() => new Promise((_, r) => (fail = r)));

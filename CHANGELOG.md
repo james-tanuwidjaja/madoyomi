@@ -2,6 +2,10 @@
 
 Each release's notes. The release workflow takes the section of the version it builds (`## X.Y.Z`) for the GitHub release and for `latest.json`, so the app's update dialog shows it: keep each section short and in plain words. A release fails without its section (`node tools/release-notes.mjs X.Y.Z` checks it). See [RELEASING.md](RELEASING.md).
 
+## 0.1.1
+
+- The video picker no longer shows "no_hoster_list" above the videos of a source that has no servers of its own: it lists the videos with their count.
+
 ## 0.1.0
 
 The first release of Madoyomi, a Windows app for anime and manga that runs Aniyomi and Mihon extensions.

@@ -8,6 +8,17 @@ import type { HosterChoice, VideoChoice } from "../api/types";
  * the remembered choice, else the preference's, else the source's.
  */
 
+/**
+ * The name of the one hoster the backend wraps a source's videos in when the source has no hosters of its own
+ * (extensions-lib 14, or a lib-16 source without `getHosterList`): Aniyomi's `Hoster.NO_HOSTER_LIST`.
+ */
+export const NO_HOSTER_LIST = "no_hoster_list";
+
+/** A hoster's name as the picker shows it: none for the backend's placeholder (Phase 7 Stage 6, found in the exit run). */
+export function hosterLabel(name: string): string | null {
+  return name === NO_HOSTER_LIST || name.trim() === "" ? null : name;
+}
+
 export interface VideoPick {
   hosterIndex: number;
   videoIndex: number;
