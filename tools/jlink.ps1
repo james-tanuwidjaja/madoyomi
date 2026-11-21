@@ -17,7 +17,8 @@
      through the QuickJs and Duktape stubs, dates in other locales, legacy charsets, zipfs, TLS providers, headless
      imaging, preferences, JDBC and JNDI. A failed check fails the script (-NoProbe skips it).
 
-  The JDK is tools\bin\jdk-21 (a full JDK with jmods; see README "Prerequisites"). The result is a build output:
+  The JDK is -Jdk, else MADOYOMI_JDK, else tools\bin\jdk-21, else JAVA_HOME (a full JDK with jmods; see README
+  "Prerequisites"; CI uses JAVA_HOME). The result is a build output:
   never commit it. tools\build-release.ps1 runs this script; the shell finds the runtime at <resources>\jre.
   Keep this file ASCII; it runs on Windows PowerShell 5.1 and PowerShell 7.
 
@@ -48,14 +49,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-if (-not $Jdk) { $Jdk = Join-Path $RepoRoot 'tools\bin\jdk-21' }
+# The JDK: -Jdk, else MADOYOMI_JDK, else tools\bin\jdk-21, else JAVA_HOME (CI, Phase 7 Stage 5; as Get-MadoyomiJdk)
+if (-not $Jdk) { $Jdk = $env:MADOYOMI_JDK }
+if (-not $Jdk) {
+    $Jdk = Join-Path $RepoRoot 'tools\bin\jdk-21'
+    if (-not (Test-Path -LiteralPath $Jdk) -and $env:JAVA_HOME) { $Jdk = $env:JAVA_HOME }
+}
 if (-not $Out) { $Out = Join-Path $RepoRoot 'app\src-tauri\resources\jre' }
 $Out = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Out)
 $jdeps = Join-Path $Jdk 'bin\jdeps.exe'
 $jlink = Join-Path $Jdk 'bin\jlink.exe'
 $jmods = Join-Path $Jdk 'jmods'
 foreach ($p in $jdeps, $jlink, $jmods) {
-    if (-not (Test-Path -LiteralPath $p)) { throw "not a full JDK (missing $p): tools\bin\jdk-21 must be a JDK 21 with jmods" }
+    if (-not (Test-Path -LiteralPath $p)) { throw "not a full JDK (missing $p): $Jdk must be a JDK 21 with jmods (-Jdk, MADOYOMI_JDK, tools\bin\jdk-21 or JAVA_HOME)" }
 }
 if (-not $Jar) {
     $newest = Get-ChildItem (Join-Path $RepoRoot 'server\api\build') -Filter 'Madoyomi-Server-*.jar' -ErrorAction SilentlyContinue |

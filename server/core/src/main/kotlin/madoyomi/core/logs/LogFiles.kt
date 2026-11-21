@@ -25,7 +25,9 @@ object LogFiles {
     /**
      * Makes room for a new [file]: the oldest of [keep] files is deleted, each other one moves up a number, and [file]
      * becomes `.1`. [keep] counts [file] too, so at most [keep] files are left once the new one is written. Best
-     * effort: a file that can't be moved (Windows: still open) is logged, and the new output then replaces it.
+     * effort: a move or delete that fails is tried again for about a second (Windows refuses one while another
+     * program still has the file open, such as a virus scanner reading the log mpv just closed; Phase 7 Stage 5
+     * saw it in CI), then logged, and the new output replaces a current log that couldn't move.
      */
     fun rotate(
         file: File,
@@ -34,24 +36,32 @@ object LogFiles {
         require(keep >= 1) { "keep must be at least 1" }
         if (keep == 1 || !file.exists()) return
         numbered(file, keep - 1).let { oldest ->
-            if (oldest.exists() &&
-                !oldest.delete()
-            ) {
-                logger.warn { "could not delete ${oldest.path}" }
-            }
+            if (oldest.exists() && !retrying { oldest.delete() }) logger.warn { "could not delete ${oldest.path}" }
         }
         for (n in keep - 2 downTo 0) {
             val from = numbered(file, n)
             if (!from.exists()) continue
             val to = numbered(file, n + 1)
-            if (!from.renameTo(to)) logger.warn { "could not move ${from.path} to ${to.name}" }
+            if (!retrying { from.renameTo(to) }) logger.warn { "could not move ${from.path} to ${to.name}" }
         }
         // anything numbered past the limit (a lower limit than before) goes too
         file.parentFile
             ?.listFiles()
             ?.filter { f -> numberOf(file, f)?.let { it >= keep } == true }
-            ?.forEach { if (!it.delete()) logger.warn { "could not delete ${it.path}" } }
+            ?.forEach { if (!retrying { it.delete() }) logger.warn { "could not delete ${it.path}" } }
     }
+
+    /** [op] until it succeeds, [ATTEMPTS] times at most, [RETRY_MS] apart. */
+    private inline fun retrying(op: () -> Boolean): Boolean {
+        repeat(ATTEMPTS - 1) {
+            if (op()) return true
+            Thread.sleep(RETRY_MS)
+        }
+        return op()
+    }
+
+    private const val ATTEMPTS = 20
+    private const val RETRY_MS = 50L
 
     /** The files of [file]'s series that exist, the current one first. */
     fun series(file: File): List<File> =

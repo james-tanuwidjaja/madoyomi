@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.TestInstance
 import suwayomi.tachidesk.server.serverConfig
 import suwayomi.tachidesk.test.ApplicationTest
+import java.net.Authenticator
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -43,6 +44,20 @@ class SocksProxyTest : ApplicationTest() {
         serverConfig.socksProxyVersion.value = originalVersion
         serverConfig.socksProxyHost.value = originalHost
         serverConfig.socksProxyPort.value = originalPort
+        // Madoyomi: ServerSetup applies the settings to the JVM's socks properties asynchronously, so a test class
+        // run next could still see one of this class's states (CefTest's download through OkHttp failed with
+        // "bad host" or "proxy.example"). Wait for the restored state, and clear the properties if it doesn't come.
+        val expectedHost = if (originalEnabled) originalHost else null
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.getProperty("socksProxyHost") != expectedHost && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20)
+        }
+        if (!originalEnabled) {
+            System.clearProperty("socksProxyHost")
+            System.clearProperty("socksProxyPort")
+            System.clearProperty("socksProxyVersion")
+            Authenticator.setDefault(null)
+        }
     }
 
     @Test

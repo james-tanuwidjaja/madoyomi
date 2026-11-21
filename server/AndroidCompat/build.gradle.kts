@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id(
         libs.plugins.kotlin.jvm
@@ -24,6 +26,11 @@ val madoyomiAndroidOverrides =
         "android/os/LocaleList.class",
     )
 
+// Madoyomi: the android-jar's SHA-256 (Phase 7 Stage 5): the artifact upstream serves can change under the same
+// version (see the repository pin in server/build.gradle.kts), so a different file fails the build instead of
+// failing it later with unresolved classes.
+val androidStubsSha256 = "b91eab7d6c1b0deae4635d351dbaef64266d3a600c81b749b71436e8bdb3aa48"
+
 val androidStubsJar: Configuration =
     configurations.create("androidStubsJar") {
         isTransitive = false
@@ -35,6 +42,18 @@ val strippedAndroidStubs =
         archiveFileName.set("android-jar-madoyomi.jar")
         destinationDirectory.set(layout.buildDirectory.dir("android-stubs"))
         inputs.property("overrides", madoyomiAndroidOverrides)
+        inputs.property("stubsSha256", androidStubsSha256)
+        doFirst {
+            val stubs = androidStubsJar.singleFile
+            val sha =
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(stubs.readBytes())
+                    .joinToString("") { "%02x".format(it) }
+            check(sha == androidStubsSha256) {
+                "${stubs.name} has SHA-256 $sha, not the pinned $androidStubsSha256 (server/build.gradle.kts pins its repository)"
+            }
+        }
         from({ zipTree(androidStubsJar.singleFile) }) {
             exclude(madoyomiAndroidOverrides)
         }

@@ -6,7 +6,8 @@
 .DESCRIPTION
   0. tools\version.ps1: VERSION and its copies (package.json, tauri.conf.json, Cargo.toml/Cargo.lock, the server's
      Constants.kt) must match, or the build stops before anything is built (Phase 7 Stage 2).
-  1. The server jar (tools\fetch-upstream-assets.ps1, then .\gradlew.bat :api:shadowJar with tools\bin\jdk-21),
+  1. The server jar (tools\fetch-upstream-assets.ps1, then .\gradlew.bat :api:shadowJar with tools\bin\jdk-21, or
+     MADOYOMI_JDK/JAVA_HOME without it, as in CI),
      copied to app\src-tauri\resources\server\Madoyomi-Server.jar. Its name must carry VERSION
      (Madoyomi-Server-vX.Y.Z.jar), so a -NoJar build can't bundle a jar of another version.
   2. tools\jlink.ps1: the runtime in app\src-tauri\resources\jre.
