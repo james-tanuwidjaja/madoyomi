@@ -73,4 +73,28 @@ class LogFilesTest {
         assertEquals(listOf("mpv.log"), names())
         assertFailsWith<IllegalArgumentException> { LogFiles.rotate(log, 0) }
     }
+
+    @Test
+    fun `a log another program still holds is moved once it lets go (Phase 7 Stage 5)`() {
+        session("a")
+        session("b")
+        // on Windows a file open without FILE_SHARE_DELETE (as java.io streams open it) can't be renamed: the way a
+        // virus scanner reading the log mpv just closed blocked the move in CI
+        val holder = log.inputStream()
+        val release =
+            Thread {
+                Thread.sleep(300)
+                holder.close()
+            }.apply { start() }
+        try {
+            session("c")
+        } finally {
+            release.join()
+            holder.close()
+        }
+        assertEquals(listOf("mpv.1.log", "mpv.2.log", "mpv.log"), names())
+        assertEquals("c", log.readText())
+        assertEquals("b", File(dir, "mpv.1.log").readText())
+        assertEquals("a", File(dir, "mpv.2.log").readText())
+    }
 }
