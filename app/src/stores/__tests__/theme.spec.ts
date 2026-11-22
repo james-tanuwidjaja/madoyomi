@@ -6,9 +6,12 @@ import { THEME_KEY, useThemeStore } from "../theme";
 /* The theme before and after the app loads: index.html's inline script sets the stored
    theme before the first paint, which a screenshot can't catch, and the store keeps the choice. */
 
-/** The classic (non-module) inline script of index.html. */
+/** The classic (non-module) inline script of index.html, read with the DOM parser. */
 function inlineScript(): string {
-  const scripts = [...indexHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!);
+  const doc = new DOMParser().parseFromString(indexHtml, "text/html");
+  const scripts = [...doc.querySelectorAll("script")]
+    .filter((s) => !s.hasAttribute("src") && (s.type === "" || s.type === "text/javascript"))
+    .map((s) => s.textContent ?? "");
   expect(scripts).toHaveLength(1);
   return scripts[0]!;
 }

@@ -47,4 +47,24 @@ describe("changelogSection", () => {
     expect(changelogSection(changelog, "0.2.0")).toBeNull();
     expect(changelogSection(changelog, "0.0.8")).toBe("");
   });
+
+  it.each([
+    "0.1.*",
+    "0.1.1|0.1.0",
+    "0+1+1",
+    ".*",
+    "0.1",
+    "0.1.1.1",
+    "v0.1.1",
+    " 0.1.1",
+    "0.1.1\n",
+    "0.1.1-beta",
+    "",
+  ])("rejects %j: only a plain X.Y.Z goes into the heading's pattern", (version) => {
+    expect(() => changelogSection(changelog, version)).toThrow(RangeError);
+  });
+
+  it("doesn't let a version's dots match any character", () => {
+    expect(changelogSection("## 0x1x1\n\n- Not 0.1.1.\n", "0.1.1")).toBeNull();
+  });
 });

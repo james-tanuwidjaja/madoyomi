@@ -1,2 +1,10 @@
 allowBuilds:
   vue-demi: true
+
+# js-beautify (through @vue/test-utils) has no release that takes minimatch 11.0.1 or later (GHSA-g3hv-75wg-m249):
+# move its glob and editorconfig to the majors that do. js-beautify only uses them in its CLI (globSync, hasMagic,
+# parseSync, unchanged in these majors); @vue/test-utils bundles its HTML formatter. Drop these when js-beautify
+# takes them itself.
+overrides:
+  js-beautify>glob: ^14.0.6
+  js-beautify>editorconfig: ^4.0.1
