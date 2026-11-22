@@ -21,6 +21,7 @@ import suwayomi.tachidesk.server.ApplicationDirs
 import uy.kohesive.injekt.injectLazy
 import java.io.File
 import java.io.FilterInputStream
+import java.io.IOException
 import java.io.InputStream
 import java.nio.file.NoSuchFileException
 import java.util.zip.Deflater
@@ -154,15 +155,24 @@ class ArchiveProvider(
         return if (cbzFile.exists()) cbzFile.length() else 0L
     }
 
-    private fun extractCbzFile(
+    // Madoyomi: internal (upstream: private) for ArchiveProviderTest.
+    internal fun extractCbzFile(
         cbzFile: File,
         chapterFolder: File,
     ) {
         if (!chapterFolder.exists()) chapterFolder.mkdirs()
+        // Madoyomi: every entry must land inside the chapter folder. Upstream wrote File(chapterFolder, entry.name) as
+        // it was, so an entry such as "../x" wrote outside it (zip slip). Such a CBZ now fails with an IOException and
+        // is kept; the entries before it are already written.
+        val root = chapterFolder.canonicalFile.toPath()
         ZipArchiveInputStream(cbzFile.inputStream()).use { zipInputStream ->
             var zipEntry = zipInputStream.nextEntry
             while (zipEntry != null) {
-                val file = File(chapterFolder, zipEntry.name)
+                val file = File(chapterFolder, zipEntry.name).canonicalFile
+                val path = file.toPath()
+                if (!path.startsWith(root) || path == root) {
+                    throw IOException("CBZ entry outside the chapter folder: ${zipEntry.name}")
+                }
                 if (!file.exists()) {
                     file.parentFile.mkdirs()
                     file.createNewFile()

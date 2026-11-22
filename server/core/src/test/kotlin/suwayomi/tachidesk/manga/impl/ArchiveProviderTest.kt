@@ -32,6 +32,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ArchiveProviderTest : ApplicationTest() {
@@ -94,6 +95,36 @@ class ArchiveProviderTest : ApplicationTest() {
 
             val (secondStream, _) = provider.getImage().executeGetImage(1)
             secondStream.use { assertContentEquals(byteArrayOf(4, 5), it.readBytes()) }
+        }
+
+    // Madoyomi: extracting a CBZ keeps every entry inside the chapter folder (zip slip).
+    @Test
+    fun extractCbzFileRefusesEntriesOutsideTheChapterFolder() =
+        runTest {
+            for ((i, name) in listOf("../escaped.png", "nested/../../escaped.png", "..").withIndex()) {
+                val (provider, cbzFile) = createFixture("ARCHIVE_ZIPSLIP_TEST_$i", "6$i")
+                val chapterFolder = File(cbzFile.parentFile, "chapter")
+                writeCbz(cbzFile, files = mapOf("001.png" to byteArrayOf(1), name to byteArrayOf(6, 6, 6)))
+
+                val e = assertFailsWith<IOException> { provider.extractCbzFile(cbzFile, chapterFolder) }
+                assertEquals("CBZ entry outside the chapter folder: $name", e.message)
+                assertFalse(File(cbzFile.parentFile, "escaped.png").exists(), name)
+                assertTrue(cbzFile.exists(), "the CBZ is kept: $name")
+            }
+        }
+
+    @Test
+    fun extractCbzFileWritesEveryEntryAndDeletesTheCbz() =
+        runTest {
+            val (provider, cbzFile) = createFixture("ARCHIVE_EXTRACT_TEST", "7")
+            val chapterFolder = File(cbzFile.parentFile, "chapter")
+            writeCbz(cbzFile, files = mapOf("001.png" to byteArrayOf(1, 2, 3), "nested/002.png" to byteArrayOf(4, 5)))
+
+            provider.extractCbzFile(cbzFile, chapterFolder)
+
+            assertContentEquals(byteArrayOf(1, 2, 3), File(chapterFolder, "001.png").readBytes())
+            assertContentEquals(byteArrayOf(4, 5), File(chapterFolder, "nested/002.png").readBytes())
+            assertFalse(cbzFile.exists())
         }
 
     private suspend fun createFixture(
