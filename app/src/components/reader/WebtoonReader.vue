@@ -23,7 +23,7 @@ import ChapterPanel from "./ChapterPanel.vue";
 import PageFailure from "./PageFailure.vue";
 
 /**
- * The webtoon reader (Phase 5 Stage 3, step 7): the chapter as one vertical strip, scrolled natively (the wheel, the
+ * The webtoon reader (step 7): the chapter as one vertical strip, scrolled natively (the wheel, the
  * scrollbar, a trackpad), as wide as the window up to 800 px. Only the items near the viewport are in the DOM; each
  * page is as tall as its image's ratio makes it (utils/webtoonNav.ts), a page not loaded yet as tall as the median of
  * the known ones. When a page's real size arrives, or the window or the gap changes, the strip keeps its anchor still:
@@ -34,10 +34,10 @@ import PageFailure from "./PageFailure.vue";
  * the viewport's top. Above the first page is the "Previous: …" panel (when there is a previous chapter), below the
  * last one the end panel, a viewport tall. A click toggles the toolbar; a failed page's click fetches it again.
  *
- * Stage 4: `edges()` says whether it is at its top or bottom, for the reader's wheel past the ends (the seamless
+ * `edges()` says whether it is at its top or bottom, for the reader's wheel past the ends (the seamless
  * next chapter); the reader keys the strip by chapter, so each chapter gets a new one.
  *
- * Stage 5: the width (`maxWidth`) and the load window (`preload`) are settings. A new width is a new layout, so the
+ * The width (`maxWidth`) and the load window (`preload`) are settings. A new width is a new layout, so the
  * anchor holds the point at the viewport's centre as it does for a resize. The colours follow the reader's background
  * (`--reader-fg`).
  */
@@ -48,9 +48,9 @@ const props = defineProps<{
   pageSize: (index: number) => PageSize | undefined;
   /** Between items, px. */
   gap: number;
-  /** The strip's widest, px; 0 is the window's width (Stage 5's setting; 800 by default). */
+  /** The strip's widest, px; 0 is the window's width (a reader setting; 800 by default). */
   maxWidth?: number;
-  /** The preload count (Stage 5): the strip keeps at least `preload − 2` pages past the viewport loaded. */
+  /** The preload count: the strip keeps at least `preload − 2` pages past the viewport loaded. */
   preload?: number;
   chapterName: string;
   mangaTitle: string;

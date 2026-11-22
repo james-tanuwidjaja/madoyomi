@@ -52,11 +52,11 @@ import suwayomi.tachidesk.server.settings.userConfig
 import suwayomi.tachidesk.server.settings.value
 
 /**
- * The library update check (Phase 6 Stage 3) for both kinds: each library entry of the chosen categories gets its
+ * The library update check for both kinds: each library entry of the chosen categories gets its
  * episode or chapter list fetched again, the list is diffed against the database (upstream's
  * `Chapter.updateChapterListDatabase` for manga, [AnimeDetails.reconcileEpisodes] for anime), and an entry that got
  * new items is marked ([LibraryUpdateMarks]). Madoyomi's own in place of upstream's manga `Updater`, whose schedule is
- * off (server/UPSTREAM.md "Library updates (Phase 6)"), so one queue, one status and one schedule cover both kinds.
+ * off (server/UPSTREAM.md "Library updates"), so one queue, one status and one schedule cover both kinds.
  *
  * - **Which entries:** upstream's category rule. Without a category, the categories flagged INCLUDE are checked, else
  *   the UNSET ones, and an entry in an EXCLUDE category is left out; with a category, that category's entries
@@ -131,7 +131,7 @@ object LibraryUpdater {
 
     /**
      * Called with the ids of the new chapters or episodes a check found in an entry (the download queue's automatic
-     * downloads: Stage 4's [madoyomi.core.downloads.MangaDownloads.autoDownload], Stage 5's
+     * downloads: [madoyomi.core.downloads.MangaDownloads.autoDownload] and
      * [madoyomi.core.downloads.AnimeDownloads.autoDownload]).
      */
     @Volatile
@@ -324,7 +324,7 @@ object LibraryUpdater {
     private suspend fun fetchAnime(entry: Entry): Int {
         val ids = newEpisodes(entry.id)
         if (ids.isNotEmpty()) {
-            // Stage 5: the anime downloads' turn (a Seasons entry's new episodes are its seasons')
+            // The anime downloads' turn (a Seasons entry's new episodes are its seasons')
             runCatching { onNewItems?.invoke(entry, ids) }
                 .onFailure { logger.warn(it) { "library update: what follows the new episodes of anime ${entry.id} failed" } }
         }

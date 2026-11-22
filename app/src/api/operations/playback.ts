@@ -2,7 +2,7 @@ import { api } from "../client";
 import type { HosterChoice, PlaybackSession } from "../types";
 
 /*
- * Playback (Phase 4): the episode's videos (`fetchEpisodeVideos`, one hoster with `fetchHosterVideos`), and the backend's mpv session (`playEpisode`,
+ * Playback: the episode's videos (`fetchEpisodeVideos`, one hoster with `fetchHosterVideos`), and the backend's mpv session (`playEpisode`,
  * `stopPlayback`, `playbackSession`). The backend owns mpv: it resolves the video right before the launch and sends
  * its headers, so the UI never needs a video's headers or tracks, only what to choose between.
  */

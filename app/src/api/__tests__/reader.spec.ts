@@ -22,7 +22,7 @@ import {
 import { formatBytes, formatLimit } from "../../composables/useReaderSettings";
 import { makeChapters } from "../../test/fixtures";
 
-/* The reader's calls over a mocked client (Phase 5 Stage 1): what each sends and what it returns. */
+/* The reader's calls over a mocked client: what each sends and what it returns. */
 
 afterEach(() => vi.clearAllMocks());
 

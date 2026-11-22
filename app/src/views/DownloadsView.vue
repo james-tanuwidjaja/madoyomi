@@ -26,11 +26,11 @@ import PageLayout from "../components/PageLayout.vue";
 import VirtualList from "../components/VirtualList.vue";
 
 /*
- * Downloads (Phase 6 Stage 4) of the kind the switch shows, as History and Updates (the user's decision): the queue,
+ * Downloads of the kind the switch shows, as History and Updates (the user's decision): the queue,
  * live over the `downloadsChanged` subscription (each row's state and pages, Pause or Resume, Retry once it failed,
  * moves up, down and to the top, Cancel), with Pause all / Resume all / Retry failed / Cancel all for the kind, and the
  * completed list (the last finished first, Read, Delete for the file, Clear list for the rows). One queue serves both
- * kinds with shared limits (Settings → Downloads). Stage 5: episodes too, their rows in bytes, the episode's time or
+ * Kinds with shared limits (Settings → Downloads). Episodes too, their rows in bytes, the episode's time or
  * segments, and the completed list's Play plays the file in mpv from where it stopped (offline too).
  */
 const backend = useBackendStore();

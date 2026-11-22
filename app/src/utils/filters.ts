@@ -1,7 +1,7 @@
 import type { Filter, FilterChange, GroupFilter, SortSelection, TriState } from "../api/types";
 
 /*
- * A source's filter values, and the `FilterChange[]` the backend takes (Phase 3 step 18, §7 "filter state must
+ * A source's filter values, and the `FilterChange[]` the backend takes ("filter state must
  * round-trip exactly").
  *
  * The backend applies the changes to a fresh `getFilterList()` on every request (upstream's `updateFilterList`), so

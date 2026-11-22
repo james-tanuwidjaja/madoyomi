@@ -18,7 +18,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import kotlin.math.roundToInt
 
-/** The preferred quality (Phase 4 step 9): the source's order, the highest, or a resolution. */
+/** The preferred quality: the source's order, the highest, or a resolution. */
 enum class QualityPreference(
     /** The resolution's height, for the resolutions. */
     val height: Int?,
@@ -33,7 +33,7 @@ enum class QualityPreference(
 }
 
 /**
- * The player settings (Phase 4 Stage 5, Settings → Player). They are the backend's, kept in its data dir
+ * The player settings (Settings → Player). They are the backend's, kept in its data dir
  * (`player-settings.json`), because the backend applies them: the watched mark ([watchedThreshold]), the order of an
  * episode's videos ([preferredQuality], [preferredServer]; [VideoPreferences]), the subtitle and audio tracks it selects
  * over IPC ([subtitleLanguage], [audioLanguage]; [TrackSelection]), and which mpv it starts ([mpvPath]; [MpvLocator]).
@@ -46,7 +46,7 @@ data class PlayerSettings(
     val preferredQuality: QualityPreference = QualityPreference.SOURCE,
     /** Hosters and videos whose name contains this (ignoring case) go first; "" for the source's order. */
     val preferredServer: String = "",
-    /** A [PlayerLanguages] code, [SUBTITLES_OFF], or "" for the source's first subtitle track (Stage 2's rule). */
+    /** A [PlayerLanguages] code, [SUBTITLES_OFF], or "" for the source's first subtitle track (the default rule). */
     val subtitleLanguage: String = "",
     /** A [PlayerLanguages] code, or "" for the video's own audio, else the source's first track. */
     val audioLanguage: String = "",

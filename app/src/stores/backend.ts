@@ -29,7 +29,7 @@ export interface BackendStatus {
   retryInMs: number | null;
   dataDir: string;
   logDir: string;
-  /** Phase 7 Stage 3: the backend's crashes in the last 10 minutes (as of the last one). */
+  /** The backend's crashes in the last 10 minutes (as of the last one). */
   recentCrashes: number;
   /** Its crashes since the app started (the crash dialog shows again only after a new one). */
   crashCount: number;

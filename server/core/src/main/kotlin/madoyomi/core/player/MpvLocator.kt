@@ -12,8 +12,8 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * Finds the mpv executable (Phase 4 §9, "Where mpv comes from"):
- * 1. the player settings' path (`PlayerSettings.mpvPath`, Settings → Player; Stage 5);
+ * Finds the mpv executable ("Where mpv comes from"):
+ * 1. the player settings' path (`PlayerSettings.mpvPath`, Settings → Player);
  * 2. the system property `madoyomi.player.mpv` (tests);
  * 3. the env `MADOYOMI_MPV`, which the Tauri shell sets to the repo's `tools/bin/mpv/mpv.exe` in dev or the bundled
  *    `resources/mpv/mpv.exe` in release, when one is there;

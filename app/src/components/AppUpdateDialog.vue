@@ -14,7 +14,7 @@ import { usePlaybackStore } from "../stores/playback";
 import { useDownloadQueue } from "../composables/useDownloads";
 
 /**
- * "Madoyomi X is out" (Phase 7 Stage 4): the version and its release notes, then Install now, Later or Skip this
+ * "Madoyomi X is out": the version and its release notes, then Install now, Later or Skip this
  * version (the user's choices). Install downloads the installer (its progress shown) while everything keeps running,
  * then the shell stops the backend (mpv quits, running downloads go back in the queue for the next start) and starts
  * the installer, which brings the new version up. While an episode plays or downloads run, the dialog says what will

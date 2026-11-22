@@ -469,7 +469,7 @@ object Chapter {
             )
 
         // Madoyomi: new chapters are queued by Madoyomi's download queue after a library update check
-        // (madoyomi.core.downloads.MangaDownloads.autoDownload; server/UPSTREAM.md "Manga downloads (Phase 6)"), not by
+        // (madoyomi.core.downloads.MangaDownloads.autoDownload; server/UPSTREAM.md "Manga downloads"), not by
         // upstream's on every chapter list fetch
         if (!MadoyomiFeatures.upstreamAutoDownloadEnabled) {
             return

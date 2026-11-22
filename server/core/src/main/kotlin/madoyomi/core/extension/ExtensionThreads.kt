@@ -16,9 +16,9 @@ import java.util.IdentityHashMap
 import java.util.concurrent.ThreadPoolExecutor
 
 /**
- * Stops the threads an extension started and left running when it is unloaded (Phase 2 §9, Stage 6; user decision
+ * Stops the threads an extension started and left running when it is unloaded (user decision
  * 2026-11-06: interrupt and log, nothing forced). A live thread keeps its extension's class loader, and so every
- * class of the extension, until the process ends. The Stage 5 harness found them in missav, onetwothreeanime and
+ * class of the extension, until the process ends. The compat harness found them in missav, onetwothreeanime and
  * reanime, which each bundle their own (R8-renamed) NanoHTTPD and start a local video proxy that nothing ever stops,
  * and in streamingcommunity, whose own thread pool idles forever.
  *

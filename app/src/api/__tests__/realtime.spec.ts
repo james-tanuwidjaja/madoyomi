@@ -119,7 +119,7 @@ describe("realtime", () => {
     ]);
   });
 
-  describe("download queue events (Phase 6 Stage 4)", () => {
+  describe("download queue events", () => {
     const item = (id: number, itemId: number, entryId: number, state = "DOWNLOADING") => ({
       id,
       kind: "MANGA",
@@ -176,7 +176,7 @@ describe("realtime", () => {
     });
   });
 
-  describe("restore status (Phase 6 Stage 6)", () => {
+  describe("restore status", () => {
     const status = (state: string, finishedAt = "0", step: string | null = "ANIME") => ({
       state,
       name: "Madoyomi_2026-11-16_21-00-00.madoyomi-backup",
@@ -224,7 +224,7 @@ describe("realtime", () => {
     });
   });
 
-  describe("library update events (Phase 6 Stage 3)", () => {
+  describe("library update events", () => {
     const send = (check: LibraryCheck) =>
       sockets.last.receive({
         id: opId("libraryUpdates"),
@@ -389,7 +389,7 @@ describe("realtime", () => {
     it("keeps the live session in the playback store, without refetching on PROGRESS", () => {
       const spy = vi.spyOn(queryClient, "invalidateQueries");
       send("STARTED", { positionSeconds: null });
-      // a session writes the watch history (Phase 6 Stage 2): the library's counts and History follow
+      // A session writes the watch history: the library's counts and History follow
       expect(invalidatedKeys(spy)).toEqual(progressKeys);
       spy.mockClear();
       send("PROGRESS", { positionSeconds: 61.5 });

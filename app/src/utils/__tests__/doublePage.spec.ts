@@ -13,7 +13,7 @@ import {
 } from "../doublePage";
 import { BEFORE } from "../pagedNav";
 
-/* The double-page reader's pairing, spread detection and steps (Phase 5 Stage 4): pure, so every case is here. */
+/* The double-page reader's pairing, spread detection and steps: pure, so every case is here. */
 const both = { hasPrevious: true, hasNext: true };
 const none = { hasPrevious: false, hasNext: false };
 const portrait = () => false;

@@ -183,7 +183,7 @@ class Updater : IUpdater {
         HAScheduler.deschedule(currentUpdateTaskId)
 
         // Madoyomi: the scheduled library update is Madoyomi's, for both kinds (madoyomi.core.library.LibraryUpdateScheduler;
-        // server/UPSTREAM.md "Library updates (Phase 6)"), so upstream's manga-only one never runs alongside it
+        // server/UPSTREAM.md "Library updates"), so upstream's manga-only one never runs alongside it
         if (!MadoyomiFeatures.upstreamLibraryUpdateScheduleEnabled) {
             return
         }

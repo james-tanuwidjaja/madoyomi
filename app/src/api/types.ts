@@ -1,5 +1,5 @@
 /*
- * Types of the backend's GraphQL API (server/UPSTREAM.md "Startup contract"; Phase 3 §9 "Stage 2").
+ * Types of the backend's GraphQL API (server/UPSTREAM.md "Startup contract").
  *
  * Hand-written, not generated: each type has the fields the UI asks for, named as in the server's Kotlin types
  * (core: graphql/types/*.kt, upstream's; api: madoyomi/api/graphql/*.kt, Madoyomi's). The operation documents in
@@ -382,17 +382,17 @@ export interface Episode {
   isWatched: boolean;
   isBookmarked: boolean;
   fillermark: boolean;
-  /** Playback position in **milliseconds**, despite the name (as the Aniyomi app stores it; Phase 4 §9). */
+  /** Playback position in **milliseconds**, despite the name (as the Aniyomi app stores it). */
   lastSecondSeen: LongString;
   /** Duration in milliseconds, "0" while unknown. */
   totalSeconds: LongString;
   summary: string | null;
   previewUrl: string | null;
-  /** Phase 6 Stage 5: downloaded; Play plays its file (`playDownloadedEpisode`), offline too. */
+  /** Downloaded; Play plays its file (`playDownloadedEpisode`), offline too. */
   downloaded?: boolean;
 }
 
-/** `UpdateEpisodePatch` (`updateEpisode(s)`, Phase 4 Stage 3): what to change; a field left out stays. */
+/** `UpdateEpisodePatch` (`updateEpisode(s)`): what to change; a field left out stays. */
 export interface EpisodePatch {
   /** False also clears the position (as Aniyomi does), unless `lastSecondSeen` is given. */
   isWatched?: boolean;
@@ -402,7 +402,7 @@ export interface EpisodePatch {
 }
 
 /**
- * `UpdateChapterPatch` (upstream's `updateChapter(s)`, Phase 5 Stage 2): what to change; a field left out stays.
+ * `UpdateChapterPatch` (upstream's `updateChapter(s)`): what to change; a field left out stays.
  * Upstream stamps `lastReadAt` whenever `lastPageRead` is given.
  */
 export interface ChapterPatch {
@@ -434,10 +434,10 @@ export interface Chapter {
   isRead: boolean;
   isBookmarked: boolean;
   lastPageRead: number;
-  /** When `lastPageRead` was last saved, epoch seconds ("0": never). Phase 5: "Continue reading" follows it. */
+  /** When `lastPageRead` was last saved, epoch seconds ("0": never). "Continue reading" follows it. */
   lastReadAt: LongString;
   pageCount: number;
-  /** Phase 6 Stage 4: downloaded as a CBZ (upstream's `isDownloaded`, the user's); the reader reads it offline. */
+  /** Downloaded as a CBZ (upstream's `isDownloaded`, the user's); the reader reads it offline. */
   isDownloaded?: boolean;
 }
 
@@ -451,28 +451,28 @@ export interface EntrySummary {
 }
 
 /**
- * A library card: a summary with the time it was added (epoch seconds) and the categories it is in (Phase 6: their ids,
+ * A library card: a summary with the time it was added (epoch seconds) and the categories it is in (their ids,
  * never the Default category's; none means it is in Default).
  */
 export interface LibraryEntry extends EntrySummary {
   inLibraryAt: number;
   categoryIds: number[];
   /**
-   * Phase 6 Stage 2, the card's badge: episodes not watched (`AnimeType.unwatchedCount`, a Seasons entry's seasons
+   * The card's badge: episodes not watched (`AnimeType.unwatchedCount`, a Seasons entry's seasons
    * included) or chapters not read (upstream's `MangaType.unreadCount`).
    */
   unreadCount: number;
   /** When an episode was last played or a chapter last read, epoch seconds (0: never); the "Last watched/read" sort. */
   lastReadAt: number;
   /**
-   * Phase 6 Stages 4–5: chapters downloaded (upstream's `MangaType.downloadCount`) or episodes downloaded
+   * Chapters downloaded (upstream's `MangaType.downloadCount`) or episodes downloaded
    * (`AnimeType.downloadCount`, a Seasons entry's seasons included).
    */
   downloadCount?: number;
 }
 
 /**
- * A History row (Phase 6 Stage 2): an entry with its episode or chapter played or read last. `item` is that episode
+ * A History row: an entry with its episode or chapter played or read last. `item` is that episode
  * or chapter, `resume` what Resume opens: the item itself, or when it is finished the first unfinished one after it.
  */
 export interface HistoryItem {
@@ -504,7 +504,7 @@ export interface HistoryPage {
 export type IncludeOrExclude = "INCLUDE" | "EXCLUDE" | "UNSET";
 
 /**
- * A library category (Phase 6 Stage 1): upstream's `CategoryType` for manga, Madoyomi's `AnimeCategoryType` for anime,
+ * A library category: upstream's `CategoryType` for manga, Madoyomi's `AnimeCategoryType` for anime,
  * the same fields. One list per kind. The Default category (`isDefaultCategory`) holds the entries in no other one.
  */
 export interface LibraryCategory {
@@ -524,7 +524,7 @@ export interface LibraryCategory {
 export interface CategoryPatch {
   name?: string;
   default?: boolean;
-  /** Phase 6 Stage 3: the Categories dialog's "Updates" and "Downloads" flags (UNSET when on, EXCLUDE when off). */
+  /** The Categories dialog's "Updates" and "Downloads" flags (UNSET when on, EXCLUDE when off). */
   includeInUpdate?: IncludeOrExclude;
   includeInDownload?: IncludeOrExclude;
 }
@@ -568,7 +568,7 @@ export interface SourcePage {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Videos and playback (Phase 4)
+// Videos and playback
 
 export interface VideoHeader {
   name: string;
@@ -663,7 +663,7 @@ export interface PlaybackSession {
 }
 
 /**
- * `PlaybackEventType.type` (Phase 4 Stage 2). CLOSED is always a session's last event. RETRYING (Stage 4): mpv
+ * `PlaybackEventType.type`. CLOSED is always a session's last event. RETRYING: mpv
  * couldn't open the video, and the backend fetches the episode's videos again once; the session's CLOSED follows,
  * then the new session's events, or ERROR.
  */
@@ -697,7 +697,7 @@ export interface PlaybackEvent {
   nextVideo: PlaybackVideoRef | null;
 }
 
-/** The schema's `QualityPreference`: the source's own order, the highest quality, or a resolution (Phase 4 Stage 5). */
+/** The schema's `QualityPreference`: the source's own order, the highest quality, or a resolution. */
 export type VideoQualityPreference =
   "SOURCE" | "HIGHEST" | "P2160" | "P1080" | "P720" | "P480" | "P360";
 
@@ -739,7 +739,7 @@ export interface MpvCheck {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Manga reader (Phase 5)
+// Manga reader
 
 /**
  * `fetchChapterPages` (upstream's): a chapter's page routes and the chapter (with its `pageCount`, `lastPageRead`
@@ -765,7 +765,7 @@ export interface ReaderSettings {
   pageCacheLimitMb: number;
 }
 
-/** A manga's meta and its source's name (`MANGA_READER_META_QUERY`), for its own reader settings (Phase 5 Stage 5). */
+/** A manga's meta and its source's name (`MANGA_READER_META_QUERY`), for its own reader settings. */
 export interface MangaReaderMeta {
   mangaId: number;
   meta: { key: string; value: string }[];
@@ -785,7 +785,7 @@ export interface PageCache {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Library updates (Phase 6 Stage 3)
+// Library updates
 
 /** An entry a library update check looked at. */
 export interface LibraryCheckEntry {
@@ -847,13 +847,13 @@ export interface UpdatesPage {
 }
 
 /**
- * Where a download is (Phase 6 Stage 4): waiting its turn, being downloaded, paused, failed after its retries, or done
+ * Where a download is: waiting its turn, being downloaded, paused, failed after its retries, or done
  * (in the completed list until it is cleared or its file deleted).
  */
 export type DownloadItemState = "QUEUED" | "DOWNLOADING" | "PAUSED" | "FAILED" | "DONE";
 
 /**
- * What a download's `progressDone`/`progressTotal` count (Stage 5): a chapter's pages; a file's bytes (as thousandths,
+ * What a download's `progressDone`/`progressTotal` count: a chapter's pages; a file's bytes (as thousandths,
  * with `totalBytes`); the seconds ffmpeg wrote of the episode's duration (HLS, DASH); yt-dlp's segments.
  */
 export type DownloadProgressUnit = "PAGES" | "BYTES" | "SECONDS" | "SEGMENTS";
@@ -893,14 +893,14 @@ export interface DownloadQueue {
   animeDone: number;
   /** Epoch milliseconds of the last item done (0: none in the completed list): the completed list is fetched again. */
   lastFinishedAt: number;
-  /** Phase 7 Stage 3: why nothing new starts (the downloads folder is moving or out of reach), or null. */
+  /** Why nothing new starts (the downloads folder is moving or out of reach), or null. */
   heldBecause: string | null;
 }
 
 /** What happens to what is downloaded when the downloads folder changes (the user picks, each time). */
 export type DownloadsFolderMode = "MOVE" | "START_EMPTY";
 
-/** The downloads folder (Phase 7 Stage 3, Settings → Downloads). */
+/** The downloads folder (Settings → Downloads). */
 export interface DownloadsFolder {
   path: string;
   /** The data dir's downloads folder. */
@@ -940,13 +940,13 @@ export interface DownloadSettings {
   autoDownload: boolean;
   /** The folder downloads are saved in (read only). */
   path: string;
-  /** Stage 5: the ffmpeg for HLS episodes; "" looks for one (`MADOYOMI_FFMPEG`, then PATH). */
+  /** The ffmpeg for HLS episodes; "" looks for one (`MADOYOMI_FFMPEG`, then PATH). */
   ffmpegPath: string;
-  /** Stage 5: the yt-dlp to fall back on; "" looks for one (`MADOYOMI_YTDLP`, then PATH). */
+  /** The yt-dlp to fall back on; "" looks for one (`MADOYOMI_YTDLP`, then PATH). */
   ytDlpPath: string;
 }
 
-/** Stage 5: ffmpeg or yt-dlp as the backend finds it now (Settings → Downloads). */
+/** Ffmpeg or yt-dlp as the backend finds it now (Settings → Downloads). */
 export interface DownloadTool {
   tool: "FFMPEG" | "YT_DLP";
   ok: boolean;
@@ -956,7 +956,7 @@ export interface DownloadTool {
   message: string | null;
 }
 
-/* --- Phase 6 Stage 6: backups (`.madoyomi-backup`) --- */
+/* --- backups (`.madoyomi-backup`) --- */
 
 /** Madoyomi's own backup, or a Mihon/Suwayomi/Aniyomi `.tachibk` (its manga part only). */
 export type BackupFormat = "MADOYOMI" | "TACHIYOMI";

@@ -28,7 +28,7 @@ export function applyTheme(choice: ThemeChoice) {
   else root.dataset.theme = choice;
 }
 
-/** The app's theme (Phase 3 §9 "Stage 1": dark and light, following Windows unless chosen), kept across sessions. */
+/** The app's theme (dark and light, following Windows unless chosen), kept across sessions. */
 export const useThemeStore = defineStore("theme", () => {
   const choice = ref<ThemeChoice>(stored());
 

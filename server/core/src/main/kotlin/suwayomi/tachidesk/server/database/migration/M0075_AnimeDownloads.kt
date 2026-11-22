@@ -15,7 +15,7 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 
 /**
- * Anime downloads (Phase 6 Stage 5):
+ * Anime downloads:
  * - `DOWNLOAD` gets `PROGRESS_UNIT` (`PAGES`, `BYTES`, `SECONDS`, `SEGMENTS`; `PAGES` for the rows before) and
  *   `TOTAL_BYTES`;
  * - `EPISODE_DOWNLOAD`, one row per downloaded episode (`EPISODE` unique and `ANIME`, both `CASCADE`): `PATH` and

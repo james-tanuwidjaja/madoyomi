@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, reactive } from "vue";
 
 /**
- * The reader's numbers (Phase 5 Stage 3, step 15), in dev builds only: the reader toggles it with the ` key. Counted
+ * The reader's numbers (step 15), in dev builds only: the reader toggles it with the ` key. Counted
  * from when it opens (Reset starts over): frames per second over the last second, frames longer than 50 ms and the
  * longest, frames during which a page in the webtoon strip's viewport wasn't shown yet ("blank"), the `<img>`
  * elements and strip items in the DOM (now and the most), the JS heap, and the time to the chapter's first page.

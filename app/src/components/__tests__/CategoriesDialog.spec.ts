@@ -23,7 +23,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import CategoriesDialog from "../CategoriesDialog.vue";
 
-/* The Library's categories dialog (Phase 6 Stage 1) against mocked category calls that keep a list. */
+/* The Library's categories dialog against mocked category calls that keep a list. */
 let pinia: Pinia;
 let queryClient: QueryClient;
 let wrapper: VueWrapper | null = null;
@@ -187,7 +187,7 @@ describe("CategoriesDialog", () => {
     expect(names()).toEqual(["Watching"]);
   });
 
-  it("has the Updates and Downloads flags, Default's too, off as EXCLUDE and on as UNSET (Phase 6 Stage 3)", async () => {
+  it("has the Updates and Downloads flags, Default's too, off as EXCLUDE and on as UNSET", async () => {
     list[2] = { ...list[2]!, includeInUpdate: "EXCLUDE", includeInDownload: "INCLUDE" };
     await open();
 

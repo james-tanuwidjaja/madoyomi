@@ -11,7 +11,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** How a track's label is matched to a language (Phase 4 Stage 5). */
+/** How a track's label is matched to a language. */
 class PlayerLanguagesTest {
     private fun lang(code: String) = PlayerLanguages.byCode(code)!!
 

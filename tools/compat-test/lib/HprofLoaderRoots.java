@@ -18,7 +18,7 @@ import java.util.Map;
  * Why is an extension class loader still alive? Reads a HotSpot heap dump (`jcmd <pid> GC.heap_dump <file>`) and prints,
  * for every live instance of a class loader class (default: `ChildFirstURLClassLoader`), the shortest chain of strong
  * references from a GC root to it. `Reference.referent` is not followed, so a loader that only a weak or soft reference
- * reaches is listed as such. Madoyomi Phase 2 Stage 6 (the uninstall leak); no dependencies, a JDK 21 single-file
+ * reaches is listed as such. Madoyomi's (the uninstall leak); no dependencies, a JDK 21 single-file
  * program:
  *
  * <pre>java -Xmx3g tools/compat-test/lib/HprofLoaderRoots.java heap.hprof [loader class simple name] [max path length]</pre>

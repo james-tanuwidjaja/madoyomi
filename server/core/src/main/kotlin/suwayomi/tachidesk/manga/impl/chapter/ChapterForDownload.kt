@@ -184,7 +184,7 @@ private class ChapterForDownload(
 
         log.debug { "isMarkedAsDownloaded= $isMarkedAsDownloaded, dbPageCount= $dbPageCount, downloadPageCount= $downloadPageCount" }
 
-        // Madoyomi: a downloaded chapter whose downloads folder is gone (an unplugged drive, Phase 7 Stage 3) is an
+        // Madoyomi: a downloaded chapter whose downloads folder is gone (an unplugged drive) is an
         // error, not a reset of its download marks and a fetch from the source (upstream resets it)
         if (!doesDownloadExist && isMarkedAsDownloaded) DownloadsFolder.requireReachable()
         return if (!doesDownloadExist) {

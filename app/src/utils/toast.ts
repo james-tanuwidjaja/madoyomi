@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 
 /*
- * The Windows toast (Phase 6 Stage 3) through Tauri's notification plugin, loaded only in the shell (plain
+ * The Windows toast through Tauri's notification plugin, loaded only in the shell (plain
  * `pnpm dev` in a browser has none). Asks for the permission once if it isn't granted yet.
  */
 

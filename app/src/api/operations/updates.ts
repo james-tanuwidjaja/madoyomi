@@ -10,7 +10,7 @@ import type {
 import { extensionKindOf } from "../types";
 
 /*
- * The library update check (Phase 6 Stage 3), Madoyomi's for both kinds: start it for a kind or one of its categories,
+ * The library update check, Madoyomi's for both kinds: start it for a kind or one of its categories,
  * stop it, its status (`libraryCheck`; the `libraryUpdates` subscription is in ./subscriptions), its settings, the
  * Updates feed of each kind (`animeUpdates`/`mangaUpdates`, newest fetch first, paged by offset), and the "new" marks of
  * the entries a check found new items in (`updateMarks`, cleared when an entry is opened: `clearUpdateMarks`).

@@ -18,8 +18,8 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 import AppShell from "../AppShell.vue";
 
 /*
- * The sidebar's Updates entry (Phase 6 Stage 3): the kind's new items since its entries were opened; Downloads
- * (Stage 4): the kind's queued and downloading items.
+ * The sidebar's Updates entry: the kind's new items since its entries were opened; Downloads
+ *: the kind's queued and downloading items.
  */
 let pinia: Pinia;
 let queryClient: QueryClient;

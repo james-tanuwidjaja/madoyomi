@@ -18,9 +18,9 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 /**
- * The reader settings the backend applies (Phase 5 Stage 1, Settings → Reader): the page cache's size cap
+ * The reader settings the backend applies (Settings → Reader): the page cache's size cap
  * ([PageCache]). They are kept in the data dir (`reader-settings.json`), like the player settings. The reader's own
- * preferences (mode, direction, fit, …) are the app's: per device, and per manga in the manga's meta (Phase 5 §9).
+ * preferences (mode, direction, fit, …) are the app's: per device, and per manga in the manga's meta.
  */
 @Serializable
 data class ReaderSettings(

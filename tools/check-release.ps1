@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Checks a release's files (Phase 7 Stage 5): the ones CI uploads to the draft release, or the draft's assets
+  Checks a release's files: the ones CI uploads to the draft release, or the draft's assets
   downloaded again (RELEASING.md).
 
 .DESCRIPTION
@@ -12,7 +12,7 @@
       copyright line: Tauri's template sets no CompanyName);
     - the MSI's ProductVersion, Manufacturer and UpgradeCode (the one pinned in tauri.conf.json), read through the
       Windows Installer API without installing it;
-    - the MSI carries app/src-tauri/installer/msi-folder.wxs (Phase 7 Stage 6, 0.1.2): its launch condition
+    - the MSI carries app/src-tauri/installer/msi-folder.wxs (0.1.2): its launch condition
       refusing an install while the per-user copy is installed, and the SetINSTALLDIR action after AppSearch that
       keeps it in Program Files when only the per-user installer recorded a folder (both sequences);
     - latest.json and the updater signature: node tools\verify-updater.mjs (the signature against tauri.conf.json's
@@ -102,7 +102,7 @@ function MsiRows([string]$Sql, [int]$Columns) {
     $null = $v.GetType().InvokeMember('Close', 'InvokeMethod', $null, $v, $null)
     $null = [Runtime.InteropServices.Marshal]::ReleaseComObject($v)
 }
-# installer/msi-folder.wxs (Phase 7 Stage 6): the launch condition and the folder reset after AppSearch.
+# Installer/msi-folder.wxs: the launch condition and the folder reset after AppSearch.
 $launch = @(MsiRows 'SELECT Condition, Description FROM LaunchCondition' 2 | Where-Object { $_[0] -like '*MADOYOMI_NSIS_INSTALLED*' })
 $searches = @(MsiRows 'SELECT Property, Signature_ FROM AppSearch' 2 | ForEach-Object { $_[0] })
 $ca = @(MsiRows "SELECT Action, Target FROM CustomAction WHERE Action = 'SetINSTALLDIR'" 2)

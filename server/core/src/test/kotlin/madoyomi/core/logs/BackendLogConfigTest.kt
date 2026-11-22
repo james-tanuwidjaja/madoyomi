@@ -26,7 +26,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The backend's `madoyomi.log` (Phase 7 Stage 3): upstream's logback setup is kept as it is. It writes
+ * The backend's `madoyomi.log`: upstream's logback setup is kept as it is. It writes
  * `<data dir>/logs/madoyomi.log`, rolls it daily and past `server.maxLogFileSize` into gzipped files, keeps
  * `server.maxLogFiles` days of them and caps them all at `server.maxLogFolderSize`.
  */

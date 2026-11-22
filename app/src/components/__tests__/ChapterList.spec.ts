@@ -27,7 +27,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 import ChapterList from "../ChapterList.vue";
 
 /*
- * The chapter list's reading actions (Phase 5 Stage 2): rows open the reader, Read / Continue, a row's page
+ * The chapter list's reading actions: rows open the reader, Read / Continue, a row's page
  * progress, the read filter, and the bulk read marks through `updateChapters`. jsdom has no layout: the list is
  * under VirtualList's threshold, so every row is in the DOM.
  */

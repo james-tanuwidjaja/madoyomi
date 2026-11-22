@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import indexHtml from "../../../index.html?raw";
 import { THEME_KEY, useThemeStore } from "../theme";
 
-/* The theme before and after the app loads (Phase 3 §9 "Stage 6"): index.html's inline script sets the stored
+/* The theme before and after the app loads: index.html's inline script sets the stored
    theme before the first paint, which a screenshot can't catch, and the store keeps the choice. */
 
 /** The classic (non-module) inline script of index.html. */

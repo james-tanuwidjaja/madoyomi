@@ -19,7 +19,7 @@ import {
 } from "../../utils/readerSettings";
 
 /**
- * The reader's global settings (Phase 5 Stage 5), kept on this device (`stores/reader.ts`): in Settings → Reader and
+ * The reader's global settings, kept on this device (`stores/reader.ts`): in Settings → Reader and
  * in the reader's settings sheet ("All manga"). A manga's own mode and direction come first (its meta), and for its
  * mode, its genres and its source's name.
  */

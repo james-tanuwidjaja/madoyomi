@@ -17,12 +17,12 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * The two programs anime downloads use (Phase 6 Stage 5, §8): ffmpeg for HLS (and DASH), yt-dlp as the fallback when
+ * The two programs anime downloads use: ffmpeg for HLS (and DASH), yt-dlp as the fallback when
  * ffmpeg fails. Each is looked for as mpv is ([MpvLocator]):
  * 1. its path in the download settings (Settings → Downloads);
  * 2. the system property `madoyomi.downloads.ffmpeg` / `madoyomi.downloads.ytdlp` (tests);
  * 3. the env `MADOYOMI_FFMPEG` / `MADOYOMI_YTDLP`, which the Tauri shell sets to the repo's `tools/bin/ffmpeg/ffmpeg.exe`
- *    and `tools/bin/yt-dlp/yt-dlp.exe` in dev, or the bundled ones in release (Phase 7), when they are there;
+ *    and `tools/bin/yt-dlp/yt-dlp.exe` in dev, or the bundled ones in release, when they are there;
  * 4. `ffmpeg.exe` / `yt-dlp.exe` on `PATH`.
  *
  * A path given by 1–3 that isn't a file is an error that names it, not a reason to look further.

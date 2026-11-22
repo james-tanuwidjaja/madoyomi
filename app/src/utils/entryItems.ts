@@ -2,7 +2,7 @@ import type { Chapter, Episode, PlaybackSession } from "../api/types";
 import { episodeProgress, type Progress } from "./progress";
 
 /*
- * Episodes and chapters as one kind of row, with the details page's sort and filters (Phase 3 step 15). Pure, so
+ * Episodes and chapters as one kind of row, with the details page's sort and filters. Pure, so
  * the 1000+ entry lists are sorted and filtered without the view.
  */
 
@@ -17,7 +17,7 @@ export interface ListItem {
   /** The source's order, oldest = 1. */
   sourceOrder: number;
   scanlator: string | null;
-  /** Watched (the backend marks it at the threshold; the list marks it by hand) or read (Phase 5). */
+  /** Watched (the backend marks it at the threshold; the list marks it by hand) or read. */
   done: boolean;
   bookmarked: boolean;
   /** Anime only: the source marks it as a filler. */
@@ -25,15 +25,15 @@ export interface ListItem {
   /** Anime only: where playback stopped (or is, while it plays), in milliseconds. */
   progress?: Progress;
   /**
-   * Manga only (Phase 5): where reading stopped, upstream's `lastPageRead` (a page index from 0) and the chapter's
+   * Manga only: where reading stopped, upstream's `lastPageRead` (a page index from 0) and the chapter's
    * page count (0 or less: not known yet).
    */
   pages?: { lastPageRead: number; pageCount: number };
-  /** Phase 6 Stages 4–5: downloaded (a chapter's CBZ, an episode's file), shown as a badge. */
+  /** Downloaded (a chapter's CBZ, an episode's file), shown as a badge. */
   downloaded?: boolean;
   /**
    * Anime only: mpv is playing it now (or has it paused), or the backend is fetching its videos again after mpv
-   * couldn't open the video (Stage 4).
+   * couldn't open the video.
    */
   playing?: "playing" | "paused" | "retrying";
 }

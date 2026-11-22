@@ -17,21 +17,21 @@ import { progressShare, progressText } from "../utils/progress";
 import VirtualList from "./VirtualList.vue";
 
 /**
- * An entry's episodes or chapters (Phase 3 step 15), behind EpisodeList and ChapterList: a sort (the source's order,
+ * An entry's episodes or chapters, behind EpisodeList and ChapterList: a sort (the source's order,
  * the number or the upload date, either way) and filters (watched/read, bookmarked, scanlator), over a VirtualList,
  * so a list of 1000+ rows keeps only what is in view in the DOM. The sort is kept per kind, the filters per entry
  * for the session (stores/itemList.ts). A row's actions come from the `actions` slot (EpisodeList: Play), and a
  * notice above the rows (an action's error) from the `notice` slot.
  *
- * With `selectable` (EpisodeList, Phase 4 Stage 3) each row has a checkbox: Shift+click selects a range of the rows
+ * With `selectable` (EpisodeList) each row has a checkbox: Shift+click selects a range of the rows
  * as shown, and a bar above the rows shows the count, the `bulk-actions` slot (with the selected ids), "Select all
  * shown" and Clear. The selection (`v-model:selected`, ids) is cleared when the entry changes. A row with
  * `progress` shows how far it was watched (a bar and "mm:ss left"), and `playing` marks the one mpv plays.
  *
- * Phase 5 Stage 2: a chapter row with `pages` shows how far it was read ("Page 13 of 92" and a bar). With `openable`
+ * A chapter row with `pages` shows how far it was read ("Page 13 of 92" and a bar). With `openable`
  * (ChapterList), a click on a row (not on its checkbox or buttons) emits `open` with its id: it opens the reader.
  *
- * Phase 6 Stage 4: a row with `downloaded` has a "Downloaded" badge, and the `tools` slot adds controls to the toolbar.
+ * A row with `downloaded` has a "Downloaded" badge, and the `tools` slot adds controls to the toolbar.
  */
 const props = defineProps<{
   kind: MediaKind;
@@ -59,7 +59,7 @@ function onRowClick(event: MouseEvent, id: number) {
 const selected = defineModel<number[]>("selected", { default: () => [] });
 
 defineSlots<{
-  /** Phase 6 Stage 4: more controls at the end of the toolbar (ChapterList: "Download…"). */
+  /** More controls at the end of the toolbar (ChapterList: "Download…"). */
   tools(): unknown;
   notice(): unknown;
   actions(props: { item: ListItem }): unknown;

@@ -80,7 +80,7 @@ class MangaMutation {
     ) {
         transaction {
             // Madoyomi: entries added to the library go into the categories flagged for new entries, as upstream's
-            // REST Library.addMangaToLibrary does (phase-6 §9 "Stage 1"; server/UPSTREAM.md "Library categories")
+            // REST Library.addMangaToLibrary does (server/UPSTREAM.md "Library categories")
             val added = if (patch.inLibrary == true) MangaNewEntryCategories.notInLibrary(userId, ids) else emptyList()
             if (patch.inLibrary != null) {
                 val now = Instant.now().epochSecond

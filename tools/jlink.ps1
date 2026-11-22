@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds the minimal Java runtime that release builds bundle (Phase 7 Stage 1): the modules the server jar needs
+  Builds the minimal Java runtime that release builds bundle: the modules the server jar needs
   (jdeps) plus the ones extensions load at runtime, linked with jlink into app\src-tauri\resources\jre (gitignored).
 
 .DESCRIPTION
@@ -30,7 +30,7 @@
   Where the runtime goes. Default: app\src-tauri\resources\jre.
 
 .PARAMETER MaxSizeMB
-  Fails when the runtime is larger (Phase 7 step 1's target: 60 MB). 0 turns the check off.
+  Fails when the runtime is larger (the target: 60 MB). 0 turns the check off.
 
 .EXAMPLE
   .\tools\jlink.ps1
@@ -49,7 +49,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-# The JDK: -Jdk, else MADOYOMI_JDK, else tools\bin\jdk-21, else JAVA_HOME (CI, Phase 7 Stage 5; as Get-MadoyomiJdk)
+# The JDK: -Jdk, else MADOYOMI_JDK, else tools\bin\jdk-21, else JAVA_HOME (CI; as Get-MadoyomiJdk)
 if (-not $Jdk) { $Jdk = $env:MADOYOMI_JDK }
 if (-not $Jdk) {
     $Jdk = Join-Path $RepoRoot 'tools\bin\jdk-21'

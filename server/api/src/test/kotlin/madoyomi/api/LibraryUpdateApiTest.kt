@@ -93,7 +93,7 @@ private class FakeMangaSource(
 }
 
 /**
- * The library update check (Phase 6 Stage 3): the update diff of both kinds with the new items counted, marked and
+ * The library update check: the update diff of both kinds with the new items counted, marked and
  * listed in the Updates feed (an entry's first fetch left out, a re-listed item not new), the category and settings
  * filters, one entry at a time per source with the stagger and the parallel-source limit, stop, the subscription, the
  * settings and the schedule.

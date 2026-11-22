@@ -4,18 +4,18 @@ import type { ReadingDirection } from "../../utils/pagedNav";
 import { MODE_LABELS, READER_MODES, type ReaderMode } from "../../utils/readerSettings";
 
 /**
- * The reader's toolbar (Phase 5 Stage 2, a first step 11): back to the manga and the chapter's name at the top; the
+ * The reader's toolbar (a first step 11): back to the manga and the chapter's name at the top; the
  * previous and next chapter, the page slider with "12 / 92", the reading direction and fullscreen at the bottom.
- * Reading right to left, the slider fills from the right and the chapter buttons swap sides, as in Mihon. Stage 3
- * adds the mode switch (paged / webtoon) and, in the webtoon mode, the page gap; the direction is the paged mode's
- * only, and the webtoon slider fills from the left. The settings come in Stage 5.
+ * Reading right to left, the slider fills from the right and the chapter buttons swap sides, as in Mihon. It
+ * has the mode switch (paged / webtoon) and, in the webtoon mode, the page gap; the direction is the paged mode's
+ * only, and the webtoon slider fills from the left. Settings opens the settings sheet.
  *
- * Stage 4: three modes in a segmented control (Single, Double, Webtoon); the direction in both paged modes, and in
+ * Three modes in a segmented control (Single, Double, Webtoon); the direction in both paged modes, and in
  * the double-page one "Shift" and a spread's label ("4–5 / 92"). A mouse click on a button leaves the focus where it
  * was (the reader), so Space then turns the page instead of pressing the button again; Tab still reaches every
  * button, and Space or Enter presses the focused one. The slider gives the focus back once a pointer lets it go.
  *
- * Stage 5: the mode and the direction are the manga's (the reader saves a switch as this manga's own), the page gap
+ * The mode and the direction are the manga's (the reader saves a switch as this manga's own), the page gap
  * the global one; Shift stays for the session. "Settings" opens the reader's settings sheet.
  */
 const props = defineProps<{

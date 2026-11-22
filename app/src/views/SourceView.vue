@@ -23,7 +23,7 @@ import MediaCard from "../components/MediaCard.vue";
 import VirtualGrid from "../components/VirtualGrid.vue";
 
 /*
- * A source (Phase 3 step 14): Popular, Latest (when the source has it) and Search, with the source's filters in a
+ * A source: Popular, Latest (when the source has it) and Search, with the source's filters in a
  * side sheet, as an endless grid of cards that loads the next page near the end. Filters apply to a search, as on the
  * server (and in Mihon): applying them switches to Search. The tab, the search and the filters stay for the session
  * (stores/sourceBrowse.ts).
@@ -69,7 +69,7 @@ function applyFilters(next: FilterState) {
   const isDefault = filterChanges(filterList.value, next).length === 0;
   st.filters = isDefault ? null : next;
   st.signature = isDefault ? null : signature.value;
-  // The search is what the box shows, even if it wasn't submitted with Enter (found in the exit run, §10).
+  // The search is what the box shows, even if it wasn't submitted with Enter.
   st.query = typed.value.trim();
   st.tab = "SEARCH";
 }

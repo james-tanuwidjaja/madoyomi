@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Static compat scan over the top 20 anime extensions and the manga sample: writes docs/research/compat-scan.md.
+  Static compat scan over the top 20 anime extensions and the manga sample: writes tools/compat-test/reports/compat-scan.md.
 
 .DESCRIPTION
   1. If top20.txt / manga-sample.txt are missing (or -Select is given), runs select-top.ps1 to rebuild them.
   2. Downloads the listed APKs into tools/compat-test/apks/ (gitignored; files already there are kept).
   3. Runs the server's CompatScanTest (server/core, MADOYOMI_COMPAT_SCAN=1): each APK is converted as an install does
      (dex2jar + Dex2jarRepair), every class is linked, and ExtensionLinkCheck resolves every external class, method and
-     field. The frequency tables decide which Android stubs get fixed first (Phase 2 doc, section 10).
+     field. The frequency tables decide which Android stubs get fixed first.
 
   Needs the repo's JDK in tools/bin/jdk-21 (or -JavaHome). Takes a few minutes (Gradle + 30 conversions).
 
@@ -67,4 +67,4 @@ try {
     Pop-Location
     Remove-Item Env:\MADOYOMI_COMPAT_SCAN -ErrorAction SilentlyContinue
 }
-Write-Host "Compat scan: $(Join-Path $RepoRoot 'docs/research/compat-scan.md')"
+Write-Host "Compat scan: $(Join-Path $RepoRoot 'tools/compat-test/reports/compat-scan.md')"

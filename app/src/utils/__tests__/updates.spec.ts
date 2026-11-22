@@ -10,7 +10,7 @@ import {
   updatesRoute,
 } from "../updates";
 
-/* The library update check's pure parts (Phase 6 Stage 3). */
+/* The library update check's pure parts. */
 
 const NOW = Date.UTC(2026, 10, 15, 12, 0, 0);
 const entry = (kind: "ANIME" | "MANGA", id: number, title: string) => ({ kind, id, title });

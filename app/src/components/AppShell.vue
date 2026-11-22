@@ -14,8 +14,8 @@ import ShellFooter from "./ShellFooter.vue";
 import AppUpdateDialog from "./AppUpdateDialog.vue";
 
 /**
- * The app shell (Phase 3 step 9): a Fluent-like navigation pane with the anime/manga switch, and the page (the slot)
- * on a raised content layer. The window keeps its native Windows title bar, which is the drag region (§9).
+ * The app shell: a Fluent-like navigation pane with the anime/manga switch, and the page (the slot)
+ * on a raised content layer. The window keeps its native Windows title bar, which is the drag region.
  */
 const route = useRoute();
 const router = useRouter();
@@ -31,8 +31,8 @@ const items: { id: NavItem; label: string; to: string }[] = [
 ];
 const settings = { id: "settings" as const, label: "Settings", to: "/settings" };
 
-// Phase 6 Stage 3: Updates shows how many new episodes or chapters the kind's entries got since they were opened
-// and (Stage 4) Downloads how many of the kind are queued or downloading
+// Updates shows how many new episodes or chapters the kind's entries got since they were opened
+// and Downloads how many of the kind are queued or downloading
 const marks = useUpdateMarks(() => mediaKind.kind);
 const downloadQueue = useDownloadQueue();
 const badges = computed<Partial<Record<NavItem, string>>>(() => {
@@ -46,7 +46,7 @@ const badges = computed<Partial<Record<NavItem, string>>>(() => {
 });
 
 // The section of the last page that has one of its own. A details page opened from Browse keeps Browse marked rather
-// than jumping to Library (found in the exit run, §10); opened directly, it marks its default.
+// than jumping to Library; opened directly, it marks its default.
 const lastSection = ref<NavItem | undefined>();
 watch(
   () => route.meta,
@@ -140,7 +140,7 @@ watch(
     <main class="content">
       <slot />
     </main>
-    <!-- Phase 7 Stage 4: the app's own update, checked on start when the setting is on -->
+    <!-- The app's own update, checked on start when the setting is on -->
     <AppUpdateDialog />
   </div>
 </template>

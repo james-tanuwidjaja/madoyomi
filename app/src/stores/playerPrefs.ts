@@ -16,8 +16,8 @@ function stored(): boolean {
 }
 
 /**
- * Player preferences kept on this device (Phase 4 Stage 4), like the other UI preferences (Phase 3 §9), until
- * Stage 5's player settings section: whether the next-episode toast plays the next episode by itself when its
+ * Player preferences kept on this device, like the other UI preferences, until
+ * The player settings section: whether the next-episode toast plays the next episode by itself when its
  * countdown ends (default on). Off, the toast only offers it.
  */
 export const usePlayerPrefsStore = defineStore("playerPrefs", () => {

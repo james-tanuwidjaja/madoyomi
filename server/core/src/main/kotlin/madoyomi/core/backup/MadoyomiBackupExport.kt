@@ -47,7 +47,7 @@ import uy.kohesive.injekt.api.get
 import java.io.File
 
 /**
- * Writes a [MadoyomiBackup] of everything a fresh install needs to look the same (Phase 6 Stage 6): the manga part
+ * Writes a [MadoyomiBackup] of everything a fresh install needs to look the same: the manga part
  * through upstream's handlers (library manga with their chapters, history, categories, meta: the per-manga reader
  * settings), and Madoyomi's own: the anime library with its seasons, episodes, positions, history and categories, the
  * manga categories' flags, the repos, the certificates the user trusted, the installed extensions (not the APKs), each

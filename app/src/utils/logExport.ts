@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { fetchDiagnostics } from "../api/operations";
 
 /*
- * Export logs (Phase 7 Stage 3): the shell writes the zip (src-tauri/src/diagnostics.rs), so it works with the backend
+ * Export logs: the shell writes the zip (src-tauri/src/diagnostics.rs), so it works with the backend
  * down; when the backend answers, its report (versions, repos, extensions, settings without secrets, and the library
  * only when `includeLibrary`) goes in as diagnostics.json.
  */

@@ -17,7 +17,7 @@ import suwayomi.tachidesk.graphql.directives.RequireAuth
 import suwayomi.tachidesk.server.JavalinSetup.future
 import java.util.concurrent.CompletableFuture
 
-/** The reader settings the backend applies (Phase 5 Stage 1, Settings → Reader). */
+/** The reader settings the backend applies (Settings → Reader). */
 @GraphQLDescription("The reader settings the backend applies (Settings → Reader), kept in its data dir")
 data class ReaderSettingsType(
     @GraphQLDescription("The chapter-page cache's cap in MiB: 256 to 10240 (default 1024). Lowering it trims the cache")

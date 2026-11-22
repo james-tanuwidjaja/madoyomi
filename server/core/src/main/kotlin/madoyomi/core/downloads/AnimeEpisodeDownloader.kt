@@ -38,7 +38,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * Downloads an episode (Phase 6 Stage 5, step 11), joining the queue as anime's [ItemDownloader]:
+ * Downloads an episode (step 11), joining the queue as anime's [ItemDownloader]:
  * 1. **the video** is resolved right before the download, through the extension as Play does
  *    ([AnimeVideos.fetchEpisodeVideos], sorted by the player settings' preferred server and quality, else the source's
  *    order): the first video of the first hoster that has one (a lazy hoster loaded when its turn comes), resolved
@@ -48,7 +48,7 @@ import java.util.concurrent.TimeUnit
  * 3. **a direct file** is staged in `<downloads>/.partial/anime/<episodeId>/video.part` and resumed from what is
  *    staged with a `Range` request when the server answers 206 for the same video and size (else it starts over);
  * 4. **HLS and DASH** go through `ffmpeg -headers … -i <url> -c copy` into Matroska; when ffmpeg is missing or fails,
- *    through yt-dlp (`--add-header`), and when both fail the error names both failures (§7's risk). Neither resumes:
+ *    through yt-dlp (`--add-header`), and when both fail the error names both failures (a known risk). Neither resumes:
  *    a retry starts the stream again;
  * 5. **subtitles** (the video's subtitle tracks) are fetched with the same headers and saved beside the file
  *    (`<episode>.<lang>.<ext>`); one that fails is left out and logged. **External audio tracks** (KickAssAnime sends

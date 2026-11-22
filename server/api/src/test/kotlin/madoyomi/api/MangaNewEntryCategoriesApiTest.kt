@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 
 /**
  * Manga added to the library through upstream's GraphQL `updateManga(s)` go into the categories flagged for new
- * entries (Phase 6 Stage 1, `MangaNewEntryCategories`), as upstream's REST `Library.addMangaToLibrary` and anime's
+ * entries (`MangaNewEntryCategories`), as upstream's REST `Library.addMangaToLibrary` and anime's
  * `updateAnimes` do.
  */
 class MangaNewEntryCategoriesApiTest : ApiGraphQLTest() {

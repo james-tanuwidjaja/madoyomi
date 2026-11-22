@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 
 /**
  * The thumbnail and chapter-page caches name their files by database id (`<mangaId>.jpg`, `anime-<id>.jpg`, chapter
- * dirs by manga and chapter id), so each data dir needs its own (Phase 3 Stage 7: a fresh data dir showed another data
+ * Dirs by manga and chapter id), so each data dir needs its own (a fresh data dir showed another data
  * dir's cached covers, because both caches were in the shared temp dir).
  */
 class IdKeyedCacheDirsTest {

@@ -2,7 +2,7 @@ import type { Chapter, DownloadItem, DownloadQueue, Episode, MediaKind } from ".
 import { formatClock } from "./progress";
 
 /*
- * The download queue as the app shows it (Phase 6 Stages 4–5): pure helpers for the Downloads screen and the chapter
+ * The download queue as the app shows it: pure helpers for the Downloads screen and the chapter
  * and episode lists. A chapter counts pages; an episode bytes (a file), seconds (ffmpeg) or segments (yt-dlp).
  */
 
@@ -101,7 +101,7 @@ export function nextUnread(
 }
 
 /**
- * The episodes to queue for "Download next N unwatched" (Stage 5): the unwatched ones in watching order (the source's
+ * The episodes to queue for "Download next N unwatched": the unwatched ones in watching order (the source's
  * order, oldest first), leaving out those downloaded or in the queue already, the first `n` (`"all"`: every one).
  */
 export function nextUnwatched(

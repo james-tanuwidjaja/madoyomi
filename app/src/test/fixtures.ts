@@ -252,7 +252,7 @@ export function makePlaybackEvent(
   };
 }
 
-/** A library category as `fetchCategories` returns it (Phase 6). */
+/** A library category as `fetchCategories` returns it. */
 export function makeCategory(overrides: Partial<LibraryCategory> = {}): LibraryCategory {
   return {
     id: 1,
@@ -288,7 +288,7 @@ export function makeLibraryEntry(overrides: Partial<LibraryEntry> = {}): Library
   };
 }
 
-/** A library update check as `libraryCheck` returns it: by default none has run yet (Phase 6 Stage 3). */
+/** A library update check as `libraryCheck` returns it: by default none has run yet. */
 export function makeLibraryCheck(overrides: Partial<LibraryCheck> = {}): LibraryCheck {
   return {
     running: false,
@@ -309,7 +309,7 @@ export function makeLibraryCheck(overrides: Partial<LibraryCheck> = {}): Library
   };
 }
 
-/** A download queue item as the app holds it (Phase 6 Stage 4): a queued chapter of manga 34 by default. */
+/** A download queue item as the app holds it: a queued chapter of manga 34 by default. */
 export function makeDownloadItem(overrides: Partial<DownloadItem> = {}): DownloadItem {
   return {
     id: 1,

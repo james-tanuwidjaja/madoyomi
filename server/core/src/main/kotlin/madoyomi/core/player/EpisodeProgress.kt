@@ -17,10 +17,10 @@ import org.jetbrains.exposed.v1.jdbc.update
 import suwayomi.tachidesk.server.database.dbTransaction
 
 /**
- * Playback progress in the existing `EPISODE` columns (Phase 4 §9): `last_second_seen` and `total_seconds` hold
+ * Playback progress in the existing `EPISODE` columns: `last_second_seen` and `total_seconds` hold
  * **milliseconds**, despite their names, as the Aniyomi app stores them (its player writes `position * 1000`), so
  * backups and history agree with Aniyomi's; `watched` is the watched flag. Every save also stamps the episode's watch
- * history (`ANIME_HISTORY`, Phase 6 Stage 2), so an episode played even for a moment is in History.
+ * history (`ANIME_HISTORY`), so an episode played even for a moment is in History.
  */
 object EpisodeProgress {
     fun save(

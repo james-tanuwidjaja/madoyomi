@@ -1,7 +1,7 @@
 import type { Chapter } from "../api/types";
 
 /*
- * The paged reader's navigation (Phase 5 Stage 2), pure so it is unit-tested without the view: where a click, a key
+ * The paged reader's navigation, pure so it is unit-tested without the view: where a click, a key
  * or the wheel goes in left-to-right and right-to-left reading, the chapter boundaries, which pages to load first,
  * where a chapter opens, and what to ask the backend to prefetch.
  *

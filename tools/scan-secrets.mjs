@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Looks for secrets in files (Phase 7 Stage 5): CI runs it on everything a release uploads, with the updater's key
+// Looks for secrets in files: CI runs it on everything a release uploads, with the updater's key
 // and its password in the environment. It never prints a secret: only where one was found.
 //
 //   node tools/scan-secrets.mjs --env NAME [--env NAME ...] <file or folder> ...

@@ -22,21 +22,21 @@ import { formatCount } from "../utils/format";
 import ErrorNotice from "./ErrorNotice.vue";
 
 /*
- * The Library's "Categories" dialog (Phase 6 Stage 1): the kind's categories in order, to create, rename (inline),
+ * The Library's "Categories" dialog: the kind's categories in order, to create, rename (inline),
  * move up and down, flag for new entries ("Add new entries here", upstream's `default`) and delete (confirmed in the
  * row, saying where its entries go). Default is built in and isn't listed: an entry is in it by being in no other.
  * Every change is saved at once.
  *
- * Phase 6 Stage 3: each category, Default too, has the "Updates" flag (its entries are checked by Update library and
+ * Each category, Default too, has the "Updates" flag (its entries are checked by Update library and
  * the schedule: upstream's `includeInUpdate`, UNSET when on, EXCLUDE when off) and the "Downloads" flag
- * (`includeInDownload`, the same way: Stage 4 queues the new chapters a library update finds in its entries when
+ * (`includeInDownload`, the same way: the download queue takes the new chapters a library update finds in its entries when
  * Settings → Downloads turns the automatic downloads on).
  */
 const props = defineProps<{ kind: MediaKind; entries: readonly LibraryEntry[] }>();
 const open = defineModel<boolean>("open", { required: true });
 
 const categories = useCategories(() => props.kind);
-// Stage 4: what the Downloads flag does (anime's automatic downloads come with Stage 5)
+// What the Downloads flag does (new chapters and episodes)
 const downloadsTitle = computed(() =>
   props.kind === "anime"
     ? "New episodes a library update finds in its entries will be downloaded automatically (coming with episode downloads)"

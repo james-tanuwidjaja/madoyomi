@@ -125,7 +125,7 @@ class AnimeExtensionApiTest : AnimeApiTest() {
                 .assertNoErrors()
                 .dataPath("extension", "compatIssues")
                 .asList
-        // the link check's 7 Android stubs, all in its EditTextPreference dialog (Phase 2 §10)
+        // the link check's 7 Android stubs, all in its EditTextPreference dialog
         assertEquals(7, issues.size, "$issues")
         assertTrue(issues.all { it.path("kind") == "STUB" && it.path("origin") == "STATIC" })
         assertTrue(issues.any { (it.path("target") as String).startsWith("android.widget.TextView.") })
@@ -146,7 +146,7 @@ class AnimeExtensionApiTest : AnimeApiTest() {
                 .assertNoErrors()
                 .dataPath("animeSources", "nodes", "0", "filters")
                 .asList
-        // header, separator, 4 selects, a group of 77 checkboxes (Phase 2 §10)
+        // header, separator, 4 selects, a group of 77 checkboxes
         assertEquals(7, filters.size)
         assertEquals(4, filters.count { it.path("__typename") == "SelectFilter" })
         assertEquals(1, filters.count { it.path("__typename") == "GroupFilter" })

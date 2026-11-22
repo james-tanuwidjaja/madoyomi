@@ -3,9 +3,9 @@ import type { MediaKind, Preference, Source, SourceBase, SourcePreferenceChange 
 import { notFound, SOURCE_FIELDS } from "./sources";
 
 /*
- * A source's own settings (Phase 3 step 19), in upstream's `Preference` union for both kinds: anime through
+ * A source's own settings, in upstream's `Preference` union for both kinds: anime through
  * Madoyomi's `animeSources(condition: {id}).preferences` and `updateAnimeSourcePreference`, manga through upstream's
- * `source(id).preferences` and `updateSourcePreference` (server/UPSTREAM.md "Anime sources (Phase 2)").
+ * `source(id).preferences` and `updateSourcePreference` (server/UPSTREAM.md "Anime sources").
  */
 
 /**
@@ -164,7 +164,7 @@ export interface PreferenceUpdate {
  *
  * Manga takes two calls: upstream's `updateSourcePreference` uses the screen its last read cached, and has none
  * (a null pointer, `INTERNAL`) before any read since the server started, e.g. right after a backend restart. So the
- * preferences are read first (Phase 3 §9 "Stage 6").
+ * preferences are read first.
  */
 export async function updateSourcePreference(
   kind: MediaKind,

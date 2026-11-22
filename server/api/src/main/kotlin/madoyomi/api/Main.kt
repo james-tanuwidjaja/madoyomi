@@ -125,19 +125,19 @@ private fun reapPlaybackOrphans() {
         .onFailure { KotlinLogging.logger {}.warn(it) { "could not check for mpv processes left by an earlier backend" } }
 }
 
-/** The scheduled library update check (Phase 6 Stage 3), from `<data dir>/library-update.json`. */
+/** The scheduled library update check, from `<data dir>/library-update.json`. */
 private fun scheduleLibraryUpdates() {
     runCatching { LibraryUpdateScheduler.start() }
         .onFailure { KotlinLogging.logger {}.warn(it) { "could not schedule the library update check" } }
 }
 
-/** The download queue (Phase 6 Stage 4): what a stop cut off is queued again and the queue goes on. */
+/** The download queue: what a stop cut off is queued again and the queue goes on. */
 private fun startDownloads() {
     runCatching { DownloadQueue.start() }
         .onFailure { KotlinLogging.logger {}.warn(it) { "could not start the download queue" } }
 }
 
-/** The scheduled backup (Phase 6 Stage 6), from `<data dir>/backup-settings.json` (off by default). */
+/** The scheduled backup, from `<data dir>/backup-settings.json` (off by default). */
 private fun scheduleBackups() {
     runCatching { BackupScheduler.start() }
         .onFailure { KotlinLogging.logger {}.warn(it) { "could not schedule the backups" } }

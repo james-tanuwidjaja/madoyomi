@@ -11,7 +11,7 @@
     3. the files in "take" (names or wildcards, matched against the archive's entries, or the downloaded file itself
        when it isn't an archive; "inner" names a zip inside the zip) are copied flat into <Out>\<dest>, after the
        old contents of that folder are removed;
-    4. each entry of "licenses" (Phase 7 Stage 2: license texts at the upstream tags) is downloaded into
+    4. each entry of "licenses" (license texts at the upstream tags) is downloaded into
        tools\bin\downloads\licenses\<name>, checked against its pinned SHA-256 like the download, and copied to
        <Out>\<dest>\<as> (mpv's own at the top, the texts of the libraries in its DLLs under licenses\);
     5. `<dest>.exe <versionArgs>` must run; its first line is printed.

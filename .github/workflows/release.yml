@@ -1,11 +1,11 @@
-# The release build (Phase 7 Stage 5; RELEASING.md has the whole checklist).
+# The release build (RELEASING.md has the whole checklist).
 #
 # - A pushed tag vX.Y.Z (it must be v + VERSION) runs the tests, builds the signed release and uploads the NSIS
 #   installer, its updater signature, the MSI, latest.json and SHA256SUMS.txt to a DRAFT release, with the notes
 #   from CHANGELOG.md's "## X.Y.Z" section. Publishing the draft is done by hand.
 # - Run workflow (workflow_dispatch) is a dry run: the same tests and signed build, the small files kept as the run's
 #   artifact, no release.
-# Windows only (phase-7 section 9, Stage 2). The toolchain is the dev desktop's (README "Prerequisites"); the JDK's
+# Windows only. The toolchain is the dev desktop's (CONTRIBUTING.md "Prerequisites"); the JDK's
 # patch is pinned because the jlink runtime is at its 60 MB cap. The updater's key comes only from the secrets
 # TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, as environment variables of the steps that need
 # them. Actions are pinned by commit (the tag in the comment).

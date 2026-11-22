@@ -173,7 +173,7 @@ class AnimeDetailsTest {
         assertTrue(moved[EpisodeTable.watched], "carried over by episode number")
         assertEquals(1400L, moved[EpisodeTable.totalSeconds])
         assertEquals(0L, dbTransaction { AnimeHistoryTable.selectAll().where { AnimeHistoryTable.episode eq e1 }.count() })
-        // its watch history moved with it (Phase 6 Stage 2)
+        // its watch history moved with it
         val history = dbTransaction { AnimeHistoryTable.selectAll().where { AnimeHistoryTable.episode eq moved[EpisodeTable.id] }.single() }
         assertEquals(1L, history[AnimeHistoryTable.lastSeen])
     }

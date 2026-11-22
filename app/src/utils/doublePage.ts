@@ -1,7 +1,7 @@
 import { isPage, step, type ChapterNeighbours, type NavResult } from "./pagedNav";
 
 /*
- * The double-page reader's pairing and navigation (Phase 5 Stage 4, step 8), pure so it is unit-tested without the
+ * The double-page reader's pairing and navigation (step 8), pure so it is unit-tested without the
  * view.
  *
  * A chapter's pages are cut into spreads, in order from its first page: two pages side by side, or one alone. A page

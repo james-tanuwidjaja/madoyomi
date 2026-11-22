@@ -18,7 +18,7 @@ import suwayomi.tachidesk.graphql.directives.RequireAuth
 import suwayomi.tachidesk.server.JavalinSetup.future
 import java.util.concurrent.CompletableFuture
 
-/** The player settings (Phase 4 Stage 5, Settings → Player), kept by the backend in its data dir. */
+/** The player settings (Settings → Player), kept by the backend in its data dir. */
 @GraphQLDescription("The player settings (Settings → Player), kept in the backend's data dir and used from the next play")
 data class PlayerSettingsType(
     @GraphQLDescription("The share of the duration at which an episode is marked watched: 0.5 to 0.95, in steps of 0.05")

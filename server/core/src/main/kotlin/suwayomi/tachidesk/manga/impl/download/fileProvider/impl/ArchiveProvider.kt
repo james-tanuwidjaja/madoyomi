@@ -48,7 +48,7 @@ class ArchiveProvider(
 
     // Madoyomi: the page's stream owns its ZipFile and closes it. Upstream returned only the entry's stream and dropped
     // the ZipFile, so a page left a file handle open until GC, and ZipFile's finalizer could close the channel while
-    // the page was still being served (ClosedChannelException in the reader, phase-6 §10 "Stage 4").
+    // the page was still being served (ClosedChannelException in the reader).
     override suspend fun getImageInputStream(image: FileType.ZipFile): InputStream {
         val zipFile =
             ZipFile

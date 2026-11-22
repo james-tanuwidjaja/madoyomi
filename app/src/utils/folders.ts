@@ -1,7 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 
 /*
- * Showing a folder in Explorer (Phase 6 Stage 4: Settings → Downloads) through Tauri's opener plugin, loaded only in
+ * Showing a folder in Explorer (Settings → Downloads) through Tauri's opener plugin, loaded only in
  * the shell (plain `pnpm dev` in a browser has none).
  */
 

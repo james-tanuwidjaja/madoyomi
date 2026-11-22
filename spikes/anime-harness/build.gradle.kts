@@ -1,4 +1,4 @@
-// Phase 0 / S3: load yuzono (Aniyomi) extensions on the JVM and call popular -> episodes -> videos.
+// Spike S3: load yuzono (Aniyomi) extensions on the JVM and call popular -> episodes -> videos.
 // The runtime (AndroidCompat, eu.kanade.tachiyomi.network, Injekt-on-Koin, OkHttp, Jsoup, kotlinx.*) comes
 // from the Suwayomi-Server fat jar, i.e. exactly what the Madoyomi fork will provide. Only the
 // eu.kanade.tachiyomi.animesource API is ours (ported from the Aniyomi app's source-api, see NOTICE.md).

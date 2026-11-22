@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { AUTO_PLAY_NEXT_KEY, usePlayerPrefsStore } from "../playerPrefs";
 
-/* Auto-play of the next episode, a preference on this device (Phase 4 Stage 4). */
+/* Auto-play of the next episode, a preference on this device. */
 
 beforeEach(() => {
   localStorage.clear();

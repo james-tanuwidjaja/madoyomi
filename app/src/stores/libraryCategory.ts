@@ -23,7 +23,7 @@ function stored(): Record<MediaKind, number | null> {
 }
 
 /**
- * The Library's open category tab per kind, on this device (Phase 6 Stage 1). A category that is gone (or a
+ * The Library's open category tab per kind, on this device. A category that is gone (or a
  * Default tab that is hidden) falls back to the first tab, without forgetting the id.
  */
 export const useLibraryCategoryStore = defineStore("libraryCategory", () => {

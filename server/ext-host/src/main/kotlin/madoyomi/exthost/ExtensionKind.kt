@@ -29,7 +29,7 @@ enum class ExtensionKind(
     /**
      * The extensions-lib versions expected (manga: upstream's `PackageTools.LIB_VERSION_MIN..MAX`; anime: the
      * versions yuzono builds against). Outside it is only a warning: the manifest lib doesn't describe the binary
-     * API (Phase 0).
+     * API.
      */
     val libRange: ClosedFloatingPointRange<Double>,
     /** Directory under `<data>/extensions/` that holds this kind's jars. */

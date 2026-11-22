@@ -79,7 +79,7 @@ const showLogs = computed(() => backend.mode === "tauri" && !!backend.status?.lo
         Open logs folder
       </button>
     </div>
-    <!-- Phase 7 Stage 3: when the shell gave up, the crash dialog's Export logs is here -->
+    <!-- When the shell gave up, the crash dialog's Export logs is here -->
     <ExportLogs v-if="showLogs && view === 'failed'" compact />
   </section>
 </template>

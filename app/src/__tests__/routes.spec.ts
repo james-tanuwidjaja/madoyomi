@@ -10,7 +10,7 @@ import { createQueryClient } from "../api/realtime";
 import { useMediaKindStore } from "../stores/mediaKind";
 
 /*
- * Route-level smoke test (Phase 3 step 22): the whole app in browser mode (no backend), on a memory history. Every
+ * Route-level smoke test: the whole app in browser mode (no backend), on a memory history. Every
  * route renders inside the shell, with its sidebar item marked.
  */
 
@@ -79,7 +79,7 @@ describe("routes", () => {
     expect(document.title).toBe(`${title} · Madoyomi`);
   });
 
-  it("shows the reader without the shell (Phase 5)", async () => {
+  it("shows the reader without the shell", async () => {
     await mountAt("/manga/34/read/5001?page=3");
 
     expect(wrapper.find(".pane").exists()).toBe(false);

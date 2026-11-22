@@ -6,7 +6,7 @@ import type { PageSize, PageState } from "../../../composables/usePageLoader";
 import WebtoonReader from "../WebtoonReader.vue";
 
 /*
- * The webtoon strip (Phase 5 Stage 3) on its own: only the items near the viewport in the DOM, each page sized by its
+ * The webtoon strip on its own: only the items near the viewport in the DOM, each page sized by its
  * ratio (the estimate before it loads), where it opens, the page reported as the user scrolls, the anchor kept when a
  * page above gets its real size, a position it didn't report, the gap, and the edges. jsdom has no layout: the strip
  * is 1000 × 900 px by stubbed clientWidth/clientHeight (so 800 px wide), and its scrollTop is set by hand.

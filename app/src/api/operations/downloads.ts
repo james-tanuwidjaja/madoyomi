@@ -17,11 +17,11 @@ import { PLAYBACK_SESSION_FIELDS } from "./playback";
 import { extensionKindOf, mediaKindOf } from "../types";
 
 /*
- * The download queue (Phase 6 Stage 4), the backend's for both kinds: the queue (`downloadQueue`; the
+ * The download queue, the backend's for both kinds: the queue (`downloadQueue`; the
  * `downloadsChanged` subscription is in ./subscriptions), the completed list of a kind (the last finished first, paged
  * by offset), queueing chapters or episodes, pause, resume, retry, cancel and reorder, deleting downloads (the files),
- * clearing the completed list, and Settings → Downloads. Stage 5: the tools' check (`downloadTools`) and playing a
- * downloaded episode (`playDownloadedEpisode`). Phase 7 Stage 3: the downloads folder of one's choice
+ * Clearing the completed list, and Settings → Downloads. The tools' check (`downloadTools`) and playing a
+ * Downloaded episode (`playDownloadedEpisode`). The downloads folder of one's choice
  * (`downloadsFolder`, `setDownloadsFolder`) and why the queue waits (`heldBecause`).
  */
 
@@ -451,7 +451,7 @@ function toDownloadsFolder(n: DownloadsFolderNode): DownloadsFolder {
   };
 }
 
-/** The downloads folder: where it is, whether it is there, and its last change (Phase 7 Stage 3). */
+/** The downloads folder: where it is, whether it is there, and its last change. */
 export async function fetchDownloadsFolder(signal?: AbortSignal): Promise<DownloadsFolder> {
   return toDownloadsFolder(
     (

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import NextEpisodeToast from "../NextEpisodeToast.vue";
 
-/* The next-episode toast's states and buttons (Phase 4 step 15). */
+/* The next-episode toast's states and buttons. */
 
 describe("NextEpisodeToast", () => {
   it("shows the next episode with its countdown, and emits Play now and Cancel", async () => {

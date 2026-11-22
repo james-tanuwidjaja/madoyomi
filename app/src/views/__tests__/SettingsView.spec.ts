@@ -328,7 +328,7 @@ describe("SettingsView", () => {
   });
 });
 
-describe("SettingsView: Player (Phase 4 Stage 5)", () => {
+describe("SettingsView: Player", () => {
   const el = <T extends HTMLElement>(id: string) =>
     wrapper.find(`[data-testid="${id}"]`).element as T;
   async function choose(id: string, value: string) {
@@ -431,7 +431,7 @@ describe("SettingsView: Player (Phase 4 Stage 5)", () => {
   });
 });
 
-describe("SettingsView: Reader (Phase 5 Stage 1)", () => {
+describe("SettingsView: Reader", () => {
   const el = <T extends HTMLElement>(id: string) =>
     wrapper.find(`[data-testid="${id}"]`).element as T;
 
@@ -495,7 +495,7 @@ describe("SettingsView: Reader (Phase 5 Stage 1)", () => {
   });
 });
 
-describe("SettingsView: Reader settings on this device (Phase 5 Stage 5)", () => {
+describe("SettingsView: Reader settings on this device", () => {
   it("shows the reader's global settings with their defaults, and keeps a change", async () => {
     await mountSettings();
     const prefs = wrapper.find('[data-testid="reader-prefs-card"]');
@@ -528,7 +528,7 @@ describe("SettingsView: Reader settings on this device (Phase 5 Stage 5)", () =>
   });
 });
 
-describe("SettingsView: Updates (Phase 6 Stage 3)", () => {
+describe("SettingsView: Updates", () => {
   const el = <T extends HTMLElement>(id: string) =>
     wrapper.find(`[data-testid="${id}"]`).element as T;
   async function choose(id: string, value: string) {
@@ -536,7 +536,7 @@ describe("SettingsView: Updates (Phase 6 Stage 3)", () => {
     await flushPromises();
   }
 
-  it("shows the update settings, off and on by the defaults, and saves each change (Phase 6 Stage 3)", async () => {
+  it("shows the update settings, off and on by the defaults, and saves each change", async () => {
     await mountSettings();
     const section = wrapper.find('[data-testid="update-settings"]');
     expect(el<HTMLSelectElement>("interval-select").value).toBe("0");
@@ -571,7 +571,7 @@ describe("SettingsView: Updates (Phase 6 Stage 3)", () => {
   });
 });
 
-describe("SettingsView: the download tools (Phase 6 Stage 5)", () => {
+describe("SettingsView: the download tools", () => {
   it("shows ffmpeg and yt-dlp as the backend finds them, saves a path and checks typed ones", async () => {
     await mountSettings();
     expect(ops.fetchDownloadTools).toHaveBeenCalledWith({});
@@ -609,7 +609,7 @@ describe("SettingsView: the download tools (Phase 6 Stage 5)", () => {
   });
 });
 
-describe("SettingsView: Backup (Phase 6 Stage 6)", () => {
+describe("SettingsView: Backup", () => {
   const section = () => wrapper.find('[data-testid="backup-settings"]');
 
   it("lists the backups, backs up now, and turns the schedule on with what to keep", async () => {
@@ -713,7 +713,7 @@ describe("SettingsView: Backup (Phase 6 Stage 6)", () => {
   });
 });
 
-describe("SettingsView: logs and the downloads folder (Phase 7 Stage 3)", () => {
+describe("SettingsView: logs and the downloads folder", () => {
   const bodyFind = (selector: string) => document.querySelector<HTMLElement>(selector);
 
   it("exports the logs, with the library only when its box is ticked, and shows the file", async () => {
@@ -889,7 +889,7 @@ describe("SettingsView: logs and the downloads folder (Phase 7 Stage 3)", () => 
   });
 });
 
-describe("SettingsView: app updates (Phase 7 Stage 4)", () => {
+describe("SettingsView: app updates", () => {
   const appSettings = {
     checkOnStart: false,
     skippedVersion: null,

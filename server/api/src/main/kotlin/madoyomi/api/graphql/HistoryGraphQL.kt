@@ -30,7 +30,7 @@ import suwayomi.tachidesk.server.user.requireUser
 import java.util.concurrent.CompletableFuture
 
 /*
- * History (Phase 6 Stage 2): one item per entry, its episode or chapter played or read last, newest first, paged;
+ * History: one item per entry, its episode or chapter played or read last, newest first, paged;
  * delete per entry and clear all. Anime history is `ANIME_HISTORY`, manga history upstream's
  * `CHAPTER_USER.last_read_at` (madoyomi.core.library). Deleting keeps the watched and read marks and the positions.
  */

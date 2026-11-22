@@ -33,11 +33,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * The backend owns mpv (Phase 4 §9): one playback session at a time, in mpv's own window.
+ * The backend owns mpv: one playback session at a time, in mpv's own window.
  *
  * - [play] resolves the video right before the launch (URLs expire), builds the command ([MpvCommand]), stops the
  *   current session and starts mpv. mpv's output goes to `<data dir>/logs/mpv.log`, one file per session: the
- *   earlier ones move to `mpv.1.log` … (the last [MPV_LOGS_KEPT] kept, Phase 7 Stage 3, [LogFiles]).
+ *   earlier ones move to `mpv.1.log` … (the last [MPV_LOGS_KEPT] kept, [LogFiles]).
  * - The process is a child of the JVM, so it is in the Tauri shell's Job Object too: when the app dies, mpv dies.
  *   A normal backend exit stops it from a shutdown hook.
  * - A backend that crashed and was restarted by the shell left its mpv running, with nothing tracking it. Each session
@@ -45,14 +45,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   process that still matches one, then clears the dir (the session config files included).
  * - The session's config file (headers and the rest, [MpvCommand]) lives in the same dir and is deleted when mpv exits.
  * - mpv gets the backend's environment without `MADOYOMI_TOKEN`.
- * - Over the IPC pipe (Stage 2, [MpvIpcClient]): the session observes mpv's position ([PlaybackTracker]), saves
+ * - Over the IPC pipe ([MpvIpcClient]): the session observes mpv's position ([PlaybackTracker]), saves
  *   progress into `EPISODE` ([EpisodeProgress]), marks the episode watched at [watchedThreshold], adds the external
  *   subtitle and audio tracks with their labels, selects the subtitle and audio track by the player settings'
- *   languages ([TrackSelection], Stage 5), and stops mpv with `quit` before it would kill it. [events] carries
+ *   languages ([TrackSelection]), and stops mpv with `quit` before it would kill it. [events] carries
  *   what happens (nothing is replayed: subscribe first).
- * - The player settings ([PlayerSettingsStore], Stage 5) are read at each launch: which mpv ([MpvLocator], the
+ * - The player settings ([PlayerSettingsStore]) are read at each launch: which mpv ([MpvLocator], the
  *   settings' path first) and the track languages; the watched threshold at every position.
- * - When mpv can't open the video (Stage 4): a failure before playback started, or with an HTTP 401/403/404/410 in
+ * - When mpv can't open the video: a failure before playback started, or with an HTTP 401/403/404/410 in
  *   mpv's log, fetches the episode's videos again once (URLs expire), finds the same video ([VideoChoices.find]) and
  *   plays it from where the failed session was (RETRYING, then the new session). If that fails too, ERROR names the
  *   video to offer instead ([VideoChoices.next]).
@@ -249,7 +249,7 @@ object PlaybackSessions {
             cancelRetryLocked()
             stopLocked()
             include.writeText(built.include, Charsets.UTF_8)
-            // Phase 7 Stage 3: one log per session, the last MPV_LOGS_KEPT kept (mpv.log, mpv.1.log, …)
+            // One log per session, the last MPV_LOGS_KEPT kept (mpv.log, mpv.1.log, …)
             LogFiles.rotate(dirs.log, MPV_LOGS_KEPT)
             runCatching { dirs.log.writeText("# Madoyomi playback $id at ${Instant.now()}: ${command.first()}\n", Charsets.UTF_8) }
                 .onFailure { logger.warn { "playback $id: could not start ${dirs.log.name}: ${it.message}" } }
@@ -367,7 +367,7 @@ object PlaybackSessions {
         val outcome =
             entry.tracker.finish(stopped, exitCode).let { o ->
                 // mpv treats a URL that stops answering (403 after it expired) as the end of the file: an eof well
-                // before the end, with an HTTP error in its log, is a failure (found live, Phase 4 Stage 4)
+                // before the end, with an HTTP error in its log, is a failure (found live)
                 val at = entry.tracker.snapshot()
                 if (o is PlaybackTracker.Outcome.Ended && o.reason == "eof" && status != null &&
                     MpvLog.endedEarly(at.positionSeconds, at.durationSeconds)
@@ -526,7 +526,7 @@ object PlaybackSessions {
     /**
      * `sub-add`/`audio-add` for the video's external tracks, with their labels as titles (mpv loads them async, and
      * none is selected as it is added). Once all are loaded (or failed), the subtitle and audio track are chosen from
-     * mpv's `track-list`, the file's own tracks included ([TrackSelection]: the settings' languages, else Stage 2's
+     * mpv's `track-list`, the file's own tracks included ([TrackSelection]: the settings' languages, else the default
      * rule), and set as `sid`/`aid`.
      */
     private fun addTracks(

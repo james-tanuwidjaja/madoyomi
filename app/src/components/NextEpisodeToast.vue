@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The next-episode toast (Phase 4 step 15): after an episode ends, "Next: <episode>" with a countdown (auto-play
+ * The next-episode toast: after an episode ends, "Next: <episode>" with a countdown (auto-play
  * on) or without one (off), Play now and Cancel. Shown by the details page (EpisodeList, `useNextEpisode`), which
  * plays the episode; this only draws it.
  */

@@ -261,7 +261,7 @@ class MigrationsFromEmptyDbTest {
     fun `upgrading a pre-Madoyomi database keeps its rows as manga`() {
         val migrations = loadMigrations()
         withScratchDatabase { db ->
-            // The state of a database before Stage 4: upstream's migrations only.
+            // The state of a database before upstream's migrations only.
             runMigrations(migrations.filter { it.version < FIRST_MADOYOMI_VERSION }, db)
             transaction(db) {
                 exec(

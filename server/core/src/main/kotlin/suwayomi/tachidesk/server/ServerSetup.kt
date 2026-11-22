@@ -93,7 +93,7 @@ class ApplicationDirs(
 ) {
     val extensionsRoot = "$dataRoot/extensions"
 
-    // Madoyomi: the downloads folder of one's choice (Phase 7 Stage 3, downloads.json), then upstream's setting, then
+    // Madoyomi: the downloads folder of one's choice (downloads.json), then upstream's setting, then
     // the default; never the default in place of a chosen folder that is gone (upstream: downloadsPath or the default)
     val downloadsRoot
         get() = DownloadsFolder.root(dataRoot, serverConfig.downloadsPath.value)
@@ -113,7 +113,7 @@ class ApplicationDirs(
     val thumbnailDownloadsRoot
         get() = "$downloadsRoot/thumbnails"
 
-    // Madoyomi: `downloads/manga`, beside Stage 5's `downloads/anime` (upstream: `$downloadsRoot/mangas`)
+    // Madoyomi: `downloads/manga`, beside `downloads/anime` (upstream: `$downloadsRoot/mangas`)
     val mangaDownloadsRoot
         get() = "$downloadsRoot/manga"
 

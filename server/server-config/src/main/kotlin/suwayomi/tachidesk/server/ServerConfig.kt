@@ -1009,7 +1009,7 @@ class ServerConfig(
         protoNumber = 86,
         group = SettingGroup.WEB_VIEW,
         privacySafe = true,
-        defaultValue = false, // Madoyomi: no Chromium download by default, WebView is Phase 2 (upstream: !isMacOS)
+        defaultValue = false, // Madoyomi: no Chromium download by default, WebView is deferred (upstream: !isMacOS)
         validator = {
             if (Platform.current.os.isMacOS) {
                 return@BooleanSetting "KCEF is not supported on MacOS"

@@ -29,7 +29,7 @@ import {
   type DownloadItemNode,
 } from "../operations/downloads";
 
-/* The download queue's calls (Phase 6 Stage 4) over a mocked client. */
+/* The download queue's calls over a mocked client. */
 afterEach(() => vi.clearAllMocks());
 
 const node = (overrides: Partial<DownloadItemNode> = {}): DownloadItemNode => ({
@@ -138,7 +138,7 @@ describe("download operations", () => {
     });
   });
 
-  it("checks the download tools and plays a downloaded episode (Stage 5)", async () => {
+  it("checks the download tools and plays a downloaded episode", async () => {
     const tool = {
       tool: "FFMPEG",
       ok: true,

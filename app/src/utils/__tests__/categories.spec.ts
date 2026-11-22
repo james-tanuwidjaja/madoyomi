@@ -17,7 +17,7 @@ import {
 } from "../categories";
 import { makeCategory, makeDefaultCategory, makeLibraryEntry } from "../../test/fixtures";
 
-/* The Library's categories (Phase 6 Stage 1): tabs, sorts, names and the assign dialog's tri-state. */
+/* The Library's categories: tabs, sorts, names and the assign dialog's tri-state. */
 const def = makeDefaultCategory();
 const watching = makeCategory({ id: 1, order: 1, name: "Watching" });
 const later = makeCategory({ id: 2, order: 2, name: "Later" });
@@ -64,7 +64,6 @@ describe("a category's sort", () => {
   it("is read from and written to its meta", () => {
     expect(parseSort("title:asc")).toEqual({ by: "title", desc: false });
     expect(parseSort("added:desc")).toEqual({ by: "added", desc: true });
-    // Phase 6 Stage 2
     expect(parseSort("unread:desc")).toEqual({ by: "unread", desc: true });
     expect(parseSort("lastRead:asc")).toEqual({ by: "lastRead", desc: false });
     for (const bad of [null, undefined, "", "title", "unseen:asc", "title:up"]) {

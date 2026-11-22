@@ -10,7 +10,7 @@ import java.io.File
 import java.util.Locale
 
 /**
- * The mpv command line for one video (Phase 4 step 1, with Phase 0 S4's findings).
+ * The mpv command line for one video (with the early mpv spike's findings).
  *
  * Everything that comes from the source (headers, the title, subtitle and audio URLs, the video's own `mpvArgs`) goes
  * into a per-session config file that mpv reads with `--include`, written with mpv's fixed-length quoting

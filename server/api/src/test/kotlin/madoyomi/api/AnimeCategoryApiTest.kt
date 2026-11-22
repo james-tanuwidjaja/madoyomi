@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The anime categories (Phase 6 Stage 1): `animeCategories`, the category mutations and `AnimeType.categories`. */
+/** The anime categories: `animeCategories`, the category mutations and `AnimeType.categories`. */
 class AnimeCategoryApiTest : AnimeApiTest() {
     private val source = FakeAnimeSource(id = 7_272L)
 

@@ -27,7 +27,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import UpdatesView from "../UpdatesView.vue";
 
-/* Updates (Phase 6 Stage 3) against mocked calls: the kind's new items by day, opening one, the marks, the check. */
+/* Updates against mocked calls: the kind's new items by day, opening one, the marks, the check. */
 const today = (h: number) => {
   const d = new Date();
   d.setHours(h, 5, 0, 0);

@@ -47,7 +47,7 @@ import kotlin.test.assertTrue
 import suwayomi.tachidesk.manga.impl.Page as UpstreamPage
 
 /**
- * Manga downloads end to end (Phase 6 Stage 4): a chapter's pages from a loopback image host through the real
+ * Manga downloads end to end: a chapter's pages from a loopback image host through the real
  * downloader, staged outside the page cache, written as a CBZ with `ComicInfo.xml` at upstream's place for it, marked
  * downloaded, then read by upstream's reader path with the host refusing every request (offline); a page in the
  * reader's cache isn't fetched again; a retry goes on from the pages staged before; deleting the download.
@@ -334,7 +334,7 @@ class MangaDownloadApiTest : ApiGraphQLTest() {
         assertTrue(cbzOf(mangaId, chapters[0]).isFile)
     }
 
-    // --- Phase 7 Stage 3: the downloads folder of one's choice ---
+    // --- the downloads folder of one's choice ---
 
     private val folderFields =
         "path defaultPath isDefault reachable change { mode state from to filesDone filesTotal bytesDone bytesTotal message }"

@@ -23,7 +23,7 @@ import org.jetbrains.exposed.v1.jdbc.vendors.currentDialectMetadata
 import suwayomi.tachidesk.server.database.migration.helpers.UNLIMITED_TEXT
 
 /**
- * The anime library's categories (Phase 6 Stage 1): one list per kind, the user's decision (phase-6 §9).
+ * The anime library's categories: one list per kind, the user's decision.
  * - M0070's `ANIME_CATEGORY` stub (an anime FK and a FK to upstream's manga `CATEGORY`, never written) is dropped;
  * - `ANIME_CATEGORY` is the anime counterpart of upstream's `CATEGORY` (name, `sort_order`, `is_default`,
  *   `is_default_category`, the include-in-update/download flags, and `meta` as JSON text), with its "Default" row;

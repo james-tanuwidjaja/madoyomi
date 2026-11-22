@@ -13,7 +13,7 @@ import PageLayout from "../components/PageLayout.vue";
 import PreferenceRenderer from "../components/PreferenceRenderer.vue";
 
 /*
- * A source's own settings (Phase 3 step 17): the extension's preference screen through PreferenceRenderer, each
+ * A source's own settings: the extension's preference screen through PreferenceRenderer, each
  * change saved at once with an optimistic update (composables/usePreferences.ts). The source is the current kind's,
  * as on the source page; one that can't be used is handled the same way there (Open in Extensions).
  */

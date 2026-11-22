@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
 /**
- * What one session's mpv reports over IPC, turned into saved progress and events (Phase 4 steps 5–8). Fed every IPC
+ * What one session's mpv reports over IPC, turned into saved progress and events. Fed every IPC
  * event by [onMessage] (the reader thread), and once more by [finish] when the session ends. No I/O of its own: it
  * calls [Hooks].
  *
@@ -93,8 +93,8 @@ class PlaybackTracker(
     /**
      * Whether mpv never got the video playing: it reported no position, or it ended the file with its own "no audio
      * or video data played". mpv reports `time-pos` (the start position) once the file is open, before any frame
-     * plays, so an HLS stream whose playlist opens but whose segments all fail has a position (found live, Phase 4
-     * Stage 6).
+     * plays, so an HLS stream whose playlist opens but whose segments all fail has a position (found
+     * live).
      */
     @get:Synchronized
     val neverPlayed: Boolean get() = position == null || fileError == NOTHING_PLAYED

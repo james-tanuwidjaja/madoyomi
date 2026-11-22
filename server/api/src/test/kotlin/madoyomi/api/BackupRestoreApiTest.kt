@@ -86,7 +86,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Phase 6 Stage 6: `.madoyomi-backup` files (`madoyomi.core.backup`) through the GraphQL API: the round trip from a data
+ * `.madoyomi-backup` files (`madoyomi.core.backup`) through the GraphQL API: the round trip from a data
  * dir with both kinds into a fresh database, field by field, the extension reinstalled from its repo; merge against
  * replace; an extension no repo lists; a file that isn't a backup; the schedule's pruning; a `.tachibk`'s manga part.
  */

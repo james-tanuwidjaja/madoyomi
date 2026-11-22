@@ -29,8 +29,7 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 /**
- * Phase 2 exit criterion: filters and preferences round-trip through the API for real extensions that use them
- * (`docs/phases/phase-2-anime-sources.md` §6). No network: the APKs come from `tools/apks/` and
+ * Filters and preferences round-trip through the API for real extensions that use them. No network: the APKs come from `tools/apks/` and
  * `tools/compat-test/apks/` (skipped when missing), and a filtered search stops at the source.
  *
  * - Filters (kickassanime, aniwave, hanime): the filters as GraphQL lists them, every one moved off its default

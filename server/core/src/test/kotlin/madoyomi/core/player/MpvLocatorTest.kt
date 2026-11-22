@@ -18,8 +18,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Where mpv comes from (Phase 4 §9): the player settings' path, the property, `MADOYOMI_MPV`, then `PATH`; its config
- * dir; and the settings' check (Stage 5).
+ * Where mpv comes from: the player settings' path, the property, `MADOYOMI_MPV`, then `PATH`; its config
+ * dir; and the settings' check.
  */
 class MpvLocatorTest {
     private val root: File = Files.createTempDirectory("mpv-locator").toFile()

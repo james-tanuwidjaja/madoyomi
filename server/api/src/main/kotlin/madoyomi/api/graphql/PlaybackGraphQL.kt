@@ -18,7 +18,7 @@ import java.util.concurrent.CompletableFuture
 /** [PlaybackSessions.State] in the schema (a type named `State` would be too vague there). */
 enum class PlaybackState { RUNNING, EXITED, STOPPED }
 
-/** A playback session: the backend's mpv process for one episode (Phase 4; one session at a time). */
+/** A playback session: the backend's mpv process for one episode (one session at a time). */
 @GraphQLDescription("The backend's mpv session for one episode; one at a time")
 data class PlaybackSessionType(
     val id: String,

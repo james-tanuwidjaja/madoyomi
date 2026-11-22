@@ -18,7 +18,7 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * HLS and DASH episodes (Phase 6 Stage 5, §8 "the anime download tool"): ffmpeg first, yt-dlp when ffmpeg is missing
+ * HLS and DASH episodes: ffmpeg first, yt-dlp when ffmpeg is missing
  * or fails, and an error naming both failures when both do. The video's headers go on the command line ([ProcessArgs]
  * keeps them whole on Windows): for ffmpeg `-user_agent` and one `-headers` block (CRLF between them), which its HLS
  * demuxer also sends with every segment and key; for yt-dlp one `--add-header` each. Neither resumes: a retry starts

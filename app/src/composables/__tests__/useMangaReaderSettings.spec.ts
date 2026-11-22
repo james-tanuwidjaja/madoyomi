@@ -24,7 +24,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import { useMangaReaderSettings } from "../useMangaReaderSettings";
 
-/* A manga's reader settings (Phase 5 Stage 5): its meta read and written through upstream's manga meta (mocked here;
+/* A manga's reader settings: its meta read and written through upstream's manga meta (mocked here;
    the live spec runs the real round trip), resolved against its genres, its source and the global settings. */
 
 let pinia: Pinia;

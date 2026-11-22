@@ -146,7 +146,7 @@ private class ListSource(
 }
 
 /**
- * The download queue (Phase 6 Stage 4) with a fake downloader: the order, the limits (global, per source, the stagger),
+ * The download queue with a fake downloader: the order, the limits (global, per source, the stagger),
  * the state machine (retries, FAILED, retry, pause, resume, cancel), reorder, the queue across a restart of the
  * workers, the GraphQL around it (the queue, the completed list, the settings, the subscription), and the automatic
  * downloads after a library update check.
@@ -288,7 +288,7 @@ class DownloadQueueApiTest : ApiGraphQLTest() {
 
         until("a chapter of each source") { fake.started().size == 2 }
         // both start in one scheduling pass; which of the two coroutines records its start first is up to the dispatcher
-        // (Stage 5's final build saw them the other way round once), so the pair is compared as a set
+        // (a build saw them the other way round once), so the pair is compared as a set
         assertEquals(setOf(a[0], b[0]), fake.started().toSet(), "one per source, the first of each in queue order, two at once")
         assertEquals("DOWNLOADING", stateOf(a[0]))
         assertEquals(listOf(1, 2), queue().first { it["itemId"] == a[0] }.let { listOf(it["progressDone"], it["progressTotal"]) })
@@ -474,7 +474,7 @@ class DownloadQueueApiTest : ApiGraphQLTest() {
             graphql("mutation { enqueueDownloads(input: {kind: ANIME, itemIds: [424242]}) { queued } }")
                 .assertNoErrors()
                 .dataPath("enqueueDownloads", "queued"),
-            "the anime kind is accepted since Stage 5; an unknown episode is left out",
+            "the anime kind is accepted; an unknown episode is left out",
         )
         assertEquals(0, enqueue(listOf(424242)), "unknown ids are left out")
 

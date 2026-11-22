@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Phase 0 / S1 spike: smoke-test Mihon (Keiyoushi) manga extensions on a running Suwayomi-Server over GraphQL.
+  Spike S1: smoke-test Mihon (Keiyoushi) manga extensions on a running Suwayomi-Server over GraphQL.
 
 .DESCRIPTION
   For each package: install (Keiyoushi jarUrl, no dex2jar) -> popular page 1 -> details of the first manga ->

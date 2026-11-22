@@ -26,13 +26,13 @@ export interface NextEpisodeOptions {
 }
 
 /**
- * The next-episode flow (Phase 4 steps 8 and 15) of one anime's details page. When a session of this anime ENDS
+ * The next-episode flow of one anime's details page. When a session of this anime ENDS
  * with a next episode (the end of the file, or a quit past the watched threshold), `offer` is that episode with a
  * countdown of {@link NEXT_EPISODE_COUNTDOWN_SECONDS} s (null without auto-play). When it reaches 0, or on `playNow`,
- * the next episode plays without the picker (Stage 3's decision): the videos are fetched, the remembered choice for
- * the source is taken (else the player settings' preference, else the source's pick; Stage 5), and it plays from its
+ * the next episode plays without the picker (the user's decision): the videos are fetched, the remembered choice for
+ * the source is taken (else the player settings' preference, else the source's pick), and it plays from its
  * resume point (as the picker's default, with the settings' watched threshold), else
- * from the start. A downloaded next episode plays from its file instead (Phase 6 Stage 5), with nothing asked of the
+ * from the start. A downloaded next episode plays from its file instead, with nothing asked of the
  * source. If that can't work, the picker opens for that episode with why.
  *
  * `cancel`, a new session (another Play), and the page going away (the scope's end) stop it. `cancel` and the page
@@ -117,7 +117,7 @@ export function useNextEpisode(options: NextEpisodeOptions) {
     const sourceId = options.sourceId();
     const remembered = choices.choiceOf(sourceId);
     try {
-      // Phase 6 Stage 5: a downloaded next episode plays from its file (offline too), from its resume point
+      // A downloaded next episode plays from its file (offline too), from its resume point
       if (episode.downloaded) {
         const resumeAt = resumePoint(
           episode.isWatched,

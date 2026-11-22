@@ -24,7 +24,7 @@ import {
 } from "../webtoonNav";
 
 /*
- * The webtoon strip's layout and navigation (Phase 5 Stage 3): page heights before and after a page's size is known,
+ * The webtoon strip's layout and navigation: page heights before and after a page's size is known,
  * scroll offset ↔ position, the page counted as shown, the anchor that keeps the view still, the pages to load around
  * the viewport, and the keys.
  */
@@ -210,7 +210,7 @@ describe("the keys", () => {
   });
 });
 
-describe("createEdgeWheel (the wheel past the strip's ends, Stage 4)", () => {
+describe("createEdgeWheel (the wheel past the strip's ends)", () => {
   it("opens the next chapter on a new gesture down at the bottom", () => {
     const w = createEdgeWheel();
     expect(w.push(100, 0, 1)).toBe(1);
@@ -249,8 +249,8 @@ describe("createEdgeWheel (the wheel past the strip's ends, Stage 4)", () => {
   });
 });
 
-describe("stripWindow and the preload count (Stage 5)", () => {
-  it("keeps Stage 3's window at the default 4, and more pages past the viewport for a higher count", () => {
+describe("stripWindow and the preload count", () => {
+  it("keeps the default window at the default 4, and more pages past the viewport for a higher count", () => {
     expect(stripWindow(900)).toEqual({ behind: 900, ahead: 1800, minAhead: 2, max: 16 });
     expect(stripWindow(900, 4)).toEqual(stripWindow(900));
     expect(stripWindow(900, 2).minAhead).toBe(2);

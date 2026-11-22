@@ -133,7 +133,7 @@ describe("BackendGate", () => {
     await screen.find(".logs-button").trigger("click");
     expect(shell.invoke).toHaveBeenCalledWith("open_backend_logs");
 
-    // Phase 7 Stage 3: Export logs, without the backend's report (it isn't running)
+    // Export logs, without the backend's report (it isn't running)
     expect(screen.find("[data-testid='export-without-backend']").exists()).toBe(true);
     await screen.find("[data-action='export-logs']").trigger("click");
     await flushPromises();

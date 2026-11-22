@@ -17,8 +17,7 @@ import type {
  * Stored entries and their children: Madoyomi's `anime`/`episodes` and upstream's `manga`/`chapters` (database reads),
  * the refreshes from the source (`fetchAnimeAndEpisodes`; upstream's `fetchManga` + `fetchChapters`), the library flag
  * (`updateAnime`, upstream's `updateManga`), the library lists, and the episodes' watched marks (`updateEpisodes`, upstream's
- * `updateChapters`; Phase 4 Stage 3), and the chapters' read marks and reading progress (upstream's `updateChapter(s)`; Phase 5
- * Stage 2).
+ * `updateChapters`), and the chapters' read marks and reading progress (upstream's `updateChapter(s)`).
  */
 
 const ANIME_FIELDS = /* GraphQL */ `
@@ -304,7 +303,7 @@ export const LIBRARY_MANGA_QUERY = /* GraphQL */ `
   }
 `;
 
-/** Several entries in or out of the library at once (the Library's bulk removal, Phase 6). */
+/** Several entries in or out of the library at once (the Library's bulk removal). */
 export const UPDATE_ANIMES_MUTATION = /* GraphQL */ `
   mutation UpdateAnimes($ids: [Int!]!, $inLibrary: Boolean!) {
     updateAnimes(input: { ids: $ids, patch: { inLibrary: $inLibrary } }) {
@@ -456,7 +455,7 @@ type LibraryNode = Omit<
   inLibraryAt: string;
   /** `[{id}]` for anime, `{nodes: [{id}]}` for manga (upstream's node list). */
   categories: { id: number }[] | { nodes: { id: number }[] };
-  /** Anime (Phase 6 Stage 2): Madoyomi's counts. */
+  /** Anime: Madoyomi's counts. */
   unwatchedCount?: number;
   lastSeenAt?: string;
   /** Manga: upstream's. */

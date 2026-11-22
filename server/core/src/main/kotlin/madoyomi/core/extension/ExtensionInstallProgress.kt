@@ -22,7 +22,7 @@ enum class InstallState {
     FAILED,
 }
 
-/** One step of an install/update, for the Stage 7 `extensionInstallProgress` subscription. */
+/** One step of an install/update, for the `extensionInstallProgress` subscription. */
 data class ExtensionInstallProgress(
     /** The package; for a sideloaded file, its file name until the APK has been read. */
     val pkgName: String,

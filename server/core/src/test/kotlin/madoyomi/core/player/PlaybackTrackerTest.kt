@@ -212,7 +212,7 @@ class PlaybackTrackerTest {
     }
 
     @Test
-    fun `a file that never played is told apart from one that failed while playing (Stage 6)`() {
+    fun `a file that never played is told apart from one that failed while playing`() {
         assertTrue(tracker.neverPlayed, "no position yet")
         // mpv reports the start position once the file is open, before any frame plays (an HLS stream whose
         // segments all fail), then ends it with its own "no audio or video data played"
@@ -233,7 +233,7 @@ class PlaybackTrackerTest {
     }
 
     @Test
-    fun `the threshold is read at every position, so a change applies to the session that plays (Stage 5)`() {
+    fun `the threshold is read at every position, so a change applies to the session that plays`() {
         var threshold = 0.85
         val live = PlaybackTracker(hooks, watchedThreshold = { threshold }, clock = { now })
         live.onMessage(msg("""{"event":"property-change","id":2,"name":"duration","data":100.0}"""))

@@ -3,11 +3,11 @@ import { ref, shallowRef } from "vue";
 import type { PlaybackEvent, PlaybackSession } from "../api/types";
 
 /**
- * The session mpv is playing, as the backend's `playbackEvents` report it (Phase 4 Stage 3): the episode list draws
+ * The session mpv is playing, as the backend's `playbackEvents` report it: the episode list draws
  * its row's progress from here while it plays (PROGRESS at most once a second), so nothing is refetched for it. Set
  * by every event of a session, cleared by its CLOSED (the stored progress is then the episode's own).
  *
- * Stage 4: `retrying` while the backend fetches the videos of a session that couldn't open its video again
+ * `retrying` while the backend fetches the videos of a session that couldn't open its video again
  * (RETRYING, until that session's CLOSED), and the last ENDED and ERROR events, for the details page to act on (the
  * next-episode toast, the picker reopened with the next video). Each is a new object per event, so a watcher sees
  * every one; nothing is kept from before the app started.

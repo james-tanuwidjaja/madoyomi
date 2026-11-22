@@ -245,10 +245,10 @@ class AnimeMutation {
     /**
      * Upstream's `updateMangas` for anime: `inLibrary` sets `in_library`, and adding sets `added_at` (`inLibraryAt`) to
      * now, while removing keeps it, as upstream does. An entry added puts itself into the categories flagged for new
-     * entries unless it is in a category already (Phase 6; upstream's `Library.addMangaToLibrary`), and a removed one
+     * entries unless it is in a category already (upstream's `Library.addMangaToLibrary`), and a removed one
      * keeps its categories. Every id must exist (`NOT_FOUND` otherwise, before anything is written). Upstream also
      * queues uninitialized entries for a library update and moves the thumbnail out of the cache; anime library
-     * updates and downloads are Phase 6, and the UI refreshes an uninitialized entry on open.
+     * updates and downloads are separate, and the UI refreshes an uninitialized entry on open.
      */
     private fun updateAnimes(
         ids: List<Int>,
@@ -324,7 +324,7 @@ class AnimeMutation {
     )
 
     /**
-     * Upstream's `updateChapters` for episodes (Phase 4 Stage 3): `isWatched`, `isBookmarked` and `lastSecondSeen`
+     * Upstream's `updateChapters` for episodes: `isWatched`, `isBookmarked` and `lastSecondSeen`
      * (milliseconds, as the player stores it). Marking unwatched also clears the position, as the Aniyomi app's
      * `SetSeenStatus` does, unless the patch sets one; marking watched keeps it. The duration is never changed here.
      * Every id must exist (`NOT_FOUND` otherwise, before anything is written). A position stamps the episodes' watch
@@ -349,7 +349,7 @@ class AnimeMutation {
                     }
                 }
             }
-            // A position given is progress: it stamps the watch history (Phase 6 Stage 2), as upstream's lastPageRead
+            // A position given is progress: it stamps the watch history, as upstream's lastPageRead
             // stamps last_read_at; a watched mark alone, and marking unwatched, don't.
             if (patch.lastSecondSeen != null && patch.isWatched != false) AnimeHistory.stamp(rows.map { it[EpisodeTable.id].value })
         }

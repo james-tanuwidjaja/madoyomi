@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * mpv's JSON IPC (Phase 4 step 4; [player/IPC.md](../../../../../../../../player/IPC.md)): one JSON object per line in
+ * Mpv's JSON IPC ([player/IPC.md](../../../../../../../../player/IPC.md)): one JSON object per line in
  * both directions. A command is `{"command": [...], "request_id": n}` and its reply `{"request_id": n, "error":
  * "success", "data": …}`; everything else mpv sends is an event (`{"event": "property-change", "id": …, "name": …,
  * "data": …}`, `end-file`, `seek`, …), handed to [onEvent] on the reader thread, in order.

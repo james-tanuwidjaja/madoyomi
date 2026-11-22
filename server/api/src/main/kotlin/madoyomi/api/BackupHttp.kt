@@ -15,7 +15,7 @@ import suwayomi.tachidesk.server.user.requireUser
 import java.net.URLEncoder
 
 /**
- * Backup files over REST (Phase 6 Stage 6; everything else is GraphQL):
+ * Backup files over REST (everything else is GraphQL):
  * - `GET /api/v1/madoyomi/backups/{name}`: the file's bytes, as a download;
  * - `POST /api/v1/madoyomi/backups?name=<file name>` with the file as the body: a backup the user picked, checked to be
  *   one (`BAD_REQUEST` if not) and kept in the backups folder under its name; answers `{"name": …}`.

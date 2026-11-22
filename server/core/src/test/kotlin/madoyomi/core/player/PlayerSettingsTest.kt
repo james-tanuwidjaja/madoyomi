@@ -17,7 +17,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** The player settings' file (Phase 4 Stage 5): defaults, changes, validation, and a file edited by hand. */
+/** The player settings' file: defaults, changes, validation, and a file edited by hand. */
 class PlayerSettingsTest {
     private val dir: File = Files.createTempDirectory("player-settings").toFile()
     private val file = File(dir, PlayerSettingsStore.FILE_NAME)

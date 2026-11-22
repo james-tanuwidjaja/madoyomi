@@ -107,7 +107,7 @@ dependencies {
     implementation(kotlin("script-runtime"))
 
     testImplementation(libs.mockk)
-    // Madoyomi: the fake mpv named-pipe server of the player tests (Phase 4)
+    // Madoyomi: the fake mpv named-pipe server of the player tests
     testImplementation(libs.jna.platform)
 
     implementation(libs.cron4j)

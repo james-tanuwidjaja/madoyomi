@@ -29,10 +29,10 @@ import PageLayout from "../components/PageLayout.vue";
 import VirtualGrid from "../components/VirtualGrid.vue";
 
 /*
- * The Library (Phase 3 step 16): the current kind's saved entries as a grid of covers (virtualized above 60). An
+ * The Library: the current kind's saved entries as a grid of covers (virtualized above 60). An
  * empty library links to Browse.
  *
- * Phase 6 Stage 1, categories (one list per kind):
+ * Categories (one list per kind):
  * - a tab per category, with its count, once the kind has a category besides Default (Default's tab only while it
  *   holds entries); the open tab is remembered per kind on this device;
  * - each tab has its own sort, by title or by when entries were added, either way, kept in the category's meta. A
@@ -40,10 +40,10 @@ import VirtualGrid from "../components/VirtualGrid.vue";
  * - "Categories" opens the management dialog; "Select" picks entries (a click, Shift+click for a range, Select all)
  *   for "Set categories" and "Remove from library"; Esc or Done ends it.
  *
- * Phase 6 Stage 2: each card shows its unwatched/unread count (from the library query, fetched again when progress
+ * Each card shows its unwatched/unread count (from the library query, fetched again when progress
  * changes), and the sort has "Unwatched/Unread" and "Last watched/read".
  *
- * Phase 6 Stage 3: "Update library" checks the kind's library for new items ("Update <tab>" only the open category),
+ * "Update library" checks the kind's library for new items ("Update <tab>" only the open category),
  * and a card an update check found new items in shows "N new" until the entry is opened.
  */
 const backend = useBackendStore();

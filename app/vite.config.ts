@@ -8,7 +8,7 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig({
   plugins: [vue()],
 
-  // The reader (Phase 5) is a lazy route that imports the window API: pre-bundled up front, so its first open in
+  // The reader is a lazy route that imports the window API: pre-bundled up front, so its first open in
   // `pnpm dev` doesn't make Vite optimize it and reload the page mid-navigation.
   optimizeDeps: {
     include: [

@@ -1,18 +1,18 @@
 import type { ReadingDirection } from "./pagedNav";
 
 /*
- * The reader's settings (Phase 5 Stage 5, §3 and step 11), pure so they are unit-tested without a store or the API:
+ * The reader's settings, pure so they are unit-tested without a store or the API:
  * - global ones, kept on this device (`stores/reader.ts`, one JSON value in `localStorage`): the default mode and
  *   direction, the page fit of the paged modes, the strip's width, the page gap, the background and the preload count;
  * - per-manga ones, kept in the manga's meta (upstream's `setMangaMeta`, strings only; they go into backups): the mode
  *   and the direction, as in Mihon.
  *
- * A manga's mode (§8, the user's): its own, else webtoon when its genres or tags say Long Strip, Webtoon, Manhwa or
- * Manhua, else webtoon when its source's name says Webtoon (Stage 5, the user's), else the global default. Values
+ * A manga's mode (the user's decision): its own, else webtoon when its genres or tags say Long Strip, Webtoon, Manhwa or
+ * Manhua, else webtoon when its source's name says Webtoon (the user's), else the global default. Values
  * that aren't known (a hand edit, a later version's) read as not set.
  */
 
-/** The reader's modes: one page at a time, two side by side (Stage 4), or the vertical strip (Stage 3). */
+/** The reader's modes: one page at a time, two side by side, or the vertical strip. */
 export type ReaderMode = "paged" | "double" | "webtoon";
 export const READER_MODES: readonly ReaderMode[] = ["paged", "double", "webtoon"];
 export const READING_DIRECTIONS: readonly ReadingDirection[] = ["rtl", "ltr"];
@@ -121,7 +121,7 @@ export function parseMangaMeta(meta: readonly { key: string; value: string }[]):
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The mode by content (§8)
+// The mode by content
 
 /** Genres and tags that mean a vertical strip, written as {@link genreToken} makes them. */
 const WEBTOON_GENRES = new Set(["longstrip", "webtoon", "webtoons", "manhwa", "manhua"]);

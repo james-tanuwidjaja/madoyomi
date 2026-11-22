@@ -11,8 +11,8 @@ import { useBackendStore } from "../stores/backend";
 import { queryKeys } from "./queryKeys";
 
 /*
- * The reader settings the backend applies (Phase 5 Stage 1, Settings → Reader): the chapter-page cache's cap. The
- * reader's own preferences (mode, direction, fit, …) are the app's, from Stage 2 on.
+ * The reader settings the backend applies (Settings → Reader): the chapter-page cache's cap. The
+ * reader's own preferences (mode, direction, fit, …) are the app's.
  */
 
 /** As `ReaderSettings()` in Kotlin. */

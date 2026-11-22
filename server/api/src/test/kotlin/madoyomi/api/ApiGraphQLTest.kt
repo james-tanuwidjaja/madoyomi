@@ -114,7 +114,7 @@ abstract class ApiGraphQLTest : ApplicationTest() {
         TransactionManager.defaultDatabase = database
         serverConfig.extensionStores.value = emptyList()
         resetRuntime()
-        // each test starts from the default player settings, in a file of its own (Phase 4 Stage 5)
+        // each test starts from the default player settings, in a file of its own
         PlayerSettingsStore.fileOverride =
             kotlin.io.path
                 .createTempFile("player-settings", ".json")

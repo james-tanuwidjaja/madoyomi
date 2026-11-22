@@ -32,7 +32,7 @@ const changelog = [
   "",
 ].join("\r\n");
 
-describe("changelogSection (Phase 7 Stage 6)", () => {
+describe("changelogSection", () => {
   it("keeps a section's first bullet: the heading ends at its own line", () => {
     expect(changelogSection(changelog, "0.1.1")).toBe("- The first bullet.\n- The second bullet.");
   });

@@ -28,7 +28,7 @@ import {
 } from "../../utils/backups";
 import type { BackupReport, RestoreStatus } from "../types";
 
-/* Backups' calls (Phase 6 Stage 6) over a mocked client, and Settings → Backup's wording. */
+/* Backups' calls over a mocked client, and Settings → Backup's wording. */
 afterEach(() => vi.clearAllMocks());
 
 const fileNode = {

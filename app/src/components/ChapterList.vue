@@ -15,13 +15,13 @@ import EntryItemList from "./EntryItemList.vue";
 import ErrorNotice from "./ErrorNotice.vue";
 
 /**
- * A manga's chapters, sorted and filtered, virtualized (EntryItemList). Phase 5 Stage 2: a click on a row, or its
+ * A manga's chapters, sorted and filtered, virtualized (EntryItemList). A click on a row, or its
  * Read / Continue button, opens the reader (`/manga/:id/read/:chapterId`), which resumes where reading stopped; a
  * row read partway shows "Page 13 of 92". Rows can be selected for "Mark read", "Mark unread" (which also sends the
  * chapter back to its first page, as Mihon does) and, with one row, "Mark previous as read" (every earlier chapter in
  * the source's order), through `updateChapters`.
  *
- * Phase 6 Stage 4, downloads: a row's Download button queues it, and while it is queued or downloading the row says how
+ * Downloads: a row's Download button queues it, and while it is queued or downloading the row says how
  * far it got with Cancel (Retry once it failed); a downloaded one has a badge and opens from its CBZ, offline too. The
  * selection (Shift+click for a range) has Download and Delete downloads, and the toolbar's "Download…" queues the next
  * 1, 5, 10 or 25 unread chapters in reading order, or all of them. The queue itself is the Downloads screen.

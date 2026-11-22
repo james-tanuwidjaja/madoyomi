@@ -15,7 +15,7 @@ import java.util.Locale;
 
 /**
  * Madoyomi: android.os.LocaleList on top of java.util.Locale (android-jar only has "Stub!" bodies, and every
- * Keiyoushi extension of the Phase 2 compat scan calls getDefault/get/size, e.g. to format dates). Replaces the
+ * Keiyoushi extension of the compat scan calls getDefault/get/size, e.g. to format dates). Replaces the
  * android-jar class: AndroidCompat's build leaves it out of the android-jar it uses (see server/UPSTREAM.md).
  * The public API is android-jar's.
  */

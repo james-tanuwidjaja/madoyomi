@@ -9,8 +9,8 @@ import { usePageLoader, type PageFetcher, type PageSize } from "../usePageLoader
 import { withSetup } from "../../test/withSetup";
 
 /*
- * The reader's page loader (Phase 5 Stage 2) over a scripted fetcher: at most 4 requests at a time, the current page
- * first, pages leaving the window aborted and their object URLs revoked, and a retry past the cache. Stage 3: a
+ * The reader's page loader over a scripted fetcher: at most 4 requests at a time, the current page
+ * First, pages leaving the window aborted and their object URLs revoked, and a retry past the cache. A
  * window given by the webtoon strip, decoding before a page counts as loaded, and the sizes kept for the chapter.
  */
 interface Call {
@@ -205,7 +205,7 @@ describe("usePageLoader", () => {
   });
 });
 
-describe("usePageLoader with the webtoon strip's window (Stage 3)", () => {
+describe("usePageLoader with the webtoon strip's window", () => {
   let decodes: { url: string; resolve: (s: PageSize | null) => void }[];
 
   function setupStrip(pageCount: number, wanted: number[] | null) {
@@ -296,7 +296,7 @@ describe("usePageLoader with the webtoon strip's window (Stage 3)", () => {
   });
 });
 
-describe("usePageLoader: the preload count (Stage 5)", () => {
+describe("usePageLoader: the preload count", () => {
   it("loads as many pages ahead as the count says, and follows a new count at once", async () => {
     const ahead = ref(2);
     const position = ref(0);
@@ -332,7 +332,7 @@ describe("usePageLoader: the preload count (Stage 5)", () => {
   });
 });
 
-describe("usePageLoader: the neighbours' opening pages held ahead (Stage 6)", () => {
+describe("usePageLoader: the neighbours' opening pages held ahead", () => {
   const next = (i: number) => `/api/v1/manga/34/chapter/2/page/${i}`;
 
   function setupHeld(pageCount: number, wanted: number[], heldRoutes: string[]) {

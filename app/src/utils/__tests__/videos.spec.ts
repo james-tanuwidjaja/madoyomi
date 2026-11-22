@@ -170,7 +170,7 @@ describe("videoFacts", () => {
   });
 });
 
-describe("the preference (Phase 4 Stage 5)", () => {
+describe("the preference", () => {
   // the list as the backend sorts it: the preferred server's hoster moved ahead of the source's first
   const sorted = () => [
     hoster(0, {
@@ -230,7 +230,7 @@ describe("the preference (Phase 4 Stage 5)", () => {
   });
 });
 
-describe("hosterLabel (Phase 7 Stage 6)", () => {
+describe("hosterLabel", () => {
   it("shows a hoster's own name, and none for the backend's placeholder of a source without hosters", () => {
     expect(hosterLabel("VidStreaming")).toBe("VidStreaming");
     expect(hosterLabel("no_hoster_list")).toBeNull();

@@ -90,7 +90,7 @@ describe("resumePoint", () => {
     expect(resumePoint(false, { positionMs: 0, durationMs: 100_000 })).toBeNull();
   });
 
-  it("follows another threshold (Stage 5's setting)", () => {
+  it("follows another threshold (the player setting)", () => {
     expect(resumePoint(false, at(0.9), 0.95)).toBe(90);
   });
 });

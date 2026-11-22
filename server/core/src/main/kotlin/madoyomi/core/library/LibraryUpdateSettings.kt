@@ -18,7 +18,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 /**
- * The library update settings (Phase 6 Stage 3, Settings → Updates), one set for both kinds, kept by the backend in
+ * The library update settings (Settings → Updates), one set for both kinds, kept by the backend in
  * `<data dir>/library-update.json` because the backend applies them: the schedule and which entries a check skips.
  * The toast is shown by the app; [notify] is kept here so a backup carries it with the rest.
  */

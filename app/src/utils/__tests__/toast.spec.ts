@@ -11,7 +11,7 @@ vi.mock("@tauri-apps/plugin-notification", () => plugin);
 
 import { showToast } from "../toast";
 
-/* The Windows toast (Phase 6 Stage 3) through a mocked Tauri notification plugin. */
+/* The Windows toast through a mocked Tauri notification plugin. */
 afterEach(() => vi.clearAllMocks());
 
 const text = { title: "2 new episodes", body: "Oshi no Ko" };

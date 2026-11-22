@@ -30,9 +30,9 @@ function stored(): Choices {
 }
 
 /**
- * The video picker's last choice per anime source (Phase 4 step 12): the hoster's name and the video's title and
+ * The video picker's last choice per anime source: the hoster's name and the video's title and
  * resolution, which stay the same between episodes where the indexes don't. Kept on this device, like the other UI
- * preferences (pins, sorts; Phase 3 §9), and preselected the next time an episode of that source is played.
+ * preferences (pins, sorts), and preselected the next time an episode of that source is played.
  */
 export const useVideoChoicesStore = defineStore("videoChoices", () => {
   const choices = ref<Choices>(stored());

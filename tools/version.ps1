@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  One version for Madoyomi (Phase 7 Stage 2): VERSION at the repo root is the source; this script checks or writes
+  One version for Madoyomi: VERSION at the repo root is the source; this script checks or writes
   the copies in the app, the shell and the server.
 
 .DESCRIPTION

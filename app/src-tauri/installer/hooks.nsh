@@ -1,4 +1,4 @@
-; Madoyomi's hooks into Tauri's NSIS installer (Phase 7 Stage 2), set in tauri.conf.json
+; Madoyomi's hooks into Tauri's NSIS installer, set in tauri.conf.json
 ; (bundle.windows.nsis.installerHooks). Tauri inserts each macro into its own installer.nsi.
 ;
 ; Tauri's uninstaller has a "Delete the application data" box. On its own it removes only

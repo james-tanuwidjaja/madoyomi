@@ -50,7 +50,7 @@ vi.mock("../../composables/usePageLoader", async (importOriginal) => {
 import ReaderView from "../ReaderView.vue";
 
 /*
- * The reader (Phase 5 Stage 2) against mocked operations and page fetches: where it opens, the click zones, keys
+ * The reader against mocked operations and page fetches: where it opens, the click zones, keys
  * and the wheel in both directions, the chapter boundaries, the read mark, a failed page's retry, the prefetch and
  * the concurrency limit. jsdom has no layout, so the reader is 900 px wide by a stubbed getBoundingClientRect.
  */
@@ -421,7 +421,7 @@ describe("ReaderView", () => {
   });
 });
 
-describe("ReaderView in the webtoon mode (Stage 3)", () => {
+describe("ReaderView in the webtoon mode", () => {
   // jsdom has no layout: the strip is 1000 × 900 px (so 800 px wide, pages of 1200 px before their size is known).
   beforeEach(() => {
     for (const [prop, value] of [
@@ -589,7 +589,7 @@ describe("ReaderView in the webtoon mode (Stage 3)", () => {
   });
 });
 
-describe("ReaderView in the double-page mode (Stage 4)", () => {
+describe("ReaderView in the double-page mode", () => {
   const spread = () => wrapper.find('[data-testid="spread"]');
   const shown = () => spread().attributes("data-pages");
   const count = () => wrapper.find('[data-testid="page-count"]').text();
@@ -681,7 +681,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
     wrapper = undefined as unknown as VueWrapper;
   });
 
-  it("saves the page it opened on until the reader moves, so a reopen doesn't move the place (Stage 6)", async () => {
+  it("saves the page it opened on until the reader moves, so a reopen doesn't move the place", async () => {
     // left at page 4 (index 3) when page 1 was paired with 2 (Shift): now 3 opens as the first of the spread 3-4
     chapters[0] = { ...chapters[0]!, lastPageRead: 3 };
     useReaderStore().prefs.mode = "double";
@@ -714,7 +714,7 @@ describe("ReaderView in the double-page mode (Stage 4)", () => {
   });
 });
 
-describe("ReaderView zoom and pan (Stage 4)", () => {
+describe("ReaderView zoom and pan", () => {
   const zoom = () => Number(wrapper.find('[data-testid="paged-reader"]').attributes("data-zoom"));
   /** A click with its count (`detail`: 2 is the second click of a double-click). */
   async function click(x: number, detail: number) {
@@ -835,7 +835,7 @@ describe("ReaderView zoom and pan (Stage 4)", () => {
   });
 });
 
-describe("ReaderView, the seamless next chapter (Stage 4)", () => {
+describe("ReaderView, the seamless next chapter", () => {
   it("fetches the next chapter's page list near the end, and goes on into it at once", async () => {
     let queryOf5002 = 0;
     const base = ops.fetchChapterPages.getMockImplementation()!;
@@ -880,7 +880,7 @@ describe("ReaderView, the seamless next chapter (Stage 4)", () => {
   });
 });
 
-describe("ReaderView, the webtoon strip's wheel past its ends (Stage 4)", () => {
+describe("ReaderView, the webtoon strip's wheel past its ends", () => {
   beforeEach(() => {
     for (const [prop, value] of [
       ["clientWidth", 1000],
@@ -933,7 +933,7 @@ describe("ReaderView, the webtoon strip's wheel past its ends (Stage 4)", () => 
     expect(stripEl().scrollTop).toBe(240);
   });
 
-  it("shows the next chapter's first page held ahead in the new strip, without fetching it again (Stage 6)", async () => {
+  it("shows the next chapter's first page held ahead in the new strip, without fetching it again", async () => {
     useReaderStore().prefs.mode = "webtoon";
     await mountReader();
     await wheelAt(1000, 100);
@@ -959,7 +959,7 @@ describe("ReaderView, the webtoon strip's wheel past its ends (Stage 4)", () => 
   });
 });
 
-describe("ReaderToolbar's focus (Stage 4)", () => {
+describe("ReaderToolbar's focus", () => {
   it("leaves the focus on the reader after a mouse click on a button, and the slider gives it back", async () => {
     await mountReader();
     for (const action of ["mode-double", "direction", "fullscreen"]) {
@@ -979,7 +979,7 @@ describe("ReaderToolbar's focus (Stage 4)", () => {
   });
 });
 
-describe("ReaderView settings (Stage 5)", () => {
+describe("ReaderView settings", () => {
   const reader = () => wrapper.find('[data-testid="reader"]');
   const strip = () => wrapper.find('[data-testid="webtoon-reader"]');
   const sheet = () => wrapper.find('[data-testid="reader-settings-sheet"]');
@@ -1115,7 +1115,7 @@ describe("ReaderView settings (Stage 5)", () => {
   });
 });
 
-describe("ReaderView page fit (Stage 5)", () => {
+describe("ReaderView page fit", () => {
   // The reader is 900 × 700; a 1:2 page fitted to the width is 900 × 1400, laid out 350 px above and below the
   // window; fitted to the screen it is 350 × 700 in the middle.
   beforeEach(() => {
@@ -1186,7 +1186,7 @@ describe("ReaderView page fit (Stage 5)", () => {
     expect(position()).toBe("1");
   });
 
-  it("goes back to the start view when the fit changes after a pan (Stage 6)", async () => {
+  it("goes back to the start view when the fit changes after a pan", async () => {
     useReaderStore().set({ fit: "width" });
     await mountReader();
     await key(" ");
@@ -1199,7 +1199,7 @@ describe("ReaderView page fit (Stage 5)", () => {
     expect(layer()).not.toContain("translate");
   });
 
-  it("keeps Stage 2's whole page with fit screen", async () => {
+  it("keeps the whole page with fit screen", async () => {
     await mountReader();
     expect(paged().attributes("data-fit")).toBe("screen");
     expect(paged().classes()).not.toContain("scrollable");
@@ -1208,7 +1208,7 @@ describe("ReaderView page fit (Stage 5)", () => {
   });
 });
 
-describe("ReaderView strip width (Stage 5)", () => {
+describe("ReaderView strip width", () => {
   beforeEach(() => {
     for (const [prop, value] of [
       ["clientWidth", 1000],
@@ -1243,7 +1243,7 @@ describe("ReaderView strip width (Stage 5)", () => {
   });
 });
 
-describe("ReaderView, the neighbours' opening pages held ahead (Stage 6)", () => {
+describe("ReaderView, the neighbours' opening pages held ahead", () => {
   const callsFor = (path: string) => assetCalls.filter((c) => c.path === path).length;
 
   it("loads the next chapter's first pages once its list is in, and shows its first page in the first render", async () => {

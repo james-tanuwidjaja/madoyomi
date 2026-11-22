@@ -16,7 +16,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * [MpvCommand] (Phase 4 step 18): the S4 header forms, subtitles and audio tracks, the source's `mpvArgs` with the
+ * [MpvCommand]: the S4 header forms, subtitles and audio tracks, the source's `mpvArgs` with the
  * reserved ones left out, and only our own values on the command line. The include file is read back with mpv's
  * fixed-length quoting (`name=%<bytes>%value`), so a value comes back exactly as the source gave it.
  */

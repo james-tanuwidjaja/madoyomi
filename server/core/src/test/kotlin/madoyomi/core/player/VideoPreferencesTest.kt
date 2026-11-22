@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** The preferred server and quality's order (Phase 4 step 9): stable, after the source's own. */
+/** The preferred server and quality's order: stable, after the source's own. */
 class VideoPreferencesTest {
     private data class V(
         val title: String,

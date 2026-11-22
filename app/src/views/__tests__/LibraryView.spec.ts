@@ -30,7 +30,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import LibraryView from "../LibraryView.vue";
 
-/* The Library against a mocked `fetchLibrary` and, since Phase 6, `fetchCategories` and the category calls. */
+/* The Library against a mocked `fetchLibrary`, `fetchCategories` and the category calls. */
 const entry = (
   kind: MediaKind,
   id: number,
@@ -128,7 +128,7 @@ describe("LibraryView", () => {
     });
   });
 
-  it("shows the unwatched/unread count on the cards above 0 (Phase 6 Stage 2)", async () => {
+  it("shows the unwatched/unread count on the cards above 0", async () => {
     libraries.anime = [entry("anime", 1, "A", 1, [], 12), entry("anime", 2, "B", 2, [], 0)];
     libraries.manga = [entry("manga", 9, "M", 1, [], 1)];
     await mountLibrary();
@@ -145,7 +145,7 @@ describe("LibraryView", () => {
     expect(counts()).toEqual([["1", "1 unread"]]);
   });
 
-  it("sorts by the unwatched count and by last watched, never-watched last (Phase 6 Stage 2)", async () => {
+  it("sorts by the unwatched count and by last watched, never-watched last", async () => {
     libraries.anime = [
       entry("anime", 1, "A", 1, [], 3, 500),
       entry("anime", 2, "B", 2, [], 9, 0),
@@ -214,7 +214,7 @@ describe("LibraryView", () => {
     expect(titles()).toHaveLength(3);
   });
 
-  describe("categories (Phase 6 Stage 1)", () => {
+  describe("categories", () => {
     const tabs = () =>
       wrapper
         .findAll('[data-testid="category-tab"]')
@@ -371,7 +371,7 @@ describe("LibraryView", () => {
     });
   });
 
-  describe("library updates (Phase 6 Stage 3)", () => {
+  describe("library updates", () => {
     it("starts a check of the kind's library, or of the open tab, and shows the running check with Stop", async () => {
       ops.startLibraryUpdate.mockResolvedValue(
         makeLibraryCheck({ running: true, total: 3, done: 1 }),

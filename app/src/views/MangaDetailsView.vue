@@ -13,11 +13,11 @@ import ErrorNotice from "../components/ErrorNotice.vue";
 import PageLayout from "../components/PageLayout.vue";
 
 /*
- * A manga's details (Phase 3 step 15): the stored entry with its chapters, refreshed from the source (upstream's
+ * A manga's details: the stored entry with its chapters, refreshed from the source (upstream's
  * `fetchManga`, then `fetchChapters`) by the button, and by itself the first time an entry that was never fetched is
  * opened. A source's failure is shown above the stored data, which stays.
  *
- * Phase 5 Stage 2: "Start reading" / "Continue reading" opens the first unread chapter in the source's order in the
+ * "Start reading" / "Continue reading" opens the first unread chapter in the source's order in the
  * reader (where it stopped, if it was begun), and the chapter rows open the reader too.
  */
 const props = defineProps<{ id: number }>();

@@ -9,7 +9,7 @@ import type {
 
 /*
  * Preference screens as the server returns them (upstream's `Preference` union, aliased as in types.ts), modelled on
- * AnimePahe's 7 preferences (Phase 2 §10: lists, switches, an edit text) and MangaDex's content-rating multi-select.
+ * AnimePahe's 7 preferences (lists, switches, an edit text) and MangaDex's content-rating multi-select.
  */
 
 const base = { visible: true, enabled: true };

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checks a release's updater files (Phase 7 Stage 5): latest.json and the NSIS installer it points at.
+// Checks a release's updater files: latest.json and the NSIS installer it points at.
 //
 //   node tools/verify-updater.mjs <latest.json> <installer.exe> [--version X.Y.Z] [--repo owner/name] [--config path]
 //

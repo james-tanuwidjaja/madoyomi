@@ -49,7 +49,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Anime downloads end to end (Phase 6 Stage 5) through the queue and the real downloader, from a loopback host that
+ * Anime downloads end to end through the queue and the real downloader, from a loopback host that
  * checks the video's headers on every request (a value with quotes, a comma and a semicolon, as KickAssAnime's
  * `sec-ch-ua`):
  * - a direct file streamed by the backend, with its subtitle and its external audio track (as KickAssAnime sends its

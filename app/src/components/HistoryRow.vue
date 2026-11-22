@@ -6,7 +6,7 @@ import type { HistoryItem } from "../api/types";
 import { historyTime, resumeLabel, resumeRoute, targetProgress } from "../utils/history";
 
 /**
- * One History row (Phase 6 Stage 2): the cover, the entry (to its details), its episode or chapter played or read
+ * One History row: the cover, the entry (to its details), its episode or chapter played or read
  * last with the time and how far it got, Resume (what `resume` names: the item, or the next one when it is finished)
  * and Remove (the entry's history; its marks and positions stay).
  */

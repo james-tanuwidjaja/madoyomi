@@ -59,7 +59,7 @@ object ErrorClassifier {
             }
 
             // upstream's CloudflareInterceptor: the site answered with a Cloudflare challenge and no solver is set up
-            // (or FlareSolverr failed). The site's doing, not a server fault (it was INTERNAL; Phase 2 Stage 5)
+            // (or FlareSolverr failed). The site's doing, not a server fault (it was INTERNAL)
             cloudflareBlock(e) != null -> {
                 expected(ErrorCode.SOURCE_FAILED, cloudflareBlock(e)!!.message ?: CLOUDFLARE_BLOCKED, mapOf("reason" to REASON_CLOUDFLARE))
             }

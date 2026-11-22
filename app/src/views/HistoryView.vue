@@ -10,7 +10,7 @@ import HistoryRow from "../components/HistoryRow.vue";
 import PageLayout from "../components/PageLayout.vue";
 
 /*
- * History (Phase 6 Stage 2 step 7) of the kind the switch shows (the user's choice, as every other section): one
+ * History of the kind the switch shows (the user's choice, as every other section): one
  * row per entry, its episode or chapter played or read last, grouped by day, newest first, 50 at a time. Resume
  * opens the chapter in the reader at its page or the episode's picker on its details page (the next one when it is
  * finished); Remove takes the entry out of history; Clear all, confirmed by a second click, empties it. Neither

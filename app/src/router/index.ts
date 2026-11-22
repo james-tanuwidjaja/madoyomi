@@ -32,9 +32,9 @@ declare module "vue-router" {
 }
 
 /**
- * Phase 3 step 10's routes, plus `/downloads` (the sidebar's placeholder), a not-found page, since Phase 5 the
- * reader (`/manga/:id/read/:chapterId?page=N`, without the shell), and since Phase 6 Stage 2 `/history` (the kind's
- * history; `/anime/:id?play=<episodeId>` opens an episode's picker, History's resume), and since Stage 3 `/updates`
+ * The app's routes, plus `/downloads` (the sidebar's placeholder), a not-found page, the
+ * reader (`/manga/:id/read/:chapterId?page=N`, without the shell), `/history` (the kind's
+ * history; `/anime/:id?play=<episodeId>` opens an episode's picker, History's resume), and `/updates`
  * (the kind's new episodes or chapters, the library update check).
  */
 export const routes: RouteRecordRaw[] = [

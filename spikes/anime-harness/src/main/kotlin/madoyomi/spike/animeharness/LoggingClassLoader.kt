@@ -6,7 +6,7 @@ import java.net.URLClassLoader
 /**
  * Same lookup order as Suwayomi's `ChildFirstURLClassLoader` (system -> jar -> parent), so the host's
  * copies of OkHttp/Jsoup/kotlinx/Injekt and our animesource API always win. Records every class name
- * that none of them could resolve: those are the missing-stub candidates for Phase 2.
+ * that none of them could resolve: those are the missing-stub candidates.
  */
 class LoggingClassLoader(
     urls: Array<URL>,

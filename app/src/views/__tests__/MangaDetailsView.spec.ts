@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 describe("MangaDetailsView", () => {
-  it("clears the manga's New mark from a library update when it is opened (Phase 6 Stage 3)", async () => {
+  it("clears the manga's New mark from a library update when it is opened", async () => {
     ops.clearUpdateMarks.mockResolvedValue(1);
     queryClient.setQueryData(queryKeys.updateMarks("manga"), { 34: 2, 5: 1 });
     await mountDetails();
@@ -168,7 +168,7 @@ describe("MangaDetailsView", () => {
     expect(names()).toEqual(["Chapter 2"]);
   });
 
-  it("starts reading at the first chapter, and continues at the first unread one (Phase 5)", async () => {
+  it("starts reading at the first chapter, and continues at the first unread one", async () => {
     await mountDetails();
     const resume = () => wrapper.find('[data-action="resume"]');
     expect(resume().text()).toBe("Start reading");

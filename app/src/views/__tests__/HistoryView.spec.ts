@@ -23,7 +23,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import HistoryView from "../HistoryView.vue";
 
-/* History (Phase 6 Stage 2) against mocked history calls: the kind's list by day, resume, remove, clear, paging. */
+/* History against mocked history calls: the kind's list by day, resume, remove, clear, paging. */
 const today = (h: number) => {
   const d = new Date();
   d.setHours(h, 5, 0, 0);

@@ -3,7 +3,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /*
- * The reader's fullscreen (Phase 5 Stage 2): the app's window itself in the desktop app (Tauri's `setFullscreen`;
+ * The reader's fullscreen: the app's window itself in the desktop app (Tauri's `setFullscreen`;
  * WebView2's element fullscreen would only fill the webview), the document's fullscreen in a plain browser
  * (`pnpm dev`). Leaving the reader leaves fullscreen.
  */

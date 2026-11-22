@@ -369,7 +369,7 @@ class ExtensionLifecycleTest {
         val result = run { lifecycle.install(pahe.pkg, ExtensionKind.ANIME) }
 
         assertTrue(result.loaded, "a warning doesn't stop the install")
-        // AnimePahe's preference dialog binds android.widget views that android-jar only has as stubs (Stage 1, §10)
+        // AnimePahe's preference dialog binds android.widget views that android-jar only has as stubs
         val warning = result.warnings.single { it.startsWith("link check:") }
         assertTrue("Android stubs" in warning && "android.view.View.findViewById" in warning, warning)
         val static = ExtensionCompatLog.issues(pahe.pkg).filter { it.origin == ExtensionCompatLog.Origin.STATIC }
@@ -379,7 +379,7 @@ class ExtensionLifecycleTest {
         run { lifecycle.uninstall(pahe.pkg, ExtensionKind.ANIME) }
         assertEquals(emptyList(), ExtensionCompatLog.issues(pahe.pkg), "uninstall drops the log")
 
-        // MangaPill's android.os.LocaleList stubs (Stage 1) are gone: AndroidCompat implements LocaleList now
+        // MangaPill's android.os.LocaleList stubs are gone: AndroidCompat implements LocaleList now
         val pill = TestApks.apk(TestApks.MANGAPILL)
         addRepo(repo(ExtensionKind.MANGA, pill.hash), TestRepo.Entry(pill))
         val manga = run { lifecycle.install(pill.pkg, ExtensionKind.MANGA) }
@@ -436,7 +436,7 @@ class ExtensionLifecycleTest {
 
     @Test
     fun `an anime extension installed but not loaded is loaded on first use and its sources reconciled`() {
-        // what a Phase 1 install leaves: trusted, is_loaded = false, ANIME_SOURCE rows from the listing
+        // what an early install leaves: trusted, is_loaded = false, ANIME_SOURCE rows from the listing
         val apk = TestApks.apk(TestApks.ANIMEGG)
         addRepo(repo(ExtensionKind.ANIME, apk.hash), TestRepo.Entry(apk))
         run { lifecycle.install(apk.pkg, ExtensionKind.ANIME) }
@@ -872,7 +872,7 @@ class ExtensionLifecycleTest {
 
     @Test
     fun `an upstream install without a signature hash is never loaded`() {
-        // what an upstream (or pre-Stage 6) install leaves behind: the flat layout, no signature_hash
+        // what an upstream (or older) install leaves behind: the flat layout, no signature_hash
         val legacyJar = ExtensionFiles.legacyJarPath("tachiyomi-en.legacy-v1.4.1.apk")
         legacyJar.parent.createDirectories()
         legacyJar.writeText("not really a jar")
@@ -922,7 +922,7 @@ class ExtensionLifecycleTest {
         run { repos.remove(repo.repoUrl) }
 
         assertFalse(row(apk.pkg)!![ExtensionTable.isLoaded])
-        // Stage 5 caveat closed: GetSource no longer reloads it lazily
+        // Caveat closed: GetSource no longer reloads it lazily
         assertNull(run { GetSource.getSourceOrNull(sourceId) })
         assertFalse(loaded(ExtensionFiles.jarPath(ExtensionKind.MANGA, apk.pkg, apk.inspection.versionName)))
     }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** A screen that a later stage builds (Phase 3 §8): says which, and what it will hold. */
+/** A screen that a later stage builds: says which, and what it will hold. */
 defineProps<{ stage: string; summary: string }>();
 </script>
 

@@ -12,8 +12,8 @@ import suwayomi.tachidesk.manga.model.dataclass.IncludeOrExclude
 import suwayomi.tachidesk.manga.model.table.columns.jsonObject
 
 /**
- * The anime library's categories (M0072), the counterpart of upstream's `CATEGORY`: one list per kind (Phase 6 §9,
- * the user's decision). The row with [isDefaultCategory] is the "Default" category: it holds the library entries that
+ * The anime library's categories (M0072), the counterpart of upstream's `CATEGORY`: one list per kind (the
+ * user's decision). The row with [isDefaultCategory] is the "Default" category: it holds the library entries that
  * are in no other category, and can't be renamed or deleted.
  */
 object AnimeCategoryTable : IntIdTable("anime_category") {

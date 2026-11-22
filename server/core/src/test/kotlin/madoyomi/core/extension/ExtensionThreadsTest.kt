@@ -215,7 +215,7 @@ class ExtensionThreadsTest {
         val pool = (AnimeSourceCalls.dispatcher as ExecutorCoroutineDispatcher).executor as ThreadPoolExecutor
         assumeTrue(pool.poolSize <= pool.maximumPoolSize - 3, "the source pool has no room for new threads in this JVM")
         // the pool's threads are counted by name, not by poolSize: idle ones that earlier tests left end after 60 s,
-        // so the size can drop meanwhile while the extension's code still created its threads (Phase 4 Stage 6)
+        // so the size can drop meanwhile while the extension's code still created its threads
         val before = sourcePoolThreadNames()
         val ref = spawnPoolThreads(compileExtension())
         val created = sourcePoolThreadNames() - before

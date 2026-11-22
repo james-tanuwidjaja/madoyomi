@@ -25,21 +25,21 @@ object MadoyomiFeatures {
 
     /**
      * Upstream's scheduled manga library update (`Updater.scheduleUpdateTask`, every `globalUpdateInterval` hours).
-     * Madoyomi schedules its own for both kinds (`madoyomi.core.library.LibraryUpdateScheduler`, Phase 6 Stage 3).
+     * Madoyomi schedules its own for both kinds (`madoyomi.core.library.LibraryUpdateScheduler`).
      */
     val upstreamLibraryUpdateScheduleEnabled = false
 
     /**
      * Upstream's automatic download of new chapters (`Chapter.downloadNewChapters`), run on every chapter list fetch
      * into upstream's `DownloadManager`. Madoyomi's queue does it after a library update check instead
-     * (`madoyomi.core.downloads.MangaDownloads.autoDownload`, Phase 6 Stage 4).
+     * (`madoyomi.core.downloads.MangaDownloads.autoDownload`).
      */
     val upstreamAutoDownloadEnabled = false
 
     /**
      * Upstream's scheduled manga-only backup (`ProtoBackupExport.scheduleAutomatedBackupTask`, every `backupInterval`
      * days into `.tachibk` files in `backups`). Madoyomi schedules its own `.madoyomi-backup` of both kinds instead
-     * (`madoyomi.core.backup.BackupScheduler`, Phase 6 Stage 6; off by default, the user's decision).
+     * (`madoyomi.core.backup.BackupScheduler`; off by default, the user's decision).
      */
     val upstreamAutomatedBackupEnabled = false
 

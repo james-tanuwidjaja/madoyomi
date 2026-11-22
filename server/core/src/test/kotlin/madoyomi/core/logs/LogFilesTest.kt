@@ -12,7 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-/** Numbered log files (Phase 7 Stage 3): mpv's per-session logs. */
+/** Numbered log files: mpv's per-session logs. */
 class LogFilesTest {
     private val dir: File = Files.createTempDirectory("log-files").toFile()
     private val log = File(dir, "mpv.log")
@@ -75,7 +75,7 @@ class LogFilesTest {
     }
 
     @Test
-    fun `a log another program still holds is moved once it lets go (Phase 7 Stage 5)`() {
+    fun `a log another program still holds is moved once it lets go`() {
         session("a")
         session("b")
         // on Windows a file open without FILE_SHARE_DELETE (as java.io streams open it) can't be renamed: the way a

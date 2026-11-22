@@ -27,7 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * History and the library counts (Phase 6 Stage 2): what stamps the anime and manga history, `animeHistory` and
+ * History and the library counts: what stamps the anime and manga history, `animeHistory` and
  * `mangaHistory` (one item per entry, newest first, the resume target, paging), delete and clear (the marks and
  * positions stay), `AnimeType.unwatchedCount`/`lastSeenAt` and upstream's `MangaType.unreadCount`.
  */

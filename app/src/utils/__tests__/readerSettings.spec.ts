@@ -13,8 +13,8 @@ import {
   webtoonGenre,
 } from "../readerSettings";
 
-/* The reader's settings (Phase 5 Stage 5): the stored values read field by field, a manga's meta, and the mode by
-   the manga's own, its genres, its source's name and the global default (§8). */
+/* The reader's settings: the stored values read field by field, a manga's meta, and the mode by
+   the manga's own, its genres, its source's name and the global default. */
 
 describe("parseReaderPrefs", () => {
   it("gives the defaults for nothing, or for something that isn't an object", () => {
@@ -98,7 +98,7 @@ describe("parseMangaMeta", () => {
   });
 });
 
-describe("the mode by content (§8)", () => {
+describe("the mode by content", () => {
   it("normalizes a genre: case, parentheses, spaces, hyphens", () => {
     expect(genreToken("Long Strip")).toBe("longstrip");
     expect(genreToken("long-strip")).toBe("longstrip");

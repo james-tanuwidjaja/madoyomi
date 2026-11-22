@@ -29,7 +29,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A fake mpv on a real Windows named pipe (Phase 4 step 19), speaking mpv's JSON IPC: line-delimited JSON, replies by
+ * A fake mpv on a real Windows named pipe, speaking mpv's JSON IPC: line-delimited JSON, replies by
  * {@code request_id}, {@code observe_property} with the current value sent at once, {@code property-change} events,
  * {@code seek}/{@code playback-restart}/{@code file-loaded}/{@code end-file}, {@code quit}, and {@code sub-add}/
  * {@code audio-add} adding to {@code track-list}. Several clients at once, as mpv allows.
@@ -51,8 +51,8 @@ public final class FakeMpvServer implements AutoCloseable {
         /** Seconds of the file per second of wall time. */
         public double speed = 1;
         /** {@code play}: plays; {@code error}: the file fails to load; {@code nothing}: the file opens and reports its
-         * start position, then ends with mpv's "no audio or video data played" (an HLS stream whose segments all fail,
-         * Stage 6); {@code idle}: nothing happens until {@link #play()}. */
+         * start position, then ends with mpv's "no audio or video data played" (an HLS stream whose segments all
+         * fail); {@code idle}: nothing happens until {@link #play()}. */
         public String mode = "play";
         /** Milliseconds from the start to {@code file-loaded}. */
         public long loadMillis = 300;
@@ -63,7 +63,7 @@ public final class FakeMpvServer implements AutoCloseable {
         /** With {@code play}: the position at which the file ends early as mpv ends one whose URL stopped answering
          * ({@code end-file} eof, exit 0); negative: never. */
         public double eofAt = -1;
-        /** The file's own audio tracks, by their {@code lang} (Stage 5); the first is selected. */
+        /** The file's own audio tracks, by their {@code lang}; the first is selected. */
         public List<String> ownAudio = new ArrayList<>();
         /** The file's own subtitle tracks, by their {@code lang}; none selected. */
         public List<String> ownSubs = new ArrayList<>();
@@ -557,13 +557,13 @@ public final class FakeMpvServer implements AutoCloseable {
      * and include file to {@code <tmp>/madoyomi-fake-mpv/<pipe name>.txt} (as {@code FakeMpv}) and, at the exit, the
      * lines the clients sent to {@code <pipe name>.received}; exits as mpv would, after two minutes at the latest.
      *
-     * <p>The URL (after {@code --}) can make the file fail, as a refused or expired URL does (Stage 4): {@code
+     * <p>The URL (after {@code --}) can make the file fail, as a refused or expired URL does: {@code
      * fakempv-error=<status>} fails to load, and {@code fakempv-fail-at=<seconds>} fails once the position gets
      * there (with {@code fakempv-status=<status>}); {@code fakempv-eof-at=<seconds>} ends the file there as mpv
      * does when a URL stops answering mid-play. With a status other than 0, FFmpeg's {@code HTTP error <status>}
      * line goes to stdout (mpv's log) when it fails. {@code fakempv-nothing=1} opens the file and ends it with mpv's "no
-     * audio or video data played" (Stage 6). {@code fakempv-audio=jpn,eng} and {@code fakempv-subs=eng} give
-     * the file tracks of its own (Stage 5).
+     * audio or video data played". {@code fakempv-audio=jpn,eng} and {@code fakempv-subs=eng} give
+     * the file tracks of its own.
      */
     public static void main(String[] args) throws Exception {
         String pipe = null;

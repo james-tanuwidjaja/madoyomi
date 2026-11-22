@@ -10,7 +10,7 @@ import {
 import FilterField from "./FilterField.vue";
 
 /**
- * A source's filter list, driven by what the backend reports (Phase 3 step 18): Header, Separator, Text, CheckBox,
+ * A source's filter list, driven by what the backend reports: Header, Separator, Text, CheckBox,
  * TriState, Select, Sort and Group (collapsible, one level). It edits `modelValue`, a {@link FilterState} parallel to
  * `filters`; `filterChanges` (utils/filters.ts) turns that into what the backend takes.
  */

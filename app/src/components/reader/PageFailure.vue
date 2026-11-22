@@ -4,7 +4,7 @@ import { describeError } from "../../api/errorText";
 import { isApiError } from "../../api/client";
 
 /**
- * A page that failed to load (Phase 5, both modes): the error with its code and the source's HTTP status, and a click
+ * A page that failed to load (both modes): the error with its code and the source's HTTP status, and a click
  * to fetch it again (the click doesn't reach the reader's zones).
  */
 const props = defineProps<{ index: number; error: unknown }>();

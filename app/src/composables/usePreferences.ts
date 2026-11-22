@@ -37,7 +37,7 @@ interface ChangeRequest {
 const MUTATION_KEY = ["sourcePreference"] as const;
 
 /**
- * Changes one preference of a source (Phase 3 step 19), with an optimistic update (Phase 3 §9 "Stage 6"):
+ * Changes one preference of a source, with an optimistic update:
  * - the new value shows at once (written into the cached list);
  * - changes run one at a time, in order (one mutation scope), so the server sees them as they were made;
  * - when the last pending change of the source answers, the server's list replaces the cached one. Its value at the

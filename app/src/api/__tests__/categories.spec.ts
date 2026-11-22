@@ -32,7 +32,7 @@ import {
 } from "../operations/categories";
 import { makeCategory } from "../../test/fixtures";
 
-/* The category calls (Phase 6 Stage 1) over a mocked client: each kind gets its own document. */
+/* The category calls over a mocked client: each kind gets its own document. */
 afterEach(() => vi.clearAllMocks());
 
 describe("fetchCategories", () => {

@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { usePlaybackStore } from "../playback";
 import { makePlaybackEvent, makePlaybackSession } from "../../test/fixtures";
 
-/* The playback store: the live session, a retry, and the last ENDED and ERROR events (Phase 4 Stages 3-4). */
+/* The playback store: the live session, a retry, and the last ENDED and ERROR events. */
 
 beforeEach(() => setActivePinia(createPinia()));
 

@@ -5,5 +5,5 @@ pnpm-lock.yaml
 src-tauri/target
 src-tauri/gen
 src-tauri/resources
-# WiX sources (Phase 7 Stage 6): Prettier takes .wxs for WeChat script (JavaScript)
+# WiX sources: Prettier takes .wxs for WeChat script (JavaScript)
 src-tauri/installer/*.wxs

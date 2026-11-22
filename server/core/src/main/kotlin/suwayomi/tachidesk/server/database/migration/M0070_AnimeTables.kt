@@ -20,7 +20,7 @@ import suwayomi.tachidesk.server.database.migration.helpers.UNLIMITED_TEXT
 
 /**
  * The anime domain, in tables of its own next to the manga ones: `ANIME_SOURCE`, `ANIME`, `EPISODE`,
- * plus `ANIME_HISTORY` and `ANIME_CATEGORY` stubs for Phase 6. Idempotent: `SchemaUtils.create` skips
+ * plus `ANIME_HISTORY` and `ANIME_CATEGORY` stubs for later use. Idempotent: `SchemaUtils.create` skips
  * tables that already exist.
  */
 @Suppress("ClassName", "unused")

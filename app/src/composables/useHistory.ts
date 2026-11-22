@@ -7,7 +7,7 @@ import { queryKeys } from "./queryKeys";
 import { invalidateProgress } from "./useEntries";
 
 /*
- * History (Phase 6 Stage 2): a kind's history in pages of `HISTORY_PAGE` (one item per entry, newest first), and
+ * History: a kind's history in pages of `HISTORY_PAGE` (one item per entry, newest first), and
  * delete one entry or clear all. A change takes the entries out of the cached pages at once, then the history and the
  * library (its "last read" sort) are fetched again.
  */
