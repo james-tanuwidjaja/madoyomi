@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and help
+    url: https://github.com/james-tanuwidjaja/madoyomi/discussions/categories/q-a
+    about: Ask how to install or use Madoyomi in Discussions → Q&A.
+  - name: Ideas and bigger plans
+    url: https://github.com/james-tanuwidjaja/madoyomi/discussions/categories/ideas
+    about: New platforms (Linux, iOS), larger features and anything to discuss first.
+  - name: Report a security problem
+    url: https://github.com/james-tanuwidjaja/madoyomi/security/advisories/new
+    about: Please report security problems privately here, not in a public issue.
