@@ -16,7 +16,7 @@ The release build runs in GitHub Actions ([`.github/workflows/release.yml`](.git
 | Release | On a tag: `gh release create vX.Y.Z --draft` with `Madoyomi_X.Y.Z_x64-setup.exe`, its `.sig`, `Madoyomi_X.Y.Z_x64_en-US.msi`, `latest.json` and `SHA256SUMS.txt`. The release text is the section plus how to install (the SmartScreen note) and the bundled programs with their sources. A rerun replaces a draft's files; a published release is never touched |
 | Dry run | Actions → Release → **Run workflow**: the same tests, signed build and checks, no release. The small files (`latest.json`, the `.sig` files, `SHA256SUMS.txt`, the release text) are kept as the run's artifact for 7 days; the installers aren't (577 MiB) |
 
-A run takes about 45–60 minutes. A private repo pays for its Windows minutes (about $0.01 a minute past the plan's allowance); a public repo's are free.
+A run takes about 26–31 minutes with warm caches (0.1.0 and 0.1.1, Phase 7 Stage 6). A private repo pays for its Windows minutes (about $0.01 a minute past the plan's allowance); a public repo's are free.
 
 ## One-time setup
 
@@ -54,7 +54,7 @@ A run takes about 45–60 minutes. A private repo pays for its Windows minutes (
    ```
 
    `check-release.ps1` must end with `OK`. Its checks: the four files and `SHA256SUMS.txt`; the installers' versions; the MSI's upgrade code; `latest.json`'s version and notes; its URL, which must be `https://github.com/james-tanuwidjaja/madoyomi/releases/download/vX.Y.Z/Madoyomi_X.Y.Z_x64-setup.exe` (a draft's own download links are `…/download/untagged-…/…` until it is published; the URL in `latest.json` is the one it gets then); and the signature against the public key in `tauri.conf.json`. Read the release text too: the notes, the SmartScreen line, the sources.
-7. **Smoke test on a clean Windows 11 machine** (no Java, mpv, ffmpeg or yt-dlp; Phase 7 Stage 6 wrote it down): install `Madoyomi_X.Y.Z_x64-setup.exe` from the draft's download. It isn't code-signed, so SmartScreen says "Windows protected your PC": choose **More info → Run anyway**. Then add a repo, install an anime and a manga extension, play an episode, read a chapter, Export logs, and uninstall (keeping the data). For an update, install the previous version first and update to this one once it's published (step 9).
+7. **Smoke test on a clean Windows 11 machine** (no Java, mpv, ffmpeg or yt-dlp; Phase 7 Stage 6 did it on the dev desktop instead, with nothing on PATH and a fresh `--data-dir`, through the job runner, and a friend's PC as the clean machine): install `Madoyomi_X.Y.Z_x64-setup.exe` from the draft's download. It isn't code-signed, so SmartScreen says "Windows protected your PC": choose **More info → Run anyway**. SmartScreen only checks a file with the Mark of the Web: browsers write it, but a download manager that takes over the download (Internet Download Manager, on the dev desktop in Stage 6) doesn't: Alt+click the link to bypass it, or turn its browser integration off, to see the warning. Then add a repo, install an anime and a manga extension, play an episode, read a chapter, Export logs, and uninstall (keeping the data). For an update, install the previous version first and update to this one once it's published (step 9).
 8. **Publish:** on the draft's page, **Publish release** with "Set as the latest release" ticked (or `gh release edit vX.Y.Z --repo james-tanuwidjaja/madoyomi --draft=false --latest`). Publishing doesn't move the tag. From then on `releases/latest/download/latest.json` is this version's.
 9. **After publishing:** `Invoke-RestMethod https://github.com/james-tanuwidjaja/madoyomi/releases/latest/download/latest.json` shows the new version. An installed earlier version with "Check for app updates" on offers it at its next start, or on Settings → General → Check now.
 
@@ -63,6 +63,11 @@ A run takes about 45–60 minutes. A private repo pays for its Windows minutes (
 - **In a draft:** fix it on a branch and merge. Then move the tag: `git push --delete origin vX.Y.Z; git tag -d vX.Y.Z`, tag the new commit and push it. The rerun replaces the draft's files and text. Or delete the draft (`gh release delete vX.Y.Z --yes`) first.
 - **In a published release:** never replace its files. Installed copies may already have it, and the signature ties the version to the file. Release X.Y.(Z+1) instead.
 - **A failed run:** the job's summary has the server's test counts; on failure the test reports are kept as the run's artifact (`test-reports`, 7 days). `server/` flakes seen before: `LooperTest`, and `CefTest` after a leaked proxy (rerun the job).
+
+### Known issues
+
+- **0.1.0 and 0.1.1's MSI after the per-user (NSIS) installer** (fixed in 0.1.2): Tauri's MSI reused the install folder recorded in `HKCU\Software\Madoyomi contributors\Madoyomi`, which the NSIS installer writes and its uninstall keeps, so on a PC that had the NSIS install those MSIs went into `%LOCALAPPDATA%\Madoyomi`. Since 0.1.2 `app/src-tauri/installer/msi-folder.wxs` keeps the MSI in Program Files (an earlier MSI install keeps its own folder) and refuses while the per-user copy is installed; `tools/check-release.ps1` checks both in the MSI's tables.
+- **A silent NSIS install over an MSI install** (`Madoyomi_X.Y.Z_x64-setup.exe /S`): Tauri's installer removes an MSI install only on its interactive reinstall page, so a silent one installs beside it. Run the NSIS installer normally, or uninstall the MSI first.
 
 ## The updater's key
 
