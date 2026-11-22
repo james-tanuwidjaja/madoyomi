@@ -16,3 +16,4 @@
 - [ ] No binaries added (APKs, jars, `.pb` files, installers, logs, zips, heap dumps).
 - [ ] Edits to upstream code are marked `// Madoyomi:` and listed in `server/UPSTREAM.md`.
 - [ ] Docs updated where behaviour or commands changed (README.md, CONTRIBUTING.md, app/README.md).
+- [ ] A line under `## Unreleased` in `CHANGELOG.md` if users would notice this change (not needed for cleanups, tests or docs).

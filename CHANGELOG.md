@@ -2,6 +2,10 @@
 
 Each release's notes. The release workflow takes the section of the version it builds (`## X.Y.Z`) for the GitHub release and for `latest.json`, so the app's update dialog shows it: keep each section short and in plain words. A release fails without its section (`node tools/release-notes.mjs X.Y.Z` checks it). See [RELEASING.md](RELEASING.md).
 
+While pull requests come in, each change a user would notice gets a line under **Unreleased**, written for users ("Downloads no longer get stuck after a restart", not "Fix race in DownloadQueue"). Code cleanups, tests and docs don't need one. At release time that heading becomes the new version and a fresh, empty **Unreleased** goes above it.
+
+## Unreleased
+
 ## 0.1.2
 
 - The MSI installer (for all users) now always installs into Program Files, also on a PC where the per-user installer was used before.

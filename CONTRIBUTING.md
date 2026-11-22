@@ -14,6 +14,7 @@ Thanks for helping. Madoyomi is a Windows desktop app (Tauri 2 + Vue 3) with a K
 - **No extension repos or content.** Madoyomi ships with no repos and no extensions, and never links to or provides them: not in code, tests, docs, issues or pull requests. Tests use local fixtures or the URLs a script already takes as a parameter.
 - **No binaries in git:** no APKs, `.dex` files, jars (except the Gradle wrapper's), `.pb` files, tool binaries, fonts or test images (restored by `tools/fetch-upstream-assets.ps1`), installers, logs, zips or heap dumps. `.gitignore` covers the usual places.
 - **Upstream code:** when you change a file that came from Suwayomi-Server (or Mihon/Aniyomi), mark the edit with a `// Madoyomi:` comment and list it in [server/UPSTREAM.md](server/UPSTREAM.md). New code goes under the `madoyomi.*` packages.
+- **Using an AI assistant?** It should follow [AGENTS.md](AGENTS.md), the ground rules for AI coding agents (most tools read it by themselves; Claude reads it through `CLAUDE.md`). You are still responsible for the change: review it and run the checks yourself.
 - **License:** contributions are under the project's license, [MPL-2.0](LICENSE). Keep the license headers of files derived from upstream projects.
 
 ## Branches and pull requests
@@ -28,7 +29,7 @@ Thanks for helping. Madoyomi is a Windows desktop app (Tauri 2 + Vue 3) with a K
 
 ## Releases
 
-Tags, releases and version bumps are the maintainer's. Leave `VERSION` and its copies alone in a pull request; a user-facing change can suggest a line for [CHANGELOG.md](CHANGELOG.md). The release checklist is [RELEASING.md](RELEASING.md).
+Tags, releases and version bumps are the maintainer's. Leave `VERSION` and its copies alone in a pull request. If your change is something a user would notice, add a line for it under `## Unreleased` at the top of [CHANGELOG.md](CHANGELOG.md), in plain words for users (the app's update dialog shows these notes as they are). The release checklist is [RELEASING.md](RELEASING.md).
 
 ## Development
 
