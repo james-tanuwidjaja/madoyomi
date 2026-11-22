@@ -1,0 +1,64 @@
+name: Feature request
+description: Suggest something specific for Madoyomi to do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. For bigger plans, new platforms (Linux, iOS, ...) or anything that needs discussion first, start a thread in Discussions → Ideas instead; it can become an issue once the idea is clear.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Installing or updating
+        - Repos and extensions
+        - Browsing or searching
+        - Details, library or categories
+        - Updates or history
+        - Manga reader
+        - Anime player (mpv)
+        - Downloads
+        - Backup and restore
+        - Settings
+        - A new platform (Linux, iOS, ...)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do that you can't today?
+      description: Describe the need, not only the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: How should it work?
+      description: What you would see and do in the app.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Other ways to get there, or how other apps (Mihon, Aniyomi, ...) do it.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Screenshots, mockups or links (no extension repos or copyrighted content).
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and Discussions → Ideas, and this isn't a duplicate.
+          required: true
