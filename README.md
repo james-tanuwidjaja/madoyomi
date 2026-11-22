@@ -55,6 +55,10 @@ Ideas and help are welcome in [Discussions → Ideas](https://github.com/james-t
 
 Pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has how to build and test, the pull request flow, and the ground rules.
 
+### Wanted: a logo
+
+Madoyomi doesn't have a logo yet; the app still uses Tauri's default icon. If you'd like to design one, say hello in [Discussions → Ideas](https://github.com/james-tanuwidjaja/madoyomi/discussions/categories/ideas). It's needed as the app and installer icon (it has to read well at 16 px), on the release page and at the top of this README.
+
 ## Contributors
 
 <a href="https://github.com/james-tanuwidjaja/madoyomi/graphs/contributors">
