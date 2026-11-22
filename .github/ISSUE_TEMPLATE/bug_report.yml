@@ -1,0 +1,111 @@
+name: Bug report
+description: Something in Madoyomi doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please search the existing issues first; it may already be reported.
+        Madoyomi doesn't provide or host extensions or content: please don't include links to extension repos or copyrighted material.
+        For questions and help, use Discussions → Q&A instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Madoyomi version
+      description: Shown at the bottom of the sidebar, and in Settings → General.
+      placeholder: "0.1.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Installer for my user (Madoyomi_X.Y.Z_x64-setup.exe)
+        - Installer for all users (MSI)
+        - Built from source
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Start → Settings → System → About → Windows specifications.
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - Installing, updating or uninstalling
+        - Repos and extensions
+        - Browsing or searching a source
+        - Details, library or categories
+        - Updates or history
+        - Manga reader
+        - Anime player (mpv)
+        - Downloads
+        - Backup and restore
+        - Settings
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: extension
+    attributes:
+      label: Extension and version
+      description: If it happens with one extension, its name and version (Extensions → Installed). No repo links, please.
+      placeholder: "MangaPill 1.6.1"
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include any error message you saw, word for word.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Settings → Backend → Export logs saves a zip of the logs, with your Windows user name and the app's tokens taken out (titles you opened can still appear in log lines). Drag the zip into this box.
+        If the app doesn't start, the failure screen and the crash dialog have Export logs too.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this isn't a duplicate.
+          required: true
+        - label: I'm on the latest version from the Releases page, or I said above which version I use.
+          required: true
+        - label: This report doesn't ask for or link to extension repos or copyrighted content.
+          required: true
