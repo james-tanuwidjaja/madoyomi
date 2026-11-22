@@ -6,6 +6,11 @@ While pull requests come in, each change a user would notice gets a line under *
 
 ## Unreleased
 
+## 0.1.3
+
+- Export logs now uses an updated zip library with security fixes.
+- Unpacking a downloaded manga chapter's archive can no longer put files outside the chapter's folder.
+
 ## 0.1.2
 
 - The MSI installer (for all users) now always installs into Program Files, also on a PC where the per-user installer was used before.
