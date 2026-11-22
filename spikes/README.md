@@ -14,9 +14,9 @@ $env:JAVA_HOME = "$PWD\..\tools\bin\jdk-21"
 
 ```powershell
 # raw decode (the file is gzip-compressed protobuf)
-curl.exe -sSL -o index-pb\out\index.pb https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb
+curl.exe -sSL -o index-pb\out\index.pb <a repo's index.pb URL>
 # gunzip it first, e.g. in Git Bash: gunzip -c out/index.pb > out/index.bin; protoc --decode_raw < out/index.bin
-.\gradlew :index-pb:run --args="out/index.pb"   # a path relative to index-pb/, or a URL; no args = the Keiyoushi URL
+.\gradlew :index-pb:run --args="out/index.pb"   # a path relative to index-pb/, or a URL; no args = Main.kt's DEFAULT_URL
 ```
 
 Schema: [index-pb/index-pb.proto](index-pb/index-pb.proto).
@@ -27,7 +27,7 @@ Static part (done):
 
 ```bash
 # from tools/apks/ (Git Bash)
-curl -sSLO https://raw.githubusercontent.com/yuzono/anime-repo/repo/apk/aniyomi-en.animegg-v14.2.apk
+curl -sSLO <an extension APK's URL>
 ../bin/jdk-21/bin/java -cp "../bin/dex2jar/dex-tools-2.4.38/lib/*" com.googlecode.dex2jar.tools.Dex2jarCmd -f -o x.jar x.apk
 ../bin/jdk-21/bin/jdeps --ignore-missing-deps --multi-release 21 -verbose:class x.jar
 cmd //c "..\\bin\\jadx\\bin\\jadx.bat -q --no-src -d jadx-x x.apk"   # manifest meta-data
@@ -53,8 +53,8 @@ cd ..\tools\upstream\Suwayomi-Server; .\gradlew.bat :server:shadowJar; cd ..\..\
 # run headless with a throwaway data dir
 $c = "-Dsuwayomi.tachidesk.config.server"
 java "$c.rootDir=$env:TEMP\suwa-data" "$c.ip=127.0.0.1" "$c.port=4567" "$c.webUIEnabled=false" "$c.systemTrayEnabled=false" "$c.initialOpenInBrowserEnabled=false" "$c.kcefEnabled=false" -jar ..\tools\upstream\Suwayomi-Server\server\build\Suwayomi-Server-v2.4.1.jar
-# add the Keiyoushi store once, then smoke-test packages
-$q = '{"query":"mutation{ addExtensionStore(input:{indexUrl:\"https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb\"}){ extensionStore{ name } } }"}'
+# add a manga extension store once (its index.pb URL), then smoke-test packages
+$q = '{"query":"mutation{ addExtensionStore(input:{indexUrl:\"<index.pb URL>\"}){ extensionStore{ name } } }"}'
 Invoke-RestMethod -Method Post http://127.0.0.1:4567/api/graphql -ContentType application/json -Body $q
 .\suwayomi-smoke\smoke.ps1 -Packages eu.kanade.tachiyomi.extension.all.mangadex,eu.kanade.tachiyomi.extension.en.mangapill
 ```

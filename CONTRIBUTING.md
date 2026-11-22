@@ -252,6 +252,8 @@ From `server/`, with `JAVA_HOME` set to `tools/bin/jdk-21` (for backend changes)
 
 For a version change: `.\tools\version.ps1` from the repo root. CI runs all of these on a release tag (see [RELEASING.md](RELEASING.md)). The live checks (`tools/smoke-api.ps1`, the live spec and the compatibility harness) need real sites and internet access, so they aren't part of CI; run the ones that cover what you changed.
 
+Every pull request into `main` also runs **code scanning** (CodeQL, [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml)) over the workflows, the JavaScript/TypeScript of `app/` and `tools/`, the Rust shell and the backend, which it compiles on Linux (`classes` only, no tests or ktlint). An alert your change adds shows on the pull request: fix it, or say in the pull request why it is a false positive. `spikes/` isn't scanned.
+
 ## Compatibility reports
 
 [`tools/compat-test/reports/`](tools/compat-test/reports/) holds the latest results of the static scan (`compat-scan.md`) and of the harness for anime (`anime-compat.md`) and manga (`manga-compat.md`). They are rewritten by `tools/compat-test/scan.ps1` and `run-compat.ps1`; a partial rerun (`-Only`) goes to the gitignored `tools/compat-test/out/` instead. Commit a report only from a full run.
