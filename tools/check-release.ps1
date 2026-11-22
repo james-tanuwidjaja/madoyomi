@@ -12,6 +12,9 @@
       copyright line: Tauri's template sets no CompanyName);
     - the MSI's ProductVersion, Manufacturer and UpgradeCode (the one pinned in tauri.conf.json), read through the
       Windows Installer API without installing it;
+    - the MSI carries app/src-tauri/installer/msi-folder.wxs (Phase 7 Stage 6, 0.1.2): its launch condition
+      refusing an install while the per-user copy is installed, and the SetINSTALLDIR action after AppSearch that
+      keeps it in Program Files when only the per-user installer recorded a folder (both sequences);
     - latest.json and the updater signature: node tools\verify-updater.mjs (the signature against tauri.conf.json's
       public key, the URL https://github.com/<Repo>/releases/download/vX.Y.Z/<installer>);
     - SHA256SUMS.txt against the files (-WriteSums writes it first).
@@ -87,7 +90,29 @@ while ($r = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, 
 }
 $null = $view.GetType().InvokeMember('Close', 'InvokeMethod', $null, $view, $null)
 $null = [Runtime.InteropServices.Marshal]::ReleaseComObject($view)
+function MsiRows([string]$Sql, [int]$Columns) {
+    # a table the MSI doesn't have (no launch conditions, say) is no rows
+    try { $v = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @($Sql)) } catch { return }
+    $null = $v.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $v, $null)
+    # each row goes out as one object (an array of its columns)
+    while ($rec = $v.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $v, $null)) {
+        $cols = @(); for ($c = 1; $c -le $Columns; $c++) { $cols += [string]$rec.GetType().InvokeMember('StringData', 'GetProperty', $null, $rec, @($c)) }
+        , $cols
+    }
+    $null = $v.GetType().InvokeMember('Close', 'InvokeMethod', $null, $v, $null)
+    $null = [Runtime.InteropServices.Marshal]::ReleaseComObject($v)
+}
+# installer/msi-folder.wxs (Phase 7 Stage 6): the launch condition and the folder reset after AppSearch.
+$launch = @(MsiRows 'SELECT Condition, Description FROM LaunchCondition' 2 | Where-Object { $_[0] -like '*MADOYOMI_NSIS_INSTALLED*' })
+$searches = @(MsiRows 'SELECT Property, Signature_ FROM AppSearch' 2 | ForEach-Object { $_[0] })
+$ca = @(MsiRows "SELECT Action, Target FROM CustomAction WHERE Action = 'SetINSTALLDIR'" 2)
+$seqExec = @(MsiRows "SELECT Action, Condition FROM InstallExecuteSequence WHERE Action = 'SetINSTALLDIR'" 2)
+$seqUi = @(MsiRows "SELECT Action, Condition FROM InstallUISequence WHERE Action = 'SetINSTALLDIR'" 2)
 $null = [Runtime.InteropServices.Marshal]::ReleaseComObject($db)
+Check 'MSI refuses while the per-user copy is installed' ($launch.Count -eq 1 -and $launch[0][0] -match '^Installed OR NOT MADOYOMI_NSIS_INSTALLED$') $(if ($launch) { $launch[0][0] } else { 'no launch condition' })
+Check 'MSI searches its folders' ((@('MADOYOMI_NSIS_INSTALLED', 'MADOYOMI_NSIS_DIR', 'MADOYOMI_MSI_DIR') | Where-Object { $searches -notcontains $_ }).Count -eq 0) ($searches -join ', ')
+Check 'MSI keeps to Program Files' ($ca.Count -eq 1 -and $ca[0][1] -eq '[ProgramFiles64Folder]Madoyomi\') $(if ($ca) { $ca[0][1] } else { 'no SetINSTALLDIR' })
+Check 'MSI folder reset in both sequences' ($seqExec.Count -eq 1 -and $seqUi.Count -eq 1 -and $seqExec[0][1] -like '*MADOYOMI_NSIS_DIR AND NOT MADOYOMI_MSI_DIR*') $(if ($seqExec) { $seqExec[0][1] } else { 'not sequenced' })
 Check 'MSI ProductVersion' ($props['ProductVersion'] -eq $Version) $props['ProductVersion']
 Check 'MSI Manufacturer' ($props['Manufacturer'] -eq 'Madoyomi contributors') $props['Manufacturer']
 Check 'MSI UpgradeCode' ($props['UpgradeCode'] -eq $wantUpgrade) $props['UpgradeCode']
