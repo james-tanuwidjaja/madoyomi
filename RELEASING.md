@@ -35,7 +35,7 @@ A run takes about 26–31 minutes with warm caches (0.1.0 and 0.1.1). A private 
 ## Making a release
 
 1. **Branch and bump.** On a branch off an up-to-date main: `.\tools\version.ps1 -Set X.Y.Z` (VERSION and its copies), then `.\tools\version.ps1` to check.
-2. **Notes.** Add a `## X.Y.Z` section at the top of [`CHANGELOG.md`](CHANGELOG.md): short, plain words, since the app's update dialog shows it whole. Check it with `node tools/release-notes.mjs X.Y.Z`.
+2. **Notes.** In [`CHANGELOG.md`](CHANGELOG.md), rename `## Unreleased` to `## X.Y.Z` and tidy its lines: short, plain words, since the app's update dialog shows the section whole. Check that nothing user-visible from the merged pull requests is missing (`git log vA.B.C..main --merges --oneline`, from the last tag). Then add a new, empty `## Unreleased` above it, and check the section with `node tools/release-notes.mjs X.Y.Z`.
 3. **Merge** the branch into main (the usual review).
 4. **Optional dry run:** Actions → Release → Run workflow on main. It proves the build before a tag exists.
 5. **Tag and push:**
