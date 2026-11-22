@@ -2,6 +2,11 @@
 
 Each release's notes. The release workflow takes the section of the version it builds (`## X.Y.Z`) for the GitHub release and for `latest.json`, so the app's update dialog shows it: keep each section short and in plain words. A release fails without its section (`node tools/release-notes.mjs X.Y.Z` checks it). See [RELEASING.md](RELEASING.md).
 
+## 0.1.2
+
+- The MSI installer (for all users) now always installs into Program Files, also on a PC where the per-user installer was used before.
+- If Madoyomi is still installed for your user with the per-user installer, the MSI says so and stops: uninstall that one first (your library and settings are kept).
+
 ## 0.1.1
 
 - The video picker no longer shows "no_hoster_list" above the videos of a source that has no servers of its own: it lists the videos with their count.

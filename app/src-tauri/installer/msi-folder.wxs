@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Madoyomi's addition to Tauri's MSI (Phase 7 Stage 6, 0.1.2), linked through tauri.conf.json
+  (bundle.windows.wix.fragmentPaths, and componentGroupRefs for the empty group below, which pulls this
+  whole fragment into the product).
+
+  Tauri's WiX template fills INSTALLDIR from HKCU\Software\Madoyomi contributors\Madoyomi: first the key's
+  default value (which the per-user NSIS installer writes, and its uninstall keeps unless "remove data" is
+  ticked), then its "InstallDir" value (which this MSI writes; the last match wins). So after a per-user
+  install the per-machine MSI went into that user's %LOCALAPPDATA%\Madoyomi. This fragment:
+    - refuses to install while the per-user copy is still installed (its uninstall entry is in HKCU), so
+      two copies never share one data dir; an installed MSI's upgrade, repair and uninstall aren't blocked;
+    - keeps the MSI in Program Files when only the NSIS installer recorded a folder: right after
+      AppSearch, INSTALLDIR is set back to [ProgramFiles64Folder]Madoyomi\ unless the MSI's own
+      "InstallDir" value exists (an earlier MSI install's folder is kept, as before).
+  Keep the messages ASCII: the MSI's codepage is 1252.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <Property Id="MADOYOMI_NSIS_INSTALLED">
+      <RegistrySearch Id="MadoyomiNsisUninstallEntry" Root="HKCU"
+                      Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\Madoyomi"
+                      Name="UninstallString" Type="raw" />
+    </Property>
+    <Property Id="MADOYOMI_NSIS_DIR">
+      <RegistrySearch Id="MadoyomiNsisInstallDir" Root="HKCU"
+                      Key="Software\Madoyomi contributors\Madoyomi" Type="raw" />
+    </Property>
+    <Property Id="MADOYOMI_MSI_DIR">
+      <RegistrySearch Id="MadoyomiMsiInstallDir" Root="HKCU"
+                      Key="Software\Madoyomi contributors\Madoyomi" Name="InstallDir" Type="raw" />
+    </Property>
+
+    <Condition Message="Madoyomi is already installed for your user with the per-user installer. Uninstall it first (Settings &gt; Apps &gt; Madoyomi; your library and settings are kept), then run this installer again.">
+      <![CDATA[Installed OR NOT MADOYOMI_NSIS_INSTALLED]]>
+    </Condition>
+
+    <SetProperty Id="INSTALLDIR" Value="[ProgramFiles64Folder]Madoyomi\" After="AppSearch" Sequence="both">
+      <![CDATA[NOT Installed AND MADOYOMI_NSIS_DIR AND NOT MADOYOMI_MSI_DIR]]>
+    </SetProperty>
+
+    <ComponentGroup Id="MadoyomiMsiFolder" />
+  </Fragment>
+</Wix>

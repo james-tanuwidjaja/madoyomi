@@ -12,7 +12,7 @@ const val MainClass = "madoyomi.api.MainKt"
 
 // should be bumped with each stable release
 // Madoyomi: fixed version; it must stay numeric vX.Y.Z because AppInfo derives the version code from it
-val getTachideskVersion = { "v0.1.1" }
+val getTachideskVersion = { "v0.1.2" }
 
 val webUIRevisionTag = "r3518"
 
