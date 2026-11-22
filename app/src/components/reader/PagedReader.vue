@@ -25,25 +25,25 @@ import ChapterPanel from "./ChapterPanel.vue";
 import PageFailure from "./PageFailure.vue";
 
 /**
- * The paged reader (Phase 5 Stage 2, step 6): one page at a time, fitted to the window, with the click zones (the
+ * The paged reader (step 6): one page at a time, fitted to the window, with the click zones (the
  * outer thirds turn the page, the middle toggles the toolbar; reading right to left, the left side goes forward). A
  * page still loading shows its number; a page that failed shows the error, with the source's HTTP status, and a click
  * on it fetches it again. Around the pages are the two transition panels: "Previous chapter: …" before the first page
  * and "Finished … Next chapter: …" after the last one (or that there is no next chapter).
  *
- * Stage 4: the view is one page or a spread of two (the double-page mode, `pages`), side by side in the reading
+ * The view is one page or a spread of two (the double-page mode, `pages`), side by side in the reading
  * direction (right to left, the first page on the right). Zoom and pan (step 10, utils/zoom.ts): a double-click in the
  * middle third zooms 2× there (its single click, the toolbar, waits {@link CLICK_DELAY_MS} for a second one; the side
  * thirds still turn at once); zoomed in, a drag pans, a click does nothing and a double-click anywhere goes back to
  * fit. The reader drives the rest through the exposed methods (Ctrl+wheel, the zoom keys, the wheel and the arrows
  * panning). A new view (a page turn, a mode switch) or a resize goes back to fit.
  *
- * Stage 5: the page fit (`fit`): the whole page (`screen`, Stage 2's), the window's width (each page of a spread half
+ * The page fit (`fit`): the whole page (`screen`, the default), the window's width (each page of a spread half
  * of it), the window's height, or the page's own size. A page bigger than the window starts at its top, on the
  * reading direction's side, and pans at 1× (`scrollable`): a drag, and the reader's wheel and keys through
  * `scrollPage` and `pan`, before they turn the page. Zoom scales the fitted page; "back to fit" is that start view.
  *
- * Stage 6: a new fit or direction goes back to the start view, even after a pan or a zoom.
+ * A new fit or direction goes back to the start view, even after a pan or a zoom.
  */
 const props = defineProps<{
   position: number;
@@ -51,7 +51,7 @@ const props = defineProps<{
   pages: readonly number[];
   pageCount: number;
   direction: ReadingDirection;
-  /** How a page fits the window (Stage 5); `screen` when not given. */
+  /** How a page fits the window; `screen` when not given. */
   fit?: PageFit;
   pageState: (index: number) => PageState | undefined;
   chapterName: string;
@@ -274,7 +274,7 @@ watch(
     zoom.value = FIT;
   },
 );
-// A new page fit or direction is a new view (Stage 6): back to its start even after a pan or a zoom (live, a pan
+// A new page fit or direction is a new view: back to its start even after a pan or a zoom (live, a pan
 // kept from the original size left a fitted spread off-centre and cut off).
 watch(
   () => `${props.fit}:${props.direction}`,

@@ -7,7 +7,7 @@ import { historyTime, targetProgress } from "../utils/history";
 import { updatesRoute } from "../utils/updates";
 
 /**
- * One Updates row (Phase 6 Stage 3): the cover, the entry (to its details), the new episode or chapter with when it
+ * One Updates row: the cover, the entry (to its details), the new episode or chapter with when it
  * was fetched and how far it got, and Play or Read, which opens it (the episode's picker on its details page, the
  * chapter in the reader). One already watched or read is dimmed. Opening emits `open`, so the entry's mark goes.
  */

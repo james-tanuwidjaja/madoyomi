@@ -40,7 +40,7 @@ import { foundSignature, toastText } from "../utils/updates";
 import { showToast, windowFocused } from "../utils/toast";
 
 /**
- * The app's vue-query defaults (Phase 3 §9 "Stage 2"):
+ * The app's vue-query defaults:
  * - a query retries only while the backend is down or restarting (`NETWORK`, `BACKEND_UNAVAILABLE`), 3 times; a
  *   server error code is an answer, not a glitch;
  * - mutations never retry (they call sources and change state);
@@ -69,26 +69,26 @@ export interface RealtimeOptions {
 }
 
 /**
- * Connects the app to the backend's events (Phase 3 step 7) and keeps queries in step with backend restarts:
+ * Connects the app to the backend's events and keeps queries in step with backend restarts:
  * - points the subscription client at `ws://<baseUrl>/api/graphql?token=` while the backend is ready, and at the new
  *   port after a restart;
  * - subscribes to `extensionInstallProgress` and `extensionStoreRefreshed` for the app's lifetime, records them in
  *   the events store and invalidates the queries they change;
- * - subscribes to `playbackEvents` (Phase 4): every event of a session goes into the playback store, from which the
- *   episode list draws the playing row's progress live (Stage 3: PROGRESS refetches nothing). WATCHED marks the
+ * - subscribes to `playbackEvents`: every event of a session goes into the playback store, from which the
+ *   Episode list draws the playing row's progress live (PROGRESS refetches nothing). WATCHED marks the
  *   episode in the cached list at once, and CLOSED writes its last position there; both then fetch the anime's
  *   episodes again, as stored;
  * - after a reconnect (events may have been missed: nothing is replayed) invalidates the extension and repo queries,
  *   and forgets the session it was following (its CLOSED may be lost; a backend restart ends mpv anyway);
  * - when the backend comes back, refetches the queries that failed while it was away;
- * - subscribes to `libraryUpdates` (Phase 6 Stage 3, the WS "library.updates" event): each status replaces the cached
+ * - subscribes to `libraryUpdates` (the WS "library.updates" event): each status replaces the cached
  *   `libraryCheck`; when a check finds new items in an entry, that kind's library (its counts), Updates and marks are
  *   fetched again, and so is the entry's episode or chapter list if it is cached; when a check ends, both kinds' are,
  *   and if it found something, the toast setting is on and the window isn't focused, a Windows toast says what;
- * - subscribes to `downloadsChanged` (Phase 6 Stage 4, the WS "downloads" event): each queue replaces the cached
+ * - subscribes to `downloadsChanged` (the WS "downloads" event): each queue replaces the cached
  *   `downloadQueue`; when items leave it (done, cancelled) or one finishes, their entries' episode or chapter lists
  *   (the downloaded marks), the kind's library (its download counts) and its completed list are fetched again;
- * - subscribes to `madoyomiRestoreStatusChanged` (Phase 6 Stage 6): each status replaces the cached restore status, and
+ * - subscribes to `madoyomiRestoreStatusChanged`: each status replaces the cached restore status, and
  *   when a restore ends every backend query but the backups' own is fetched again (the library, categories, repos,
  *   extensions and settings may all have changed).
  *
@@ -111,7 +111,7 @@ export function startRealtime(options: RealtimeOptions): {
     );
   const invalidateEpisodes = (session: PlaybackSession) =>
     void queryClient.invalidateQueries({ queryKey: queryKeys.episodes(session.animeId) });
-  // Phase 6 Stage 2: a session writes the watch history and changes the library's counts
+  // A session writes the watch history and changes the library's counts
   const invalidateProgress = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.library("anime") });
     void queryClient.invalidateQueries({ queryKey: queryKeys.history("anime") });
@@ -204,7 +204,7 @@ export function startRealtime(options: RealtimeOptions): {
     },
   );
 
-  // Phase 6 Stage 3: what a library update check changes
+  // What a library update check changes
   const invalidateUpdates = (kind: MediaKind) => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.library(kind) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.updates(kind) });
@@ -242,7 +242,7 @@ export function startRealtime(options: RealtimeOptions): {
     },
   );
 
-  // Phase 6 Stage 4: what the download queue changes
+  // What the download queue changes
   client.subscribe<{ downloadsChanged: DownloadQueueNode }>(
     DOWNLOADS_CHANGED_SUBSCRIPTION,
     {},
@@ -280,7 +280,7 @@ export function startRealtime(options: RealtimeOptions): {
     },
   );
 
-  // Phase 6 Stage 6: a restore's progress; once it ends, everything it may have changed is fetched again
+  // A restore's progress; once it ends, everything it may have changed is fetched again
   client.subscribe<{ madoyomiRestoreStatusChanged: RestoreStatusNode }>(
     MADOYOMI_RESTORE_STATUS_SUBSCRIPTION,
     {},

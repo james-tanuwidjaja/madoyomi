@@ -1,13 +1,13 @@
 import type { Episode, PlaybackSession } from "../api/types";
 
 /*
- * An episode's playback progress (Phase 4 Stage 3): the stored position and duration, which the backend saves in
+ * An episode's playback progress: the stored position and duration, which the backend saves in
  * MILLISECONDS (`lastSecondSeen`/`totalSeconds`, as the Aniyomi app does, despite the names), or the live session's
  * while it plays. Pure, so the list and the picker share it.
  */
 
 /**
- * The default share of the duration at which the backend marks an episode watched. Since Stage 5 it is a player
+ * The default share of the duration at which the backend marks an episode watched. It is a player
  * setting (`PlayerSettings.watchedThreshold`, 50–95 %); the UI uses this only until the backend's value is known.
  */
 export const WATCHED_THRESHOLD = 0.85;

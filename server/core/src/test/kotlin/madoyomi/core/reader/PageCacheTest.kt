@@ -37,7 +37,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The chapter-page cache (Phase 5 Stage 1): hits and misses, one fetch per page at a time, the retry, the errors, and
+ * The chapter-page cache: hits and misses, one fetch per page at a time, the retry, the errors, and
  * the size cap with LRU eviction. A scratch folder, a fake clock and scripted fetchers; no source, no database.
  */
 class PageCacheTest {

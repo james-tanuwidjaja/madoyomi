@@ -27,7 +27,7 @@ import PageLayout from "../components/PageLayout.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 
 /*
- * Repos (Phase 3 step 11): where extensions come from. Add one by URL (its kind detected, or chosen), remove one
+ * Repos: where extensions come from. Add one by URL (its kind detected, or chosen), remove one
  * (adding trusts its signing key, removing withdraws that), refresh a kind's repos or all of them, and follow the
  * live repo and install events.
  */

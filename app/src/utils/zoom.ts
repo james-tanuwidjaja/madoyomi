@@ -1,13 +1,13 @@
 import type { KeyLike } from "./pagedNav";
 
 /*
- * Zoom and pan in the paged and double-page modes (Phase 5 Stage 4, step 10), pure so it is unit-tested without the
+ * Zoom and pan in the paged and double-page modes (step 10), pure so it is unit-tested without the
  * view. The view is a box the size of the reader; the content (the page or the two pages, fitted to the box) is a
  * rect inside it at scale 1. A zoom is a scale from 1 (fit) to {@link MAX_ZOOM} and a translation of the box, applied
  * as `translate(x, y) scale(scale)` from its top-left corner. It is always clamped: the content's edges never come
  * inside the box, and along an axis where the scaled content is smaller than the box, it is centred.
  *
- * Stage 5: with a page fit other than "fit screen" (fit width, fit height, original size), the content can be bigger
+ * With a page fit other than "fit screen" (fit width, fit height, original size), the content can be bigger
  * than the box at scale 1. It then pans at scale 1 too (the same clamp), and a new page starts at its top, on the
  * reading direction's side ({@link startView}); the reader scrolls it before it turns the page ({@link edgesOf}).
  */

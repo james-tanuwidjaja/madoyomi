@@ -22,7 +22,7 @@ import {
 } from "../operations/updates";
 import { makeLibraryCheck } from "../../test/fixtures";
 
-/* The library update calls (Phase 6 Stage 3) over a mocked client. */
+/* The library update calls over a mocked client. */
 afterEach(() => vi.clearAllMocks());
 
 const entry = { id: 4, title: "Frieren", thumbnailUrl: null, inLibrary: true };

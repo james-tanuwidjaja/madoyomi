@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The release notes of a version (Phase 7 Stage 5), from CHANGELOG.md's "## X.Y.Z" section.
+// The release notes of a version, from CHANGELOG.md's "## X.Y.Z" section.
 //
 //   node tools/release-notes.mjs [X.Y.Z] [--notes <file>] [--body <file>] [--repo owner/name]
 //

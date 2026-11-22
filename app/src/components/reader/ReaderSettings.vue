@@ -15,7 +15,7 @@ import ErrorNotice from "../ErrorNotice.vue";
 import ReaderPrefsFields from "./ReaderPrefsFields.vue";
 
 /**
- * The reader's settings sheet (Phase 5 Stage 5, step 11), from the toolbar's Settings button: "This manga" (its own
+ * The reader's settings sheet (step 11), from the toolbar's Settings button: "This manga" (its own
  * mode and direction, kept in its meta, each with "Use default", and a reset) and "All manga" (the global settings on
  * this device, as in Settings → Reader). It says where the mode shown comes from: the manga's own, its genres, its
  * source's name or the default. Esc or Close closes it; the reader's keys and wheel leave it alone meanwhile.

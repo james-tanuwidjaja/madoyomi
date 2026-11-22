@@ -13,9 +13,9 @@ import { useVideoChoicesStore } from "../stores/videoChoices";
 import type { RememberedChoice } from "../utils/videos";
 
 /*
- * Playing an episode (Phase 4). The backend owns mpv: it resolves the chosen video right before the launch, sends
+ * Playing an episode. The backend owns mpv: it resolves the chosen video right before the launch, sends
  * its headers, subtitles and audio tracks, and replaces the session that was playing. The UI only chooses: the
- * video picker (Stage 3) lists the episode's hosters and videos, then plays one, from the start or a position.
+ * video picker lists the episode's hosters and videos, then plays one, from the start or a position.
  */
 
 /** Why an episode has nothing to play: the first failed hoster's error, or a plain "no video". */
@@ -131,7 +131,7 @@ export function usePlayEpisode() {
 }
 
 /**
- * Plays a downloaded episode from its file (Phase 6 Stage 5, `playDownloadedEpisode`): the same mpv session as
+ * Plays a downloaded episode from its file (`playDownloadedEpisode`): the same mpv session as
  * `playEpisode` (progress, the watched mark, the next episode), with nothing asked of the source, so it plays offline.
  */
 export function usePlayDownloadedEpisode() {

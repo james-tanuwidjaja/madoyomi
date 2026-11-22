@@ -2,7 +2,7 @@ import { api } from "../client";
 import type { HistoryItem, HistoryPage, HistoryTarget, LongString, MediaKind } from "../types";
 
 /*
- * History (Phase 6 Stage 2), one list per kind: Madoyomi's `animeHistory`/`mangaHistory` (one item per entry, its
+ * History, one list per kind: Madoyomi's `animeHistory`/`mangaHistory` (one item per entry, its
  * episode or chapter played or read last, newest first, paged by offset), `deleteAnimeHistory`/`deleteMangaHistory`
  * (by entry) and `clearAnimeHistory`/`clearMangaHistory`. Deleting keeps the watched and read marks and positions.
  * Anime history is written by the player's saves, manga history by the reader's (upstream's `lastReadAt`).

@@ -27,7 +27,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * What the backend adds to Export logs (Phase 7 Stage 3): versions, repos, installed extensions and the settings
+ * What the backend adds to Export logs: versions, repos, installed extensions and the settings
  * without secrets; the library's titles only when asked.
  */
 class DiagnosticsApiTest : ApiGraphQLTest() {

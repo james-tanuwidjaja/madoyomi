@@ -29,7 +29,7 @@ import { queryKeys, type BrowseKey } from "../queryKeys";
 import { useSourceBrowse, useSources } from "../useSources";
 
 /*
- * The optimistic preference change (Phase 3 step 19) over mocked operations: the value shows before the server
+ * The optimistic preference change over mocked operations: the value shows before the server
  * answers, a failure puts it back, a refusal is the server's own value, and a change that took drops what the old
  * source instance produced.
  */

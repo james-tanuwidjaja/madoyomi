@@ -10,7 +10,7 @@ import type {
 } from "../types";
 
 /*
- * Backups (Phase 6 Stage 6), the backend's `.madoyomi-backup` files in `<data dir>/backups`: the list, Back up now, the
+ * Backups, the backend's `.madoyomi-backup` files in `<data dir>/backups`: the list, Back up now, the
  * schedule (Settings → Backup), deleting one, what a file holds checked against this install (the trust prompt's
  * content), the restore with merge or replace, and its status (a query and a subscription). A file the user picks is
  * sent to `POST /api/v1/madoyomi/backups` and kept in the folder first, so every restore names a file there.

@@ -14,7 +14,7 @@ import PageLayout from "../components/PageLayout.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 
 /*
- * Browse (Phase 3 step 13): the current kind's installed sources, the pinned ones first, then by language, and
+ * Browse: the current kind's installed sources, the pinned ones first, then by language, and
  * upstream's built-in Local source last. A source opens its page (SourceView) only when the backend can use it;
  * an untrusted or unloadable one points to Extensions, where the trust prompt and the install error are.
  */

@@ -62,9 +62,9 @@ data class DownloadItem(
     val error: String?,
     val addedAt: Long,
     val finishedAt: Long,
-    /** Stage 5: what [progressDone] and [progressTotal] count. */
+    /** What [progressDone] and [progressTotal] count. */
     val progressUnit: DownloadProgressUnit = DownloadProgressUnit.PAGES,
-    /** Stage 5: the size it will have, when known (0: unknown). */
+    /** The size it will have, when known (0: unknown). */
     val totalBytes: Long = 0,
 )
 
@@ -97,7 +97,7 @@ interface ItemDownloader {
 }
 
 /**
- * The download queue (Phase 6 Stage 4), Madoyomi's for both kinds, kept in [DownloadTable] so it survives a restart:
+ * The download queue, Madoyomi's for both kinds, kept in [DownloadTable] so it survives a restart:
  * its order, the paused and failed items, and how far each got (the downloaders keep their staged parts).
  *
  * - **Order:** the queued items in [DownloadTable.position] order, both kinds in one queue.
@@ -494,7 +494,7 @@ object DownloadQueue {
         wake.trySend(Unit)
     }
 
-    /** Phase 7 Stage 3: tells the listeners and the workers that something changed outside (the downloads folder). */
+    /** Tells the listeners and the workers that something changed outside (the downloads folder). */
     fun refresh() {
         changed()
         wakeUp()
@@ -545,7 +545,7 @@ object DownloadQueue {
                         .orderBy(DownloadTable.position to SortOrder.ASC, DownloadTable.id to SortOrder.ASC)
                         .map(::toItem)
                 }
-            // Phase 7 Stage 3: the downloads folder is moving or out of reach: nothing starts, the items stay queued
+            // The downloads folder is moving or out of reach: nothing starts, the items stay queued
             if (queued.isNotEmpty() && DownloadsFolder.blockReason() != null) return HOLD_MS
             for (item in queued) {
                 if (running.size >= settings.maxParallel) break

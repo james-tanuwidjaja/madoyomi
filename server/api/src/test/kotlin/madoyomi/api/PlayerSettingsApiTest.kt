@@ -15,7 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The player settings through GraphQL (Phase 4 Stage 5): `playerSettings`, `setPlayerSettings`, `playerLanguages`,
+ * The player settings through GraphQL: `playerSettings`, `setPlayerSettings`, `playerLanguages`,
  * `mpvCheck`, and the order of `fetchEpisodeVideos` by the preferred server and quality.
  */
 class PlayerSettingsApiTest : AnimeApiTest() {

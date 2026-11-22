@@ -5,17 +5,17 @@ import type { Chapter, ChapterPatch } from "../api/types";
 import { writeChapters } from "./useEntries";
 
 /*
- * Reading progress (Phase 5 Stage 2, steps 12–13): the page shown is saved into upstream's `CHAPTER_USER` through
+ * Reading progress (steps 12–13): the page shown is saved into upstream's `CHAPTER_USER` through
  * `updateChapter` (`lastPageRead`, which also stamps `lastReadAt`), debounced, so paging quickly through a chapter
  * writes once. Showing the last page marks the chapter read at once (Mihon's rule). A pending save is written when
  * the reader moves to another chapter, when it closes, and when the window goes away. Each saved chapter replaces
  * its row in the manga's cached chapter list, so the details page shows it without a refetch. A save that fails (the
  * backend restarting) is tried again after `RETRY_MS`, a read mark included, until one works.
  *
- * Stage 3: reaching the end panel marks the chapter read too, with its last page, if showing the last page didn't
+ * Reaching the end panel marks the chapter read too, with its last page, if showing the last page didn't
  * (a fling down the webtoon strip, or End, can pass the last page between two scroll events).
  *
- * Stage 4: in the double-page mode the reader gives the spread's last page as the position, so the furthest page
+ * In the double-page mode the reader gives the spread's last page as the position, so the furthest page
  * seen is saved and the last spread marks the chapter read.
  */
 

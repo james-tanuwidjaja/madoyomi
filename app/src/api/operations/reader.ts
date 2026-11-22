@@ -10,9 +10,9 @@ import type {
 import { CHAPTER_FIELDS } from "./entries";
 
 /*
- * The manga reader's backend (Phase 5): a chapter's pages (upstream's `fetchChapterPages`, which fetches the page list
+ * The manga reader's backend: a chapter's pages (upstream's `fetchChapterPages`, which fetches the page list
  * from the source each time), the prefetch that warms the page cache, and the reader settings the backend applies
- * (the page cache's cap, Settings → Reader), with what the cache holds and Clear. Stage 5: a manga's own reader settings
+ * (the page cache's cap, Settings → Reader), with what the cache holds and Clear. A manga's own reader settings
  * in its meta (upstream's `manga { meta }`, `setMangaMeta` and `deleteMangaMeta`; strings only), with its source's
  * name for the default mode by content.
  */

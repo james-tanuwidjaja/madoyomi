@@ -29,7 +29,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * [MpvIpcClient] against a fake mpv on a real named pipe ([FakeMpvServer], Phase 4 step 19): connecting with retries,
+ * [MpvIpcClient] against a fake mpv on a real named pipe ([FakeMpvServer]): connecting with retries,
  * replies by `request_id`, errors, `observe_property` events, messages split or merged across writes, writes while a
  * read is pending (overlapped I/O), and the close when mpv goes away.
  */
@@ -40,7 +40,7 @@ class MpvIpcClientTest {
     private val clients = mutableListOf<MpvIpcClient>()
 
     // Iterated by the tests while the client's reader thread appends: a snapshot per iteration. A synchronized
-    // list locks only single calls; iterating it threw ConcurrentModificationException (Phase 5 Stage 5's baseline).
+    // list locks only single calls; iterating it threw ConcurrentModificationException (seen in a baseline run).
     private val events: MutableList<JsonObject> = CopyOnWriteArrayList()
 
     private fun server(

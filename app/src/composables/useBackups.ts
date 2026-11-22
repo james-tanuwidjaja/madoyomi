@@ -15,7 +15,7 @@ import { useBackendStore } from "../stores/backend";
 import { queryKeys } from "./queryKeys";
 
 /*
- * Settings → Backup (Phase 6 Stage 6): the backup files, the schedule, Back up now, delete, a picked file kept in the
+ * Settings → Backup: the backup files, the schedule, Back up now, delete, a picked file kept in the
  * folder, and the restore with its status (kept current by the `madoyomiRestoreStatusChanged` subscription in
  * api/realtime, which refetches everything once a restore ends).
  */

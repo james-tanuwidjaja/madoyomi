@@ -109,7 +109,7 @@ data class RestoreStatus(
 )
 
 /**
- * Restores a [MadoyomiBackup] (Phase 6 Stage 6), one at a time, in the background; [status] follows it (the
+ * Restores a [MadoyomiBackup], one at a time, in the background; [status] follows it (the
  * `madoyomiRestoreStatus` subscription). The steps, in this order so the sources exist before the library needs them:
  * the settings files, the repos, the certificates, the extensions, the sources' preferences, then the library: the
  * anime categories and entries (mapped by source and URL, as upstream maps manga), then the manga part through

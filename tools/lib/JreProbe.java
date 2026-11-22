@@ -1,4 +1,4 @@
-// Phase 7 Stage 1: checks a jlink runtime against what the server and extensions use at runtime, beyond what jdeps
+// Checks a jlink runtime against what the server and extensions use at runtime, beyond what jdeps
 // finds in the server jar. tools/jlink.ps1 compiles it with the JDK's javac (classpath: the server jar) and runs it on
 // the new runtime: `java -cp <jar>;<dir> JreProbe`. Prints one line per check and exits 1 if any fails.
 // No network: TLS is checked by its providers and cipher suites; the compat harness and the live spec do real fetches.
@@ -48,7 +48,7 @@ public class JreProbe {
             }
         });
         // The Duktape stub asks javax.script for "rhino", which the jar doesn't register (on the JDK too: upstream's
-        // state, phase-7 section 10 "Stage 1"), so this checks javax.script itself, as the stub and H2 reach it.
+        // state), so this checks javax.script itself, as the stub and H2 reach it.
         check("javax.script (java.scripting)", () -> {
             javax.script.ScriptEngineManager m = new javax.script.ScriptEngineManager();
             return m.getEngineFactories().size() + " engine factories";

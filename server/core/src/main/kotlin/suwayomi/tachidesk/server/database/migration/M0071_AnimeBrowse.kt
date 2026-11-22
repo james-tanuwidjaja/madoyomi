@@ -13,7 +13,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import suwayomi.tachidesk.server.database.migration.helpers.UNLIMITED_TEXT
 
 /**
- * What browsing and episode lists need (Phase 2 Stage 3):
+ * What browsing and episode lists need:
  * - `ANIME`: the `SAnime` fields M0070 lacked (`background_url`, `update_strategy`, `fetch_type`, `season_number`,
  *   `memo`) and seasons (`parent_id` → `ANIME`, `ON DELETE SET NULL`; `season_source_order`);
  * - `EPISODE`: the `SEpisode` fields (`fillermark`, `summary`, `preview_url`, `memo`);

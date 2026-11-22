@@ -29,15 +29,15 @@ import VideoPicker from "./VideoPicker.vue";
  * (which also clears the position, as in Aniyomi) and, with one row, "Mark previous as watched" (every earlier
  * episode in the source's order), through `updateEpisodes`.
  *
- * Stage 4: when an episode of this anime ends, the next-episode toast (`useNextEpisode`) counts down and plays the
+ * When an episode of this anime ends, the next-episode toast (`useNextEpisode`) counts down and plays the
  * next one with the remembered choice, without the picker. When mpv can't play a video even after the backend
  * fetched the videos again (ERROR), the picker reopens for that episode with the error and the next video
  * preselected. Both only while this page is open.
  *
- * Phase 6 Stage 2: `playOnOpen` (History's Resume, `?play=` on the details page) opens the picker for that episode
+ * `playOnOpen` (History's Resume, `?play=` on the details page) opens the picker for that episode
  * once it is in the list, then emits `play-opened`.
  *
- * Phase 6 Stage 5, downloads (as the chapter list's): a row's Download queues it (the backend resolves the video by the
+ * Downloads (as the chapter list's): a row's Download queues it (the backend resolves the video by the
  * player settings' preference right before), and while it is in the queue the row says how far it got with Cancel
  * (Retry once it failed); a downloaded one has a badge, and its Play plays the file from where it stopped, with
  * nothing asked of the source (offline too), while "Stream…" opens the picker. The selection has Download and Delete
@@ -142,7 +142,7 @@ async function mark(ids: number[], isWatched: boolean) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Downloads (Phase 6 Stage 5)
+// Downloads
 
 const downloads = useEntryDownloads("anime", () => props.animeId);
 const enqueue = useEnqueueDownloads();

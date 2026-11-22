@@ -3,7 +3,7 @@ import { useBackendStore, type BackendInfo } from "../stores/backend";
 import type { ErrorCode, GraphQLErrorJson, RestErrorBody } from "./types";
 
 /**
- * The typed API client (Phase 3 step 5): GraphQL over `POST /api/graphql` with the session token, and token-bearing
+ * The typed API client: GraphQL over `POST /api/graphql` with the session token, and token-bearing
  * URLs for the binary REST routes.
  *
  * The base URL and token are read for every request, so the first request after a backend restart already goes to
@@ -58,7 +58,7 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
-/** `method`/`body`: a `POST` of a file to a REST route (Phase 6 Stage 6: a backup the user picked). */
+/** `method`/`body`: a `POST` of a file to a REST route (a backup the user picked). */
 export interface AssetOptions extends RequestOptions {
   reload?: boolean;
   method?: "GET" | "POST";
@@ -80,7 +80,7 @@ export interface ApiClient {
    */
   assetUrl(path: string | null | undefined): string | null;
   /**
-   * Fetches a server-relative binary route (a manga page, Phase 5) with the token in the `Authorization` header, so
+   * Fetches a server-relative binary route (a manga page) with the token in the `Authorization` header, so
    * it never appears in a URL. A JSON error body (`SOURCE_FAILED` with `details.httpCode`, `NOT_FOUND`) becomes an
    * {@link ApiError}. `reload` skips the webview's HTTP cache (a retry after a failure).
    */

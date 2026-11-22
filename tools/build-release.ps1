@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-  Builds a release of Madoyomi (Phase 7): the server jar, the jlink runtime, the pinned mpv/ffmpeg/yt-dlp, then
+  Builds a release of Madoyomi: the server jar, the jlink runtime, the pinned mpv/ffmpeg/yt-dlp, then
   `pnpm tauri build` with the bundle's resources.
 
 .DESCRIPTION
   0. tools\version.ps1: VERSION and its copies (package.json, tauri.conf.json, Cargo.toml/Cargo.lock, the server's
-     Constants.kt) must match, or the build stops before anything is built (Phase 7 Stage 2).
+     Constants.kt) must match, or the build stops before anything is built.
   1. The server jar (tools\fetch-upstream-assets.ps1, then .\gradlew.bat :api:shadowJar with tools\bin\jdk-21, or
      MADOYOMI_JDK/JAVA_HOME without it, as in CI),
      copied to app\src-tauri\resources\server\Madoyomi-Server.jar. Its name must carry VERSION
@@ -18,12 +18,14 @@
      beside it (app\src-tauri\target\release) and the installers (target\release\bundle): NSIS per-user and the
      MSI (the installer settings, which need no binaries, are in tauri.conf.json). The resources (with LICENSE,
      NOTICE and THIRD_PARTY.md) are in a config of their own, so `pnpm tauri dev` and `cargo test` don't need them.
-  6. The updater's files (Phase 7 Stage 4): Tauri signs the NSIS installer with the updater's private key
+  6. The updater's files: Tauri signs the NSIS installer with the updater's private key
      (bundle.createUpdaterArtifacts in tauri.conf.json) and writes its .sig beside it; this script then writes
      latest.json beside them (bundle\nsis\latest.json): the version, the notes, the date, and the installer's URL
      and signature under windows-x86_64-nsis and windows-x86_64. The key comes from the environment, never from the
-     repo: TAURI_SIGNING_PRIVATE_KEY (the key's path or its text) and TAURI_SIGNING_PRIVATE_KEY_PASSWORD. Without
-     the key, use -NoUpdater (installers without a .sig and no latest.json).
+     repo: TAURI_SIGNING_PRIVATE_KEY (the key's path or its text) and TAURI_SIGNING_PRIVATE_KEY_PASSWORD. The key
+     isn't kept in the repo folder either: for a local signed build, restore it from its backup to a folder outside
+     the repo first (RELEASING.md, "The updater's key"). Without the key, use -NoUpdater (installers without a .sig
+     and no latest.json); CI takes both from the repo's secrets.
   Everything it writes is gitignored (app\src-tauri\resources, target, tools\bin). Don't run it while the app or a
   test server runs on the jar it rebuilds (Windows locks a running jar).
   Keep this file ASCII; it runs on Windows PowerShell 5.1 and PowerShell 7.
@@ -86,8 +88,23 @@ if ($LASTEXITCODE -ne 0) { throw 'tools\version.ps1: the versions differ (see ab
 $version = (Get-Content -Raw -LiteralPath (Join-Path $RepoRoot 'VERSION')).Trim()
 
 $signing = -not ($NoUpdater -or $NoBundle -or $SkipTauri)
+# The key is not kept in the repo folder (RELEASING.md, "The updater's key"): restore it from its backup to a folder
+# outside the repo first, or build without it.
+$keyHelp = 'restore the key from its backup (RELEASING.md, "The updater''s key") to a folder outside the repo and set TAURI_SIGNING_PRIVATE_KEY (that file or its text) and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or build unsigned with -NoUpdater'
 if ($signing -and -not $env:TAURI_SIGNING_PRIVATE_KEY) {
-    throw 'the updater needs its private key: set TAURI_SIGNING_PRIVATE_KEY (the key file or its text) and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or build with -NoUpdater'
+    throw "the updater needs its private key: $keyHelp"
+}
+if ($signing) {
+    # A one-line value that names a .key file (or looks like a path) is read as a path: say so when it is missing,
+    # instead of Tauri reporting it as an unreadable key.
+    $keyValue = $env:TAURI_SIGNING_PRIVATE_KEY.Trim()
+    $looksLikePath = ($keyValue -notmatch '\n|\r') -and ($keyValue -match '\.key$|^[A-Za-z]:[\\/]|^\.{1,2}[\\/]|^[\\/]{2}')
+    if ($looksLikePath -and -not (Test-Path -LiteralPath $keyValue -PathType Leaf)) {
+        throw "TAURI_SIGNING_PRIVATE_KEY names a key file that isn't there ($keyValue): $keyHelp"
+    }
+    if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
+        throw "the updater's key needs its password in TAURI_SIGNING_PRIVATE_KEY_PASSWORD: $keyHelp"
+    }
 }
 if ($Notes -and $NotesFile) { throw 'give -Notes or -NotesFile, not both' }
 if ($NotesFile) { $Notes = (Get-Content -Raw -Encoding UTF8 -LiteralPath $NotesFile).Trim() }

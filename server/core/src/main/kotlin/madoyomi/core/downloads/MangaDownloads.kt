@@ -40,13 +40,13 @@ import java.io.File
 import suwayomi.tachidesk.manga.impl.Page as UpstreamPage
 
 /**
- * Downloads a chapter as a CBZ (Phase 6 Stage 4), at upstream's place for it (`getChapterCbzPath`:
+ * Downloads a chapter as a CBZ, at upstream's place for it (`getChapterCbzPath`:
  * `<downloads>/manga/<source>/<title>/<scanlator_><chapter>.cbz`), so upstream's reader, its delete and its
  * `isDownloaded` work on it as they are:
  * 1. the page list, through upstream's `getChapterDownloadReadyById` (from the CBZ when there is one already);
  * 2. each page, staged in `<downloads>/.partial/manga/<chapterId>/` (outside the reader's page cache, which trims its
  *    folder): a page staged by an earlier attempt is kept, one in the reader's cache is copied, the others are fetched
- *    through Phase 5's [PageImages] (the source's client and rate limits, the expired-URL retry, `SOURCE_FAILED`),
+ *    through the reader's [PageImages] (the source's client and rate limits, the expired-URL retry, `SOURCE_FAILED`),
  *    one at a time;
  * 3. upstream's `ComicInfo.xml`, then the CBZ ([CbzWriter]), then the chapter marked downloaded for the user, as
  *    upstream's downloader does.

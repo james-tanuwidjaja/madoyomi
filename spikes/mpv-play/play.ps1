@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Phase 0 / S4 spike: play one video in mpv with its source headers, subtitles and audio tracks,
+  Spike S4: play one video in mpv with its source headers, subtitles and audio tracks,
   and drive mpv over JSON IPC on a named pipe.
 
 .DESCRIPTION

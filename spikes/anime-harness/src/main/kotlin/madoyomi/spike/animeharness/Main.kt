@@ -1,6 +1,6 @@
-// Phase 0 / S3 harness: load Aniyomi extension APKs on the JVM, call popular -> details -> episodes ->
+// Spike S3 harness: load Aniyomi extension APKs on the JVM, call popular -> details -> episodes ->
 // hosters -> videos, and write out/<ext>.result.json, out/video.json (for spikes/mpv-play/play.ps1) and
-// out/missing.log. Throwaway spike code: see docs/phases/phase-0-spikes.md.
+// out/missing.log. Throwaway spike code (spikes/README.md).
 package madoyomi.spike.animeharness
 
 import eu.kanade.tachiyomi.animesource.AnimeSource
@@ -129,7 +129,7 @@ private fun playJson(title: String, v: Video) = buildJsonObject {
 private fun Video.hasUrl() = videoUrl.startsWith("http", ignoreCase = true)
 
 fun main(args: Array<String>) {
-    missingFile.writeText("# Phase 0 / S3 missing class / method log (${LocalDateTime.now()})\n")
+    missingFile.writeText("# Spike S3 missing class / method log (${LocalDateTime.now()})\n")
     require(args.isNotEmpty()) { "usage: anime-harness <apk>..." }
 
     val t0 = System.nanoTime()

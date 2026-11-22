@@ -29,7 +29,7 @@ export const EXTENSION_STORE_REFRESHED_SUBSCRIPTION = /* GraphQL */ `
 `;
 
 /**
- * Playback events of every session (Phase 4 Stage 2): STARTED, PROGRESS (at most once a second), WATCHED (once per
+ * Playback events of every session: STARTED, PROGRESS (at most once a second), WATCHED (once per
  * session), ENDED (with the next episode), ERROR, and CLOSED (always last). Nothing is replayed.
  */
 export const PLAYBACK_EVENTS_SUBSCRIPTION = /* GraphQL */ `
@@ -60,7 +60,7 @@ export const PLAYBACK_EVENTS_SUBSCRIPTION = /* GraphQL */ `
 `;
 
 /**
- * The library update check's status (Phase 6 Stage 3, the WS "library.updates" event): at once on subscribing, then on
+ * The library update check's status (the WS "library.updates" event): at once on subscribing, then on
  * every change (an entry started or done, the end). The latest one wins when they come faster than they are read.
  */
 export const LIBRARY_UPDATES_SUBSCRIPTION = /* GraphQL */ `
@@ -73,7 +73,7 @@ export const LIBRARY_UPDATES_SUBSCRIPTION = /* GraphQL */ `
 `;
 
 /**
- * The download queue (Phase 6 Stage 4, the WS "downloads" event): at once on subscribing, then on every change (queued,
+ * The download queue (the WS "downloads" event): at once on subscribing, then on every change (queued,
  * started, a page, done, failed, moved, removed), at most every 250 ms. The latest one wins.
  */
 export const DOWNLOADS_CHANGED_SUBSCRIPTION = /* GraphQL */ `

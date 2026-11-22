@@ -18,7 +18,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 /**
- * The download settings (Phase 6 Stage 4, Settings → Downloads), for both kinds, kept by the backend in
+ * The download settings (Settings → Downloads), for both kinds, kept by the backend in
  * `<data dir>/downloads.json` because the backend applies them.
  */
 @Serializable
@@ -32,12 +32,12 @@ data class DownloadSettings(
      * `includeInDownload` rule). Off on a fresh install (the user's decision).
      */
     val autoDownload: Boolean = false,
-    /** Stage 5: the ffmpeg to download HLS episodes with ("": [DownloadTools]' own search). */
+    /** The ffmpeg to download HLS episodes with ("": [DownloadTools]' own search). */
     val ffmpegPath: String = "",
-    /** Stage 5: the yt-dlp to fall back on when ffmpeg fails ("": [DownloadTools]' own search). */
+    /** The yt-dlp to fall back on when ffmpeg fails ("": [DownloadTools]' own search). */
     val ytDlpPath: String = "",
     /**
-     * Phase 7 Stage 3: the downloads folder of one's choice, an absolute path ("": `<data dir>/downloads`). Changed only
+     * The downloads folder of one's choice, an absolute path ("": `<data dir>/downloads`). Changed only
      * through [DownloadsFolder.change], which moves what is downloaded or starts an empty folder.
      */
     val folder: String = "",
@@ -87,7 +87,7 @@ object DownloadSettingsStore {
 
     fun file(): File = fileFor(applicationDirs.dataRoot)
 
-    /** The settings file of the data dir [dataRoot] (Phase 7 Stage 3: `ApplicationDirs` asks before it is injected). */
+    /** The settings file of the data dir [dataRoot] (`ApplicationDirs` asks before it is injected). */
     fun fileFor(dataRoot: String): File = fileOverride ?: File(dataRoot, FILE_NAME)
 
     fun current(): DownloadSettings = currentAt(file())
@@ -102,7 +102,7 @@ object DownloadSettingsStore {
         return settings
     }
 
-    /** Phase 7 Stage 3: records the downloads folder ([DownloadsFolder.change] only; "" is the default). */
+    /** Records the downloads folder ([DownloadsFolder.change] only; "" is the default). */
     internal fun setFolder(folder: String) {
         synchronized(this) {
             val before = current()

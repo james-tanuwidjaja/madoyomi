@@ -14,7 +14,7 @@ import suwayomi.tachidesk.manga.impl.backup.proto.models.BackupManga
 import suwayomi.tachidesk.manga.impl.backup.proto.models.BackupSource
 
 /**
- * A `.madoyomi-backup` (Phase 6 Stage 6): a gzipped protobuf. The manga part keeps upstream's (Suwayomi's and
+ * A `.madoyomi-backup`: a gzipped protobuf. The manga part keeps upstream's (Suwayomi's and
  * Mihon's) field numbers and types, so upstream's handlers write and read it and a Mihon/Suwayomi `.tachibk` decodes
  * as a backup with only that part. Madoyomi's additions use field numbers from [FIRST_MADOYOMI_FIELD] up, which none of
  * the others use: Mihon has 1, 2, 101 and 104–106; Aniyomi 1, 2, 101, 104–106 and 500–506 (its anime part);

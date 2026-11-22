@@ -19,7 +19,7 @@ import {
   MANGA_HISTORY_QUERY,
 } from "../operations/history";
 
-/* The history calls (Phase 6 Stage 2) over a mocked client: each kind gets its own documents. */
+/* The history calls over a mocked client: each kind gets its own documents. */
 afterEach(() => vi.clearAllMocks());
 
 const entry = {

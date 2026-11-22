@@ -28,7 +28,7 @@ import { byItem } from "../utils/downloads";
 import { queryKeys } from "./queryKeys";
 
 /*
- * The download queue (Phase 6 Stages 4–5): the queue (fetched once, then kept current by the `downloadsChanged`
+ * The download queue: the queue (fetched once, then kept current by the `downloadsChanged`
  * subscription in api/realtime.ts), the completed list of a kind in pages of `COMPLETED_PAGE`, the actions (queue,
  * pause, resume, retry, cancel, reorder, delete, clear), and Settings → Downloads. Every action writes the queue it
  * gets back into the cache, so the screen and the chapter rows change at once.
@@ -194,7 +194,7 @@ export const FOLDER_MOVE_POLL_MS = 500;
 export const FOLDER_GONE_POLL_MS = 5_000;
 
 /**
- * The downloads folder (Phase 7 Stage 3): fetched again every {@link FOLDER_MOVE_POLL_MS} while its files move, and every
+ * The downloads folder: fetched again every {@link FOLDER_MOVE_POLL_MS} while its files move, and every
  * {@link FOLDER_GONE_POLL_MS} while it isn't reachable (found live: the warning stayed after the drive was back). When a
  * change ends, everything the API serves is fetched again: the downloaded marks, the counts, the queue, the path.
  */

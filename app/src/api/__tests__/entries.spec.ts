@@ -138,7 +138,7 @@ describe("fetchLibrary", () => {
     ]);
   });
 
-  it("reads an anime's categories as a plain list (Phase 6)", async () => {
+  it("reads an anime's categories as a plain list", async () => {
     client.gql.mockResolvedValue({
       animes: {
         nodes: [
@@ -164,7 +164,7 @@ describe("fetchLibrary", () => {
     });
   });
 
-  it("reads a manga never read as last read 0 (Phase 6 Stage 2)", async () => {
+  it("reads a manga never read as last read 0", async () => {
     client.gql.mockResolvedValue({
       mangas: {
         nodes: [
@@ -186,7 +186,7 @@ describe("fetchLibrary", () => {
   });
 });
 
-describe("setManyInLibrary (Phase 6)", () => {
+describe("setManyInLibrary", () => {
   it("takes several entries out of the kind's library at once", async () => {
     client.gql.mockResolvedValue({});
 
@@ -200,7 +200,7 @@ describe("setManyInLibrary (Phase 6)", () => {
   });
 });
 
-describe("updateChapter(s) (Phase 5 Stage 2)", () => {
+describe("updateChapter(s)", () => {
   it("saves one chapter's page and returns it as stored", async () => {
     const stored = { ...makeChapters(1)[0]!, lastPageRead: 12 };
     client.gql.mockResolvedValue({ updateChapter: { chapter: stored } });

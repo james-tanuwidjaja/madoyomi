@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-  End-to-end smoke test of the Madoyomi backend API against real extension repos (the Phase 1 exit run, plus the
-  Phase 2 anime chain).
+  End-to-end smoke test of the Madoyomi backend API against real extension repos (the backend's end-to-end check, plus the
+  anime chain).
 
 .DESCRIPTION
   Starts the server jar the way the Tauri shell does (random port, MADOYOMI_TOKEN, --data-dir, piped stdin),
@@ -41,7 +41,7 @@
   Manga repo index URL. Default: Keiyoushi's index.pb.
 
 .PARAMETER Java
-  The java.exe to run the server with. Default: tools\bin\jdk-21\bin\java.exe. Phase 7 checks the bundled runtime
+  The java.exe to run the server with. Default: tools\bin\jdk-21\bin\java.exe. Release checks run it on the bundled runtime
   with -Java app\src-tauri\resources\jre\bin\java.exe (tools\jlink.ps1).
 
 .EXAMPLE
@@ -152,7 +152,7 @@ try {
         } | Out-Null
     }
 
-    # 3. installs, 4. installed + trusted + loaded (anime since Phase 2)
+    # 3. installs, 4. installed + trusted + loaded (anime too)
     $script:installed = @{}
     foreach ($ext in @(@{ type = 'ANIME'; pkg = $AnimePkg }, @{ type = 'MANGA'; pkg = $MangaPkg })) {
         if (-not $script:stores[$ext.type]) { Skip "3  install $($ext.pkg)" "no $($ext.type) repo"; Skip "4  $($ext.pkg) installed and trusted" 'not installed'; continue }
@@ -244,7 +244,7 @@ try {
         }
     }
 
-    # 6. anime chain (Phase 2)
+    # 6. anime chain
     $animeSteps = @('animeSources', 'popular', 'details + episodes', 'videos', 'resolve', 'thumbnail', 'compatIssues')
     if (-not $script:installed['ANIME']) {
         foreach ($n in $animeSteps) { Skip "6  AnimeGG $n" 'AnimeGG not installed' }

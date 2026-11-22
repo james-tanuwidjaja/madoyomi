@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
 
 /**
  * `ParsedAnimeHttpSource` (the Jsoup-selector base class) through the anime services, against a loopback site. None
- * of the top 20 extends it (all 20 are plain `AnimeHttpSource`s, `docs/research/compat-scan.md`), so this is what
+ * of the top 20 extends it (all 20 are plain `AnimeHttpSource`s, `tools/compat-test/reports/compat-scan.md`), so this is what
  * covers it: browse (popular, latest, search), details with episodes, and the videos of an episode.
  */
 class ParsedAnimeHttpSourceTest {

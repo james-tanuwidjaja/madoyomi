@@ -21,7 +21,7 @@ import suwayomi.tachidesk.manga.model.dataclass.IncludeOrExclude
 import suwayomi.tachidesk.server.JavalinSetup.future
 
 /**
- * An anime category (`ANIME_CATEGORY`, Phase 6 Stage 1), the counterpart of upstream's `CategoryType`: the same
+ * An anime category (`ANIME_CATEGORY`), the counterpart of upstream's `CategoryType`: the same
  * fields, and the library entries in it.
  */
 class AnimeCategoryType(

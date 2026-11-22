@@ -17,7 +17,7 @@ import {
   makeEpisodes,
 } from "../../test/fixtures";
 
-/* The download queue's pure helpers (Phase 6 Stage 4). */
+/* The download queue's pure helpers. */
 describe("download helpers", () => {
   const queue = makeDownloadQueue(
     [
@@ -93,7 +93,7 @@ describe("download helpers", () => {
     expect(queueCounts(undefined, "manga").total).toBe(0);
   });
 
-  it("says how far an episode got in bytes, the episode's time or segments (Stage 5)", () => {
+  it("says how far an episode got in bytes, the episode's time or segments", () => {
     const item = (over: Parameters<typeof makeDownloadItem>[0]) =>
       makeDownloadItem({ kind: "anime", state: "DOWNLOADING", ...over });
     const bytes = item({

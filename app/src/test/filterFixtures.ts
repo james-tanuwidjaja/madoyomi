@@ -1,7 +1,7 @@
 import type { Filter, FilterChange } from "../api/types";
 
 /*
- * Shared filter fixtures (Phase 3 §7: "keep backend + UI tests in sync with shared fixtures").
+ * Shared filter fixtures ("keep backend + UI tests in sync with shared fixtures").
  *
  * `serverFixtureFilters` is the fake source of server/api/src/test/kotlin/madoyomi/api/AnimeBrowseApiTest.kt as the
  * GraphQL `filters` field returns it: Header "Options", Quality (Select), Studio (Text), Dubbed (CheckBox), and the

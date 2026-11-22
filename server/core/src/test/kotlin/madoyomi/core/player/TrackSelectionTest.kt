@@ -15,7 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Which subtitle and audio track mpv plays, from its track-list (Phase 4 Stage 5). */
+/** Which subtitle and audio track mpv plays, from its track-list. */
 class TrackSelectionTest {
     private fun track(
         id: Int,
@@ -63,7 +63,7 @@ class TrackSelectionTest {
     ) = TrackSelection.choose(list, ext, settings)
 
     @Test
-    fun `without languages, Stage 2's rule - the source's first subtitle, and its first audio track without audio of its own`() {
+    fun `without languages, the default rule - the source's first subtitle, and its first audio track without audio of its own`() {
         assertEquals(TrackSelection.Selection(Choice.Track(2), Choice.Track(2)), choose(kaa, PlayerSettings()))
     }
 
@@ -75,7 +75,7 @@ class TrackSelectionTest {
     }
 
     @Test
-    fun `nothing matching falls back to Stage 2's rule, and off turns the subtitles off`() {
+    fun `nothing matching falls back to the default rule, and off turns the subtitles off`() {
         val s = choose(kaa, PlayerSettings(subtitleLanguage = "de", audioLanguage = "ko"))
         assertEquals(TrackSelection.Selection(Choice.Track(2), Choice.Track(2)), s)
         assertEquals(Choice.Off, choose(kaa, PlayerSettings(subtitleLanguage = "off")).subtitle)

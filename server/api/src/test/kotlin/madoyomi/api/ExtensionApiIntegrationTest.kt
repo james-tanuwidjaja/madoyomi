@@ -39,7 +39,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The Phase 1 API flow end to end: repos, extensions, install/update/uninstall and trust for both kinds, through
+ * The extension API flow end to end: repos, extensions, install/update/uninstall and trust for both kinds, through
  * GraphQL only, with the real APKs from `tools/apks/` (skipped without them) served by a loopback repo.
  */
 class ExtensionApiIntegrationTest : ApiGraphQLTest() {

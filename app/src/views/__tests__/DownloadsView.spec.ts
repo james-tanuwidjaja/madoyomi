@@ -28,8 +28,8 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 import DownloadsView from "../DownloadsView.vue";
 
 /*
- * Downloads (Phase 6 Stage 4) against mocked calls: the kind's queue with each row's state and actions, the actions
- * for the whole kind, moving rows, the completed list with Read and Delete. Stage 5: the anime view, its rows in
+ * Downloads against mocked calls: the kind's queue with each row's state and actions, the actions
+ * For the whole kind, moving rows, the completed list with Read and Delete. The anime view, its rows in
  * bytes, time or segments, and Play for a downloaded episode.
  */
 let pinia: Pinia;
@@ -128,7 +128,7 @@ describe("DownloadsView", () => {
     );
   });
 
-  it("says why the queue waits when the downloads folder is out of reach (Phase 7 Stage 3)", async () => {
+  it("says why the queue waits when the downloads folder is out of reach", async () => {
     await mountDownloads();
     expect(wrapper.find('[data-testid="queue-held"]').exists()).toBe(false);
     queue = { ...queue, heldBecause: "The downloads folder isn't reachable: F:\\Gone" };

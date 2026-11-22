@@ -15,11 +15,11 @@ import PageLayout from "../components/PageLayout.vue";
 import VirtualGrid from "../components/VirtualGrid.vue";
 
 /*
- * An anime's details (Phase 3 step 15): the stored entry with its episodes, or, for a `Seasons` entry, its seasons
+ * An anime's details: the stored entry with its episodes, or, for a `Seasons` entry, its seasons
  * (entries of their own, linking to their details). Refreshed from the source by the button, and by itself the first
  * time an entry that was never fetched is opened; a source's failure is shown above the stored data, which stays.
  *
- * `?play=<episodeId>` (Phase 6 Stage 2, History's Resume) opens that episode's picker once the list has it, and is then
+ * `?play=<episodeId>` (History's Resume) opens that episode's picker once the list has it, and is then
  * dropped from the URL so a reload doesn't open it again.
  */
 const props = defineProps<{ id: number }>();

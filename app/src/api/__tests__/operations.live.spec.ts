@@ -21,7 +21,7 @@ import {
 } from "../../utils/filters";
 
 /*
- * Live check against a running server (Phase 3 §9 "Stage 2": hand-written types, checked here instead of
+ * Live check against a running server (hand-written types, checked here instead of
  * generated). Skipped unless both are set, e.g. for a server from tools/run-server.ps1 or Start-MadoyomiServer:
  *
  *   $env:MADOYOMI_LIVE_URL = 'http://127.0.0.1:<port>'; $env:MADOYOMI_LIVE_TOKEN = '<its MADOYOMI_TOKEN>'
@@ -120,7 +120,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     await expect(client.gql(operations.EXTENSIONS_QUERY, { type: "ANIME" })).resolves.toBeTruthy();
   });
 
-  // The Repos screen detects a repo's kind by trying one and, on this error, the other (Phase 3 §9 "Stage 3").
+  // The Repos screen detects a repo's kind by trying one and, on this error, the other.
   it("refuses a repo added as the wrong kind with REPO_TYPE_MISMATCH and the packages", async () => {
     const e = await client
       .gql(operations.ADD_REPO_MUTATION, {
@@ -137,7 +137,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     expect((details.packages as string[]).length).toBeGreaterThan(0);
   }, 60_000);
 
-  // The source page's filter sheet (Phase 3 §9 "Stage 4"): FilterRenderer's state, through filterChanges, is a change
+  // The source page's filter sheet: FilterRenderer's state, through filterChanges, is a change
   // list the real server takes, and the filtered search finds entries. A filter-only search has an empty query: the
   // sources tried apply their filters only then. Needs an installed, trusted source of a kind (it skips when there is
   // none) and the source's site. A source whose site fails (AnimeGG's own genre filter gives a 404) is recorded, and
@@ -233,7 +233,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     if (kindsTried === 0) ctx.skip();
   }, 300_000);
 
-  // The details page and the Library (Phase 3 §9 "Stage 5"): a stored entry of each kind (the first of a usable
+  // The details page and the Library: a stored entry of each kind (the first of a usable
   // source's Popular) is refreshed from the source the way the page does it (anime: one call, a partial result on a
   // source failure; manga: fetchManga, then fetchChapters), then added to the library, found in the library list with
   // its time, and removed again (an entry that was already in the library is put back). The library round trip is
@@ -355,7 +355,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     if (kindsTried === 0) ctx.skip();
   }, 300_000);
 
-  // The source settings page (Phase 3 §9 "Stage 6"): one preference of a configurable source of each kind is changed
+  // The source settings page: one preference of a configurable source of each kind is changed
   // the way the page does it (manga: read, then change), read back, and restored. Only a switch, checkbox or list
   // that is enabled and visible is changed. The database and the source's SharedPreferences only, no site.
   it("changes a preference of a configurable source of each kind, reads it back and restores it", async (ctx) => {
@@ -457,10 +457,10 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     if (kindsTried === 0) ctx.skip();
   }, 120_000);
 
-  // The reader's image pipeline (Phase 5 Stage 1): a manga chapter's page routes, the first page through the backend
+  // The reader's image pipeline: a manga chapter's page routes, the first page through the backend
   // (the source's headers, then the cache), a prefetch of the next pages, and a page past the end as NOT_FOUND.
   // MangaPill when installed, else the first usable manga source with a Popular entry and chapters.
-  // Phase 5 Stage 5: a manga's own reader settings live in its meta (upstream's setMangaMeta, strings only).
+  // A manga's own reader settings live in its meta (upstream's setMangaMeta, strings only).
   it("keeps a manga's reader settings in its meta, gives them back with its source's name, and removes them", async (ctx) => {
     const list = (
       await client.gql<{ sources: { nodes: SourceBase[] } }>(operations.MANGA_SOURCES_QUERY)
@@ -582,7 +582,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     expect(first.r.headers.get("cache-control")).toBe("max-age=86400");
     const again = await image(routes[0]);
     expect(again.bytes).toBe(first.bytes);
-    // the reader's way (Phase 5 Stage 2): the token in the Authorization header, not in the URL
+    // The reader's way: the token in the Authorization header, not in the URL
     expect((await client.fetchAsset(routes[0])).size).toBe(first.bytes);
     report.push(
       `${sourceName} '${chapter!.name}': ${routes.length} pages; page 1 ${first.bytes} bytes in ${first.ms} ms, cached in ${again.ms} ms`,
@@ -624,7 +624,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
       `cache: ${cache.files} pages, ${cache.bytes} bytes; a page past the end: 404 NOT_FOUND`,
     );
 
-    // Reading progress (Phase 5 Stage 2): upstream's updateChapter(s), clamped to the page count, then put back.
+    // Reading progress: upstream's updateChapter(s), clamped to the page count, then put back.
     const before = direct.fetchChapterPages.chapter;
     type Saved = { id: number; lastPageRead: number; isRead: boolean };
     try {
@@ -667,7 +667,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.info(report.join("\n"));
   }, 180_000);
 
-  // The library's categories (Phase 6 Stage 1), one list per kind: upstream's for manga, Madoyomi's for anime. Two
+  // The library's categories, one list per kind: upstream's for manga, Madoyomi's for anime. Two
   // categories are made, renamed, moved, given a sort in their meta, given two stored entries of the kind (any, in
   // the library or not) and taken back out; a third, flagged for new entries, gets an entry added to the library
   // and taken out again; then all three are deleted. The kind's other categories and its entries' other categories
@@ -854,7 +854,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.info(report.join("\n"));
   }, 60_000);
 
-  // History and the library counts (Phase 6 Stage 2), for each kind: a stored episode or chapter (any, the database
+  // History and the library counts, for each kind: a stored episode or chapter (any, the database
   // only) gets its own position saved again through updateEpisode/updateChapter, which stamps its history; the
   // history's first item is then its entry with it, the library's lists carry the counts, and deleting the entry's
   // history takes it out of the list and leaves the marks and positions as they were. The entry's history is gone
@@ -1297,7 +1297,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.log(report.join("\n"));
   }, 300_000);
 
-  // Phase 6 Stage 5: an episode of KickAssAnime (HLS, ffmpeg) and of AnimeGG (a direct file) downloaded through the
+  // An episode of KickAssAnime (HLS, ffmpeg) and of AnimeGG (a direct file) downloaded through the
   // queue at the lowest preferred quality (the player settings', put back after), followed over the WebSocket, marked
   // downloaded on the episode and the anime, then deleted. The tools' check first.
   it("downloads an HLS and a direct episode over the queue, follows them over the WebSocket and deletes them", async (ctx) => {
@@ -1611,7 +1611,7 @@ describe.skipIf(!baseUrl || !token)("operations against the live server", () => 
     console.log(report.join("\n"));
   }, 600_000);
 
-  // Phase 7 Stage 3: what Export logs gets from the backend, and the downloads folder of one's choice.
+  // What Export logs gets from the backend, and the downloads folder of one's choice.
   it("reads the backend's diagnostics without the token, and the library only when asked", async () => {
     const plain = (
       await client.gql<{ diagnostics: string }>(operations.DIAGNOSTICS_QUERY, {

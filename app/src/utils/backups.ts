@@ -2,7 +2,7 @@ import type { BackupFile, BackupReport, RestoreStatus, RestoreStep } from "../ap
 import { formatBytes } from "./downloads";
 import { clockTime } from "./updates";
 
-/* Settings → Backup's wording and the restore dialog's defaults (Phase 6 Stage 6). */
+/* Settings → Backup's wording and the restore dialog's defaults. */
 
 /** The schedule's choices: off (the default), daily, weekly. */
 export const BACKUP_INTERVALS = [

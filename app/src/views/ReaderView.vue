@@ -55,7 +55,7 @@ import ReaderToolbar from "../components/reader/ReaderToolbar.vue";
 import WebtoonReader from "../components/reader/WebtoonReader.vue";
 
 /*
- * The manga reader (Phase 5 Stage 2, steps 5, 6, 11–14): `/manga/:id/read/:chapterId?page=N`, outside the app shell.
+ * The manga reader (steps 5, 6, 11–14): `/manga/:id/read/:chapterId?page=N`, outside the app shell.
  * It asks the source for the chapter's pages (upstream's `fetchChapterPages`, each time: image URLs may expire),
  * opens at `?page=`, else where reading stopped, and shows them in the paged mode. Clicks, keys and the wheel turn
  * the pages (utils/pagedNav.ts); past the last page is the next chapter, before the first the previous one. The page
@@ -63,12 +63,12 @@ import WebtoonReader from "../components/reader/WebtoonReader.vue";
  * pages around the reader, at most 4 at a time, and the backend prefetches the next block and, near the end, the
  * next chapter's first pages.
  *
- * Stage 3: the webtoon mode (`WebtoonReader`), switched from the toolbar for the session. The strip reports the page
+ * The webtoon mode (`WebtoonReader`), switched from the toolbar for the session. The strip reports the page
  * at its top as the position, and the pages to load around its viewport, which replace the paged ±N; the wheel
  * scrolls it natively, the keys scroll it by a line or a screen, and past its ends they open the next or previous
  * chapter. Switching modes keeps the page.
  *
- * Stage 4: the double-page mode (utils/doublePage.ts): the chapter in spreads of two pages (a wide page, and by
+ * The double-page mode (utils/doublePage.ts): the chapter in spreads of two pages (a wide page, and by
  * default the first, alone; "shift by one" pairs the first two); the position stays a page index and the spread that
  * holds it is shown, steps go spread by spread, progress counts the spread's last page. Zoom and pan in both paged
  * modes (PagedReader; Ctrl+wheel, Ctrl+=/−/0, and while zoomed the wheel and the arrows pan, Esc goes back to fit).
@@ -76,14 +76,14 @@ import WebtoonReader from "../components/reader/WebtoonReader.vue";
  * page list is fetched ahead, so one more step past the panel opens it at once, in place; the wheel at the strip's
  * bottom (top) does so in the webtoon mode.
  *
- * Stage 5: the settings. The mode and the direction are the manga's own (its meta), else by its genres and its
+ * The settings. The mode and the direction are the manga's own (its meta), else by its genres and its
  * source's name (the mode), else the global defaults on this device (useMangaReaderSettings); the reader waits for
  * them before it shows a page. The toolbar's mode and direction switches save this manga's own; the page gap is
  * global and Shift is for the session. The settings sheet (the toolbar's Settings) sets both. The page fit, the
  * strip's width, the background and the preload count are global: a fit that makes a page bigger than the window
  * scrolls it with the wheel and the keys before the page turns.
  *
- * Stage 6 (the exit run): the pages a neighbour opens on are held decoded ahead once its page list is in
+ * The pages a neighbour opens on are held decoded ahead once its page list is in
  * (usePageLoader's `held`), so the step into it shows them in the first frame (live, the strip had 2–7 blank frames
  * there while the page decoded). Until the reader moves off the page a chapter opened on, progress saves that page,
  * not the double-page spread's last one, so reopening a chapter doesn't move its place forward.
@@ -202,7 +202,7 @@ const neighbours = computed(() => ({
 /** Null until the chapter's pages are in; then a page index or a transition panel. */
 const position = ref<number | null>(null);
 /**
- * The page the chapter opened on, until the reader moves off it (Stage 6): it is what progress saves meanwhile, so
+ * The page the chapter opened on, until the reader moves off it: it is what progress saves meanwhile, so
  * a reopened double-page spread doesn't save its other page as read. The pairing can differ from the last session
  * (Shift is for the session, and the sizes of the pages behind aren't known yet), and saving the spread's last page
  * on every reopen moved the place forward a page each time (live, 9 → 10 → 11).
@@ -230,7 +230,7 @@ watch(position, (p) => {
 
 /**
  * The webtoon strip's pages around its viewport, most urgent first (null in the paged mode, or before it reports),
- * with the chapter it reported them for (Stage 6): right after a step into the next chapter the old strip's window
+ * With the chapter it reported them for: right after a step into the next chapter the old strip's window
  * would stand for the new pages, and the loader dropped the page held ahead as outside it.
  */
 const webtoonWindow = ref<{ chapterId: number; pages: number[] } | null>(null);
@@ -240,7 +240,7 @@ watch(mode, () => {
 /** The double-page mode's pages to load (the spread, the pages after it and before it). */
 const doubleWindow = ref<number[] | null>(null);
 /**
- * The pages the neighbours open on, once their page lists are fetched ahead (Stage 6): the next chapter's first page
+ * The pages the neighbours open on, once their page lists are fetched ahead: the next chapter's first page
  * (or where reading stopped in it) and the one after it, the previous chapter's last two. The loader holds them
  * decoded, so the step into a neighbour shows its page in the first frame.
  */
@@ -299,7 +299,7 @@ watch(
 );
 /**
  * The page progress counts: the double-page spread's last page, else the position. Until the reader moves off the
- * page the chapter opened on, that page itself (Stage 6).
+ * page the chapter opened on, that page itself.
  */
 const progressPosition = computed(() => {
   const p = position.value;
@@ -319,7 +319,7 @@ const progress = useReadingProgress({ chapter, pageCount, position: progressPosi
 
 const toolbar = ref(true);
 
-// Time to the first page shown (the dev stats; phase-5 step 15).
+// Time to the first page shown (the dev stats).
 const stats = ref(false);
 let openedAt = performance.now();
 const firstPageMs = ref<number | null>(null);
@@ -330,7 +330,7 @@ watch(
     firstPageMs.value = null;
   },
 );
-// By chapter: a page held ahead is in when the chapter opens, so "shown" alone wouldn't change (Stage 6).
+// By chapter: a page held ahead is in when the chapter opens, so "shown" alone wouldn't change.
 watch(
   () => {
     const p = position.value;

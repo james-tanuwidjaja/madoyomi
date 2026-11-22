@@ -40,7 +40,7 @@ import java.io.File
 import java.time.Instant
 
 /**
- * What the backend adds to Settings → Export logs (Phase 7 Stage 3): `diagnostics.json` in the zip the shell writes.
+ * What the backend adds to Settings → Export logs: `diagnostics.json` in the zip the shell writes.
  *
  * Always: the backend's and Java's versions and the OS; the repos (name, index URL, kind); the installed extensions
  * (name, package, version, language, kind, repo, state); the settings without secrets (server.conf's keys upstream

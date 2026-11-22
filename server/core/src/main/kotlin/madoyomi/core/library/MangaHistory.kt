@@ -19,7 +19,7 @@ import suwayomi.tachidesk.manga.model.table.ChapterUserTable
 import suwayomi.tachidesk.server.database.dbTransaction
 
 /**
- * Reading history (Phase 6 Stage 2): upstream's `CHAPTER_USER.last_read_at` (epoch seconds), which upstream's
+ * Reading history: upstream's `CHAPTER_USER.last_read_at` (epoch seconds), which upstream's
  * `updateChapter(s)` stamps whenever `lastPageRead` is saved (the reader does on opening a chapter and on every page)
  * and its backup already carries as `BackupHistory`. No table of Madoyomi's: deleting history sets `last_read_at` back
  * to 0 and keeps the read marks and the pages.

@@ -54,7 +54,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The chapter-page images (Phase 5 Stage 1): upstream's page route
+ * The chapter-page images: upstream's page route
  * (`GET /api/v1/manga/{mangaId}/chapter/{chapterIndex}/page/{index}`, on a bare Javalin with upstream's exception
  * handlers) through `PageImages`/`PageCache`, against a loopback image host that records what it was sent; the page
  * lists from upstream's `fetchChapterPages`; and the reader's GraphQL (`prefetchChapterPages`, `readerSettings`,

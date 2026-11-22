@@ -32,7 +32,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 import AppUpdateDialog from "../AppUpdateDialog.vue";
 
 /*
- * The app's update dialog (Phase 7 Stage 4): the check on start (only when the setting is on, which the shell
+ * The app's update dialog: the check on start (only when the setting is on, which the shell
  * decides), the version and notes, Install now / Later / Skip this version, what Install stops while an episode plays
  * or downloads run, the progress, and the errors.
  */

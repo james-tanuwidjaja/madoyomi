@@ -6,7 +6,7 @@ import { formatBytes } from "../utils/downloads";
 import { revealFolder } from "../utils/folders";
 
 /**
- * Export logs (Phase 7 Stage 3), in Settings → Backend, the crash dialog and the failed panel: an opt-in box for the
+ * Export logs, in Settings → Backend, the crash dialog and the failed panel: an opt-in box for the
  * library's titles, the button (the shell's save dialog, then the zip), and what was written with Show in folder.
  */
 const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });

@@ -209,7 +209,7 @@ describe("assetUrl and subscriptionUrl", () => {
   });
 });
 
-describe("fetchAsset (Phase 5: manga pages)", () => {
+describe("fetchAsset (manga pages)", () => {
   it("fetches the route with the token in the header, never in the URL", async () => {
     fetchMock.mockResolvedValue(new Response("jpeg", { status: 200 }));
 

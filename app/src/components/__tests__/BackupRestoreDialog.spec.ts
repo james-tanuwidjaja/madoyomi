@@ -18,7 +18,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import BackupRestoreDialog from "../BackupRestoreDialog.vue";
 
-/* The restore dialog (Phase 6 Stage 6): the report, merge or replace, and the trust prompt, over mocked calls. */
+/* The restore dialog: the report, merge or replace, and the trust prompt, over mocked calls. */
 
 const NAME = "Madoyomi_2026-11-16_21-00-00.madoyomi-backup";
 const KEY = "c7d8".repeat(16);

@@ -12,7 +12,7 @@ import suwayomi.tachidesk.manga.impl.extension.github.NetworkExtensionStore
 
 /**
  * Aniyomi's variant of the v2 extension-store index (`index.pb`, or the same message as JSON), as served by yuzono.
- * Reverse-engineered from the wire on 2026-11-03 (see docs/phases/phase-1-backend-foundation.md §10).
+ * Reverse-engineered from the wire on 2026-11-03 (schema: spikes/index-pb/index-pb.proto).
  *
  * The store, contact and resources messages are the same as Mihon's ([NetworkExtensionStore]). `Extension` differs:
  * field 8 is a bool `is_torrent`, and the sources moved to field 9. Upstream's Mihon DTO therefore cannot read an

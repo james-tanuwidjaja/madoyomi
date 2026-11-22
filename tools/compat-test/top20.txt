@@ -1,6 +1,6 @@
 # Top 20 yuzono anime extensions by jsDelivr hits, snapshot 2026-11-04 (tools/compat-test/select-top.ps1).
 # Method: data.jsdelivr.com stats for gh/yuzono/anime-repo@repo, period=month (436 APK files over 7 pages),
-# hits summed per package across versions; torrent extensions excluded; NSFW included (Phase 2 doc, section 9).
+# hits summed per package across versions; torrent extensions excluded; NSFW included.
 # Index: https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.pb (247 extensions); warning = index.pb content warning; apk = the current APK.
 # columns: rank	pkg	version	lib	warning	lang	monthly_hits	apk
 1	eu.kanade.tachiyomi.animeextension.en.hanime	16.25	16	NSFW	en	1927	https://cdn.jsdelivr.net/gh/yuzono/anime-repo@repo/apk/aniyomi-en.hanime-v16.25.apk

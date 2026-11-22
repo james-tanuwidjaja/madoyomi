@@ -16,7 +16,7 @@ import {
 import { queryKeys } from "./queryKeys";
 
 /*
- * A manga's reader settings (Phase 5 Stage 5): its own mode and direction from its meta (upstream's `setMangaMeta`,
+ * A manga's reader settings: its own mode and direction from its meta (upstream's `setMangaMeta`,
  * tied to the database's manga id and kept in backups), resolved against its genres, its source's name and the
  * global settings on this device (utils/readerSettings.ts). Changes show at once and are written in order; a write
  * that fails reads the meta again and sets `error`.

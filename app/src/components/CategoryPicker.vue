@@ -26,7 +26,7 @@ import { formatCount } from "../utils/format";
 import ErrorNotice from "./ErrorNotice.vue";
 
 /*
- * Sets the categories of one library entry or of several (Phase 6 Stage 1), as Mihon's "Set categories": a box per
+ * Sets the categories of one library entry or of several, as Mihon's "Set categories": a box per
  * category (Default isn't one: an entry is in it by being in no other). With several entries a box can be mixed (some
  * of them are in it); a click makes it checked, then unchecked. A mixed box left alone changes nothing. Save sends one
  * change for all the entries; a new category can be made here and is checked at once.

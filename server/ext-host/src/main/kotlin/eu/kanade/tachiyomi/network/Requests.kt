@@ -82,7 +82,7 @@ fun DELETE(
 
 // Madoyomi: the suspend request helpers of Aniyomi's extensions-lib 16 (aniyomiorg/aniyomi
 // core/common/.../network/Requests.kt). Suwayomi's copy lacks them, and lib-16 anime extensions call them
-// (compat scan, Phase 2 doc section 10: anikoto, kotokai, aniwave)
+// (compat scan, anikoto, kotokai, aniwave)
 
 /**
  * Sends a GET request and returns the response, throwing [HttpException] unless it is successful.

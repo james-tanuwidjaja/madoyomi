@@ -18,7 +18,7 @@ import {
 } from "../zoom";
 
 /*
- * Zoom and pan (Phase 5 Stage 4): a 1000 × 800 box with a portrait page fitted in its middle (400 px wide, full
+ * Zoom and pan: a 1000 × 800 box with a portrait page fitted in its middle (400 px wide, full
  * height), and a spread that fills the box's width.
  */
 const view = { width: 1000, height: 800 };
@@ -139,7 +139,7 @@ describe("keys", () => {
 });
 
 /*
- * Stage 5: a page fit other than "fit screen". Fit width: a 1000 × 1500 page in the 1000 × 800 box, laid out centred
+ * A page fit other than "fit screen". Fit width: a 1000 × 1500 page in the 1000 × 800 box, laid out centred
  * (350 px above the box, 350 below). Original size: a 1400 × 2000 page, centred both ways.
  */
 const tall: Rect = { left: 0, top: -350, width: 1000, height: 1500 };

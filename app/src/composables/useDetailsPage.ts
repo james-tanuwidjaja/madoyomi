@@ -25,13 +25,13 @@ interface EntryState {
 }
 
 /**
- * The parts of a details page both kinds share (Phase 3 step 15):
+ * The parts of a details page both kinds share:
  * - the entry's source, and whether it can be used. A missing, untrusted or unloaded source isn't asked for
  *   anything: the page says why and points to Extensions, and shows what is stored;
  * - the refresh from the source: by the button, and by itself the first time an entry that was never fetched
  *   (`initialized` false) is opened in the session (`claimAutoRefresh`). The source's error is kept with the data;
  * - adding to and removing from the library;
- * - (Phase 6 Stage 3) opening the entry clears its "new" mark from a library update check.
+ * - opening the entry clears its "new" mark from a library update check.
  */
 export function useDetailsPage(opts: {
   kind: MediaKind;

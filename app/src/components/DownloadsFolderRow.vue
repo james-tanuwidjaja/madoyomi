@@ -18,7 +18,7 @@ import { revealFolder } from "../utils/folders";
 import ErrorNotice from "./ErrorNotice.vue";
 
 /**
- * Settings → Downloads → Download folder (Phase 7 Stage 3): where downloads go, Show in Explorer, Change… (the shell's
+ * Settings → Downloads → Download folder: where downloads go, Show in Explorer, Change… (the shell's
  * folder picker) and Use the default. Each change asks what to do with what is downloaded (the user's decision):
  * move it to the new folder, or start an empty folder and leave the old files where they are. A move shows its
  * progress; a folder that isn't there (an unplugged drive) says so.

@@ -30,8 +30,8 @@ import kotlin.test.assertTrue
 /**
  * The anime services against the real sites (network): popular → details → episodes → videos → resolve, through
  * [AnimeBrowse], [AnimeDetails] and [AnimeVideos] with real extensions. Skipped unless `MADOYOMI_LIVE_SOURCE_TESTS=1`;
- * a site that is down fails it, one behind Cloudflare is skipped (no solver yet, Phase 2 §9). The compat harness
- * (Stage 5) does this for the whole top 20 over the sidecar.
+ * a site that is down fails it, one behind Cloudflare is skipped (no solver yet). The compat harness
+ * does this for the whole top 20 over the sidecar.
  */
 class AnimeServicesLiveTest {
     companion object {
@@ -95,7 +95,7 @@ class AnimeServicesLiveTest {
                 try {
                     AnimeBrowse.fetch(source.id, AnimeBrowse.Type.POPULAR, 1)
                 } catch (e: IOException) {
-                    // upstream's CloudflareInterceptor without FlareSolverr; whether to add a solver is decided in Stage 5
+                    // upstream's CloudflareInterceptor without FlareSolverr; whether to add a solver is decided later
                     assumeTrue(e.message?.contains("Cloudflare") != true, "${source.name} is behind Cloudflare: ${e.message}")
                     throw e
                 }

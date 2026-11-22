@@ -5,7 +5,7 @@ import type { LibraryEntry, MediaKind } from "../api/types";
 /** `localStorage` key of the Library's sort, per kind. */
 export const LIBRARY_SORT_KEY = "madoyomi.librarySort";
 
-/** Phase 6 Stage 2: `unread`, the unread/unwatched count, and `lastRead`, when it was last read or watched. */
+/** `unread`, the unread/unwatched count, and `lastRead`, when it was last read or watched. */
 export type LibrarySortKey = "title" | "added" | "unread" | "lastRead";
 
 export const LIBRARY_SORT_KEYS: readonly LibrarySortKey[] = [

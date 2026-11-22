@@ -15,7 +15,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Finding a video again after a refetch, the next video to offer, and the HTTP status in mpv's log (Stage 4). */
+/** Finding a video again after a refetch, the next video to offer, and the HTTP status in mpv's log. */
 class VideoChoicesTest {
     private fun video(
         index: Int,

@@ -6,7 +6,7 @@ package madoyomi.core.player
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The order of an episode's hosters and videos by the player settings' preferred server and quality (Phase 4 step 9),
+ * The order of an episode's hosters and videos by the player settings' preferred server and quality,
  * applied after the source's own `sortHosters()`/`sortVideos()` (which already use the source's quality setting). Both
  * sorts are stable: what the preference doesn't tell apart keeps the source's order.
  *

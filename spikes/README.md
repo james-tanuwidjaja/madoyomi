@@ -1,6 +1,6 @@
-# Phase 0 spikes
+# Spikes
 
-Throwaway code for [docs/phases/phase-0-spikes.md](../docs/phases/phase-0-spikes.md). The findings live in `docs/research/` and in the phase doc. Nothing here is a dependency of the real app, except that `app/src-tauri` uses `sidecar/build/libs/sidecar-all.jar` in debug builds until the real backend exists.
+Throwaway code from the early spikes that checked the plan could work. Nothing here is a dependency of the real app, except that `app/src-tauri` uses `sidecar/build/libs/sidecar-all.jar` in debug builds until the real backend exists.
 
 Tools are expected in `tools/bin/` (gitignored): `jdk-21/` (Temurin 21), `jadx/`, `dex2jar/dex-tools-2.4.38/`, `gradle/`. mpv, protoc and node are expected on PATH. Generated output goes to each spike's `out/` folder (gitignored).
 
@@ -19,7 +19,7 @@ curl.exe -sSL -o index-pb\out\index.pb https://raw.githubusercontent.com/keiyous
 .\gradlew :index-pb:run --args="out/index.pb"   # a path relative to index-pb/, or a URL; no args = the Keiyoushi URL
 ```
 
-Schema: [docs/research/index-pb.proto](../docs/research/index-pb.proto).
+Schema: [index-pb/index-pb.proto](index-pb/index-pb.proto).
 
 ## S3: anime extension analysis (`anime-harness/`)
 

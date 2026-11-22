@@ -2,7 +2,7 @@ import type { GraphQLErrorJson } from "./types";
 import { ApiError } from "./client";
 
 /**
- * A graphql-transport-ws client (Phase 3 step 7; the protocol of
+ * A graphql-transport-ws client (the protocol of
  * https://github.com/enisdenjo/graphql-ws/blob/master/PROTOCOL.md), written here rather than taken from the
  * `graphql-ws` library: that library always asks for the `graphql-transport-ws` subprotocol, and the backend
  * negotiates none, so a browser would fail the handshake (server/UPSTREAM.md "Startup contract"). The token goes

@@ -109,7 +109,7 @@ class ChapterMutation {
                         this[ChapterUserTable.lastPageRead] =
                             it.coerceAtMost(chapterIdToPageCount[chapterId] ?: 0).coerceAtLeast(0)
                         // Madoyomi: marking unread resets the page without stamping last_read_at, Mihon's rule: the
-                        // history (Phase 6) would otherwise list every chapter marked unread as just read
+                        // history would otherwise list every chapter marked unread as just read
                         if (patch.isRead != false) this[ChapterUserTable.lastReadAt] = now
                     }
                 }

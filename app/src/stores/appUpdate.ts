@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /**
- * The app's own updates (Phase 7 Stage 4), run by the shell (src-tauri/src/updater.rs): the setting "Check for app
+ * The app's own updates, run by the shell (src-tauri/src/updater.rs): the setting "Check for app
  * updates" (off by default), the check on start (once the backend is healthy, only when the setting is on and the
  * app is installed; offline or no feed yet is quiet), "Check now", and the update dialog's install with its progress.
  * Its callers run it only when the shell runs the backend (`backend.mode === "tauri"`).

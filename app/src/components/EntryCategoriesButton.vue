@@ -6,7 +6,7 @@ import { useLibrary } from "../composables/useEntries";
 import CategoryPicker from "./CategoryPicker.vue";
 
 /*
- * A details page's "Categories" button (Phase 6 Stage 1), for an entry in the library: it names the categories the
+ * A details page's "Categories" button, for an entry in the library: it names the categories the
  * entry is in and opens the picker for it. The entry's categories come from the library list (read once for the kind).
  */
 const props = defineProps<{ kind: MediaKind; id: number }>();

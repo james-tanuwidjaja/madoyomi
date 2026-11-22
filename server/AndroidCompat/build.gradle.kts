@@ -26,7 +26,7 @@ val madoyomiAndroidOverrides =
         "android/os/LocaleList.class",
     )
 
-// Madoyomi: the android-jar's SHA-256 (Phase 7 Stage 5): the artifact upstream serves can change under the same
+// Madoyomi: the android-jar's SHA-256: the artifact upstream serves can change under the same
 // version (see the repository pin in server/build.gradle.kts), so a different file fails the build instead of
 // failing it later with unresolved classes.
 val androidStubsSha256 = "b91eab7d6c1b0deae4635d351dbaef64266d3a600c81b749b71436e8bdb3aa48"

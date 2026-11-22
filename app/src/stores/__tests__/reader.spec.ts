@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { READER_PREFS_KEY, useReaderStore } from "../reader";
 import { DEFAULT_READER_PREFS } from "../../utils/readerSettings";
 
-/* The reader's global settings on this device (Phase 5 Stage 5): kept in one localStorage value, read field by field;
+/* The reader's global settings on this device: kept in one localStorage value, read field by field;
    "shift by one" stays for the session. */
 
 const stored = () => JSON.parse(localStorage.getItem(READER_PREFS_KEY) ?? "null") as unknown;

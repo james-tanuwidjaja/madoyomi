@@ -1,8 +1,8 @@
 import type { HosterChoice, VideoChoice } from "../api/types";
 
 /*
- * Choosing a video of an episode (Phase 4): the user's last choice for that source (Stage 3's picker), the player
- * settings' preferred server and quality (Stage 5), and the source's own choice. The backend returns the hosters and
+ * Choosing a video of an episode: the user's last choice for that source (the picker's), the player
+ * settings' preferred server and quality, and the source's own choice. The backend returns the hosters and
  * videos sorted by the preference after the source's own sort (`index` is the list's order, `sourceIndex` the
  * source's), and marks the videos that match it (`matchesPreference`). What is preselected, and what auto-play plays:
  * the remembered choice, else the preference's, else the source's.
@@ -14,7 +14,7 @@ import type { HosterChoice, VideoChoice } from "../api/types";
  */
 export const NO_HOSTER_LIST = "no_hoster_list";
 
-/** A hoster's name as the picker shows it: none for the backend's placeholder (Phase 7 Stage 6, found in the exit run). */
+/** A hoster's name as the picker shows it: none for the backend's placeholder (found in the exit run). */
 export function hosterLabel(name: string): string | null {
   return name === NO_HOSTER_LIST || name.trim() === "" ? null : name;
 }
@@ -117,7 +117,7 @@ export function matchChoice(
 
 /**
  * What to preselect (and what auto-play plays): the remembered choice if this episode has its hoster, else the
- * preference's pick, else the source's (Phase 4 §9, Stage 5).
+ * preference's pick, else the source's.
  */
 export function initialPick(
   hosters: readonly HosterChoice[],

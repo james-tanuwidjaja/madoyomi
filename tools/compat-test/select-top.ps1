@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-  Picks the extensions the Phase 2 compat work measures: the top 20 yuzono anime extensions (top20.txt) and a
+  Picks the extensions the compat work measures: the top 20 yuzono anime extensions (top20.txt) and a
   Keiyoushi manga sample (manga-sample.txt). Optionally downloads their APKs.
 
 .DESCRIPTION
-  Anime (top20.txt), the Phase 2 decision (docs/phases/phase-2-anime-sources.md, section 9): yuzono's APKs ranked by
+  Anime (top20.txt), as decided: yuzono's APKs ranked by
   jsDelivr hits over the last month (https://data.jsdelivr.com/v1/stats/packages/gh/yuzono/anime-repo@repo/files,
   paginated), summed per package across versions. Torrent extensions are excluded, NSFW is included; each row records
   the content warning from yuzono's index.pb (the JSON index can't tell MIXED from NSFW).
@@ -119,7 +119,7 @@ $ranked = @($ranked | ForEach-Object { $i++; $_ | Add-Member -NotePropertyName R
 Write-List (Join-Path $PSScriptRoot 'top20.txt') @(
     "Top $AnimeCount yuzono anime extensions by jsDelivr hits, snapshot $Today (tools/compat-test/select-top.ps1).",
     "Method: data.jsdelivr.com stats for gh/yuzono/anime-repo@repo, period=month ($statFiles APK files over $($page - 1) pages),",
-    'hits summed per package across versions; torrent extensions excluded; NSFW included (Phase 2 doc, section 9).',
+    'hits summed per package across versions; torrent extensions excluded; NSFW included.',
     "Index: $YuzonoIndex ($($anime.Count) extensions); warning = index.pb content warning; apk = the current APK."
 ) $ranked 'monthly_hits'
 

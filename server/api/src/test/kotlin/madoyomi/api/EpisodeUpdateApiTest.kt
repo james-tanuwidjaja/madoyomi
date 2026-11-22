@@ -16,7 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * `updateEpisode` and `updateEpisodes` (Phase 4 Stage 3): the watched and bookmark flags and the position (milliseconds),
+ * `updateEpisode` and `updateEpisodes`: the watched and bookmark flags and the position (milliseconds),
  * in the shape of upstream's `updateChapter(s)`.
  */
 class EpisodeUpdateApiTest : AnimeApiTest() {

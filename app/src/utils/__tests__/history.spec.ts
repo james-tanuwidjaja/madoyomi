@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { HistoryItem } from "../../api/types";
 import { dayLabel, groupByDay, resumeLabel, resumeRoute, targetProgress } from "../history";
 
-/* The History view's pure parts (Phase 6 Stage 2). */
+/* The History view's pure parts. */
 const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h).getTime() / 1000;
 
 function item(id: number, seconds: number, over: Partial<HistoryItem> = {}): HistoryItem {

@@ -9,7 +9,7 @@ import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 
 /**
- * Watch history, one row per episode (Aniyomi's `animehistory`): M0070's Phase 6 stub, written since Phase 6 Stage 2
+ * Watch history, one row per episode (Aniyomi's `animehistory`): M0070's stub, written since history was added
  * (`madoyomi.core.library.AnimeHistory`).
  */
 object AnimeHistoryTable : IntIdTable("anime_history") {

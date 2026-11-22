@@ -42,7 +42,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 /**
- * The anime side of the queue (Phase 6 Stage 5): which episodes to queue, where a downloaded episode goes and what is
+ * The anime side of the queue: which episodes to queue, where a downloaded episode goes and what is
  * recorded of it ([EpisodeDownloadTable]), deleting downloads, the automatic downloads after a library update check,
  * and playing a downloaded episode in mpv.
  *
@@ -63,7 +63,7 @@ object AnimeDownloads {
 
     fun animeRoot(): File = File(downloadsRoot(), "anime")
 
-    /** A file beside the video, in [EpisodeDownloadTable.subtitles]: a subtitle, or an audio track (Stage 5's fix). */
+    /** A file beside the video, in [EpisodeDownloadTable.subtitles]: a subtitle, or an audio track (a later fix). */
     @Serializable
     data class SubtitleFile(
         val path: String,
@@ -386,10 +386,10 @@ object AnimeDownloads {
 
     /**
      * Plays the downloaded episode [episodeId] in mpv from [startSeconds] (with [resume] and no start: from where it
-     * stopped, by the app's rule, [resumePoint]): Phase 4's session (progress saves, the watched mark, the next
+     * stopped, by the app's rule, [resumePoint]): the player's session (progress saves, the watched mark, the next
      * episode), with the local file in place of the URL and its subtitle files as the external tracks. Nothing goes to
      * the source, and a failure isn't retried with fetched videos. `NOT_FOUND` when the episode isn't downloaded or its
-     * file is gone; `DOWNLOADS_UNREACHABLE` when the whole downloads folder is (Phase 7 Stage 3).
+     * file is gone; `DOWNLOADS_UNREACHABLE` when the whole downloads folder is.
      */
     fun play(
         episodeId: Int,
@@ -400,7 +400,7 @@ object AnimeDownloads {
             local(episodeId)
                 ?: throw MadoyomiException(ErrorCode.NOT_FOUND, "Episode $episodeId isn't downloaded", mapOf("episodeId" to episodeId))
         if (!local.file.isFile) {
-            // Phase 7 Stage 3: the whole folder gone (an unplugged drive) says so, rather than "the file is gone"
+            // The whole folder gone (an unplugged drive) says so, rather than "the file is gone"
             if (downloadsRootOverride == null) DownloadsFolder.requireReachable()
             throw MadoyomiException(
                 ErrorCode.NOT_FOUND,

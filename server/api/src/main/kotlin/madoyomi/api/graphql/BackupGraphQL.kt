@@ -27,7 +27,7 @@ import suwayomi.tachidesk.server.user.requireUser
 import java.util.concurrent.CompletableFuture
 
 /*
- * Madoyomi's backups (Phase 6 Stage 6, madoyomi.core.backup): `.madoyomi-backup` files in `<data dir>/backups`, made
+ * Madoyomi's backups (madoyomi.core.backup): `.madoyomi-backup` files in `<data dir>/backups`, made
  * now or on a schedule, checked against this install before a restore, restored with merge or replace. Named apart
  * from upstream's manga-only `createBackup`/`restoreBackup`/`validateBackup`/`restoreStatus`, which stay.
  */

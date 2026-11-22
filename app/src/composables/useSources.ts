@@ -61,7 +61,7 @@ function browseKey(p: BrowseParams): BrowseKey {
 }
 
 /**
- * A source's popular, latest or search results, page by page (Phase 3 step 8). Browsing is a mutation on the server
+ * A source's popular, latest or search results, page by page. Browsing is a mutation on the server
  * (it stores the entries), wrapped here in an infinite query: page N+1 is asked for while the last page says
  * `hasNextPage`. A change of kind, source, type, query or filters starts over at page 1.
  *

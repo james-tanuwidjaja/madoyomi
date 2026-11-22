@@ -25,7 +25,7 @@ allprojects {
         // Madoyomi: the android-jar branch at a fixed commit (upstream: raw/android-jar/, the branch's head). Upstream
         // rewrites com.github.Suwayomi:android-jar:1.0.0 in place whenever its AndroidCompat implements another
         // class (2026-11-07: RenderProcessGoneDetail), which this fork still takes from the stubs. 6830765 is the jar
-        // the fork was built and tested with; AndroidCompat/build.gradle.kts checks its SHA-256 (Phase 7 Stage 5).
+        // the fork was built and tested with; AndroidCompat/build.gradle.kts checks its SHA-256.
         maven("https://github.com/Suwayomi/Suwayomi-Server/raw/6830765fb39a28e31cd40111c853f5bf88be3f06/")
         maven("https://jitpack.io")
         maven("https://jogamp.org/deployment/maven")

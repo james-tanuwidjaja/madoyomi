@@ -6,7 +6,7 @@ import type { EntryStatus } from "../api/types";
 import { formatStatus } from "../utils/format";
 
 /**
- * The top of a details page (Phase 3 step 15): the cover (the backend's thumbnail route through `useAssetUrl`, so it
+ * The top of a details page: the cover (the backend's thumbnail route through `useAssetUrl`, so it
  * follows a backend restart; the title's first letter without one), the title, author and artist, status, genres,
  * the source and the description, which is clamped to a few lines with "More". The page's buttons go in `actions`,
  * and anything about the entry's place (a season's parent) in `context`.

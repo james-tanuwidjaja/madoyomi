@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-  Phase 2 compat harness: runs the top 20 yuzono anime extensions on the real sidecar jar and writes
-  docs/research/anime-compat.md.
+  Compat harness: runs the top 20 yuzono anime extensions on the real sidecar jar and writes
+  tools/compat-test/reports/anime-compat.md.
 
 .DESCRIPTION
   Starts the jar the way the Tauri shell does (tools\lib\MadoyomiServer.ps1) on a fresh data dir, adds the yuzono
@@ -31,12 +31,12 @@
   GC-root path of each (lib\HprofLoaderRoots.java) in the report.
 
   -Kind Manga runs the Keiyoushi manga sample (manga-sample.txt) through upstream's manga API instead: install ->
-  popular -> details + chapters -> pages -> the first page image, into docs/research/manga-compat.md (Phase 2's
-  "no regression in manga").
+  popular -> details + chapters -> pages -> the first page image, into tools/compat-test/reports/manga-compat.md (the
+  "no regression in manga" check).
 
 .PARAMETER Kind
-  Anime (default: top20.txt, yuzono, docs/research/anime-compat.md) or Manga (manga-sample.txt, Keiyoushi,
-  docs/research/manga-compat.md).
+  Anime (default: top20.txt, yuzono, reports/anime-compat.md) or Manga (manga-sample.txt, Keiyoushi,
+  reports/manga-compat.md).
 
 .PARAMETER Only
   Run only these extensions (short names such as animepahe, or package names). The report then goes to
@@ -50,7 +50,7 @@
   Don't take a heap dump when extension class loaders are still alive at the end.
 
 .PARAMETER Java
-  The java.exe that runs the server. Default: the JDK's (tools\bin\jdk-21). Phase 7 runs the harness on the bundled
+  The java.exe that runs the server. Default: the JDK's (tools\bin\jdk-21). Release checks run the harness on the bundled
   runtime with -Java app\src-tauri\resources\jre\bin\java.exe (tools\jlink.ps1); jcmd, jstat and the heap-dump tool
   still come from the JDK. The report names the runtime when it isn't the JDK's.
 
@@ -96,7 +96,7 @@ $JdkJava = Join-Path $Jdk 'bin\java.exe'
 if (-not $Java) { $Java = $JdkJava }
 $Java = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Java)
 if (-not (Test-Path -LiteralPath $Java)) { throw "java not found at $Java" }
-# the runtime named in the report when it isn't the JDK's (Phase 7: the jlink runtime)
+# The runtime named in the report when it isn't the JDK's (the jlink runtime)
 $JavaLabel = $null
 if ($Java -ne $JdkJava) {
     $home2 = Split-Path (Split-Path $Java -Parent) -Parent
@@ -111,10 +111,10 @@ $KindLower = $Kind.ToLower()
 if (-not $List) { $List = Join-Path $PSScriptRoot $(if ($IsManga) { 'manga-sample.txt' } else { 'top20.txt' }) }
 if (-not $Triage) { $Triage = Join-Path $PSScriptRoot 'triage.txt' }
 if (-not $Report) {
-    $Report = if ($Only) { Join-Path $OutDir "$KindLower-compat-partial.md" } else { Join-Path $RepoRoot "docs\research\$KindLower-compat.md" }
+    $Report = if ($Only) { Join-Path $OutDir "$KindLower-compat-partial.md" } else { Join-Path $RepoRoot "tools\compat-test\reports\$KindLower-compat.md" }
 }
 $Repo = if ($IsManga) { $MangaRepo } else { $AnimeRepo }
-# results: compat-<stamp>.json (anime, as in Stage 5) or manga-compat-<stamp>.json
+# results: compat-<stamp>.json (anime) or manga-compat-<stamp>.json
 $ResultsPrefix = if ($IsManga) { 'manga-compat-' } else { 'compat-' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
@@ -844,13 +844,13 @@ function Get-AutoCategory($x) {
     $msg = [string]$s.message
     $runtimeGap = @($x.compatIssues | Where-Object { $_.origin -eq 'RUNTIME' -and $_.kind -ne 'CLASS_NOT_FOUND' }).Count -gt 0
     if ($code -eq 'EXTENSION_INCOMPATIBLE' -or ($code -eq 'LOAD_FAILED' -and $msg -match 'missing') -or $runtimeGap) { return 'HOST_GAP' }
-    # the server's own word (SOURCE_FAILED reason CLOUDFLARE since Stage 5), or a 403/503 from a site whose base URL
+    # the server's own word (SOURCE_FAILED reason CLOUDFLARE), or a 403/503 from a site whose base URL
     # answers PowerShell's probe with a challenge. A probe challenge alone doesn't count: OkHttp may get through
     # where PowerShell doesn't (hentaihaven browses fine behind one)
     $httpCf = $msg -match '"httpCode":\s*(403|503)' -or $msg -match '\bHTTP (403|503)\b'
     if ($msg -match '(?i)cloudflare|cf_clearance|just a moment' -or ($httpCf -and $x.siteProbe -and $x.siteProbe.cloudflare)) { return 'CLOUDFLARE' }
-    # a source that renders in a real WebView, which the sidecar runs without (KCEF is off by default, phase-1 sidecar
-    # defaults; the WebView/Cloudflare shim is deferred, Phase 2 section 9)
+    # a source that renders in a real WebView, which the sidecar runs without (KCEF is off by default, the sidecar's
+    # defaults; the WebView/Cloudflare shim is deferred)
     if ($msg -match 'CEF is disabled|CefException') { return 'WEBVIEW' }
     # a host the extension needs is unreachable (the site, or a video host of a hoster)
     if ($msg -match '(?i)failed to connect|unable to resolve|unknownhost|no address associated|connection refused|timed out') { return 'SITE_DOWN' }
@@ -889,7 +889,7 @@ function Add-RuntimeSections($L, $R, $exts) {
     & $L '## Compat issues seen at runtime'
     & $L ''
     $rt = @($exts | ForEach-Object { $e = $_; @($e.compatIssues) | Where-Object { $_.origin -eq 'RUNTIME' } | ForEach-Object { "| $($e.name) | $($_.kind) | ``$(Cell (Clip $_.target 100))`` | $(Cell (Clip $_.context 60)) | $($_.count) |" } })
-    if ($rt.Count -eq 0) { & $L 'None (the static issues of `docs/research/compat-scan.md` are counted in the details table).' } else {
+    if ($rt.Count -eq 0) { & $L 'None (the static issues of `tools/compat-test/reports/compat-scan.md` are counted in the details table).' } else {
         & $L '| Extension | Kind | Target | Context | Count |'
         & $L '|---|---|---|---|---|'
         $rt | ForEach-Object { & $L $_ }
@@ -897,7 +897,7 @@ function Add-RuntimeSections($L, $R, $exts) {
     & $L ''
     & $L '## Process health'
     & $L ''
-    & $L 'One JVM for the whole run (phase-1 section 8). Measured after the repo add (baseline), after each extension and after uninstalling all of them; heap is the live heap after a full GC (`jcmd GC.run`, `GC.heap_info`), loaders are the extension class loaders alive (`ChildFirstURLClassLoader` in `jcmd VM.classloader_stats`).'
+    & $L 'One JVM for the whole run. Measured after the repo add (baseline), after each extension and after uninstalling all of them; heap is the live heap after a full GC (`jcmd GC.run`, `GC.heap_info`), loaders are the extension class loaders alive (`ChildFirstURLClassLoader` in `jcmd VM.classloader_stats`).'
     & $L ''
     & $L '| After | OS threads | Java threads | Working set MB | Private MB | Handles | Heap used MB | Metaspace MB | Classes loaded / unloaded | Ext loaders (classes) |'
     & $L '|---|---|---|---|---|---|---|---|---|---|'
@@ -947,7 +947,7 @@ function Write-CompatReport($R, [string]$Path) {
 
     $sb = New-Object Text.StringBuilder
     $L = { param($s) [void]$sb.AppendLine($s) }
-    & $L '# Anime extension compatibility (Phase 2 compat harness)'
+    & $L '# Anime extension compatibility (compat harness)'
     & $L ''
     & $L "> Generated by ``tools/compat-test/run-compat.ps1`` on $($R.run.started) (duration $($R.run.durationMin) min). Do not edit by hand: triage notes go in ``tools/compat-test/triage.txt``, then ``run-compat.ps1 -ReportOnly -Results <json>`` redraws this file."
     & $L ''
@@ -1060,7 +1060,7 @@ function Write-MangaReport($R, [string]$Path) {
     $gaps = @($fail | Where-Object { $_.category -in @('HOST_GAP', 'INTERNAL', 'JVM_ABORT') })
     $sb = New-Object Text.StringBuilder
     $L = { param($s) [void]$sb.AppendLine($s) }
-    & $L '# Manga extension compatibility (Phase 2: no regression in manga)'
+    & $L '# Manga extension compatibility (no regression in manga)'
     & $L ''
     & $L "> Generated by ``tools/compat-test/run-compat.ps1 -Kind Manga`` on $($R.run.started) (duration $($R.run.durationMin) min). Do not edit by hand: triage notes go in ``tools/compat-test/triage.txt``, then ``run-compat.ps1 -Kind Manga -ReportOnly -Results <json>`` redraws this file."
     & $L ''
@@ -1078,7 +1078,7 @@ function Write-MangaReport($R, [string]$Path) {
     & $L ''
     & $L "A regression would be a failure that is Madoyomi's (HOST_GAP, INTERNAL, JVM_ABORT): **$($gaps.Count)**$(if ($gaps.Count) { ": $(($gaps | ForEach-Object { $_.name }) -join ', ')" })."
     $web = @($fail | Where-Object { $_.category -eq 'WEBVIEW' })
-    if ($web.Count) { & $L ''; & $L "WEBVIEW failures ($($web.Count): $(($web | ForEach-Object { $_.name }) -join ', ')) need a real WebView, which the sidecar runs without (KCEF is off by default since Phase 1; the WebView shim is deferred with Cloudflare). They are not counted as regressions of the manga API." }
+    if ($web.Count) { & $L ''; & $L "WEBVIEW failures ($($web.Count): $(($web | ForEach-Object { $_.name }) -join ', ')) need a real WebView, which the sidecar runs without (KCEF is off by default; the WebView shim is deferred with Cloudflare). They are not counted as regressions of the manga API." }
     & $L ''
     & $L '## Results'
     & $L ''
@@ -1105,7 +1105,7 @@ function Write-MangaReport($R, [string]$Path) {
     & $L ''
     & $L '## Failures and triage'
     & $L ''
-    & $L 'Classes as in `docs/research/anime-compat.md`: HOST_GAP, CLOUDFLARE, SITE_DOWN, WEBVIEW (renders in a real WebView; KCEF is off), UPSTREAM_BROKEN, SOURCE_ERROR, INTERNAL, JVM_ABORT.'
+    & $L 'Classes as in `tools/compat-test/reports/anime-compat.md`: HOST_GAP, CLOUDFLARE, SITE_DOWN, WEBVIEW (renders in a real WebView; KCEF is off), UPSTREAM_BROKEN, SOURCE_ERROR, INTERNAL, JVM_ABORT.'
     & $L ''
     if ($fail.Count -eq 0) { & $L 'None.' }
     foreach ($x in $fail) {

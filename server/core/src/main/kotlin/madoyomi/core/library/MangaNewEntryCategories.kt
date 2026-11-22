@@ -15,7 +15,7 @@ import suwayomi.tachidesk.manga.model.table.CategoryTable
 import suwayomi.tachidesk.manga.model.table.MangaUserTable
 
 /**
- * New manga library entries into the categories flagged for new entries (Phase 6 Stage 1), for upstream's GraphQL
+ * New manga library entries into the categories flagged for new entries, for upstream's GraphQL
  * `updateManga(s)`. Upstream does this only in its REST `Library.addMangaToLibrary`, so a manga added through GraphQL
  * stayed in Default whatever the flags said; anime's `AnimeCategories.addedToLibrary` follows the same rule.
  *

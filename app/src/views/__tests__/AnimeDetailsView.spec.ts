@@ -481,7 +481,7 @@ describe("AnimeDetailsView", () => {
   });
 });
 
-describe("AnimeDetailsView: the next episode and failed videos (Phase 4 Stage 4)", () => {
+describe("AnimeDetailsView: the next episode and failed videos", () => {
   const toast = () => wrapper.find('[data-testid="next-episode"]');
   const ended = (episodeId = 1001, nextEpisodeId: number | null = 1002) =>
     usePlaybackStore().apply(
@@ -724,7 +724,7 @@ describe("AnimeDetailsView: the next episode and failed videos (Phase 4 Stage 4)
   });
 });
 
-describe("AnimeDetailsView: the player settings (Phase 4 Stage 5)", () => {
+describe("AnimeDetailsView: the player settings", () => {
   const toast = () => wrapper.find('[data-testid="next-episode"]');
   const ended = () =>
     usePlaybackStore().apply(
@@ -793,7 +793,7 @@ describe("AnimeDetailsView: the player settings (Phase 4 Stage 5)", () => {
   });
 });
 
-describe("AnimeDetailsView: the episode list's downloads (Phase 6 Stage 5)", () => {
+describe("AnimeDetailsView: the episode list's downloads", () => {
   const row = (name: string) =>
     wrapper.findAll('[data-testid="item-row"]').find((r) => r.find(".name").text() === name)!;
 

@@ -62,29 +62,29 @@ import ExportLogs from "../components/ExportLogs.vue";
 import PageLayout from "../components/PageLayout.vue";
 
 /*
- * Settings (Phase 3 step 17): the theme and language, where the backend keeps its data and logs, and the current
+ * Settings: the theme and language, where the backend keeps its data and logs, and the current
  * kind's sources that have settings of their own (each opens /settings/source/:id).
  *
- * Player (Phase 4 Stage 5): the backend's player settings, each saved as it changes and used from the next play (the
+ * Player: the backend's player settings, each saved as it changes and used from the next play (the
  * watched threshold also by the episode playing): when an episode counts as watched, the preferred quality and server
  * (the order of the picker's videos and what is preselected), the subtitle and audio language, and which mpv to run.
- * Auto-play the next episode (Stage 4) is in the same section but stays on this device.
+ * Auto-play the next episode is in the same section but stays on this device.
  *
- * Reader (Phase 5 Stage 1): the chapter-page cache's cap (the backend's setting; a lower one trims the cache before
- * the backend answers), what the cache holds now, and Clear. Stage 5: the reader's global settings on this device
+ * Reader: the chapter-page cache's cap (the backend's setting; a lower one trims the cache before
+ * The backend answers), what the cache holds now, and Clear. The reader's global settings on this device
  * (ReaderPrefsFields, as in the reader's settings sheet), each manga's own mode and direction coming first.
  *
- * Updates (Phase 6 Stage 3): the library update check's schedule (off, the user's default, or every 6, 12 or 24 h)
+ * Updates: the library update check's schedule (off, the user's default, or every 6, 12 or 24 h)
  * with the next check, which entries it skips (completed, with unwatched/unread items, not started), and the Windows
  * toast (off by default, the user's decision). The backend keeps them, for both kinds.
  *
- * Downloads (Phase 6 Stage 4): how many download at once (all sources, and from one source), the automatic download
+ * Downloads: how many download at once (all sources, and from one source), the automatic download
  * of the new chapters a library update finds (off by default, the user's decision; the Categories dialog's Downloads
  * flags say which categories), and the folder downloads are saved in (the data dir's, the user's decision), with
- * Show in Explorer. The backend keeps them, for both kinds. Stage 5: new episodes too, and the two programs anime
+ * Show in Explorer. The backend keeps them, for both kinds. New episodes too, and the two programs anime
  * downloads use, ffmpeg (HLS) and yt-dlp (its fallback), each with its path (empty: looked for) and a check, as mpv's.
  *
- * Backup (Phase 6 Stage 6): Back up now, the schedule (off by default, the user's decision; daily or weekly, keeping
+ * Backup: Back up now, the schedule (off by default, the user's decision; daily or weekly, keeping
  * the last N), the folder with Show in Explorer, the backup files (Restore…, Show, Delete with a second click), a file
  * the user picks (kept in the folder, then restored), and the restore's progress and problems. BackupRestoreDialog
  * shows what a file holds, merge (the default, the user's decision) or replace, and the trust prompt.
@@ -100,7 +100,7 @@ const setPlayer = useSetPlayerSettings();
 const player = computed(() => playerSettings.data.value ?? null);
 
 /**
- * General → App updates (Phase 7 Stage 4): "Check for app updates" (on start; off by default, the user's decision),
+ * General → App updates: "Check for app updates" (on start; off by default, the user's decision),
  * Check now and the version. Apart from Updates below, which is the library's new-items check.
  */
 const appUpdates = useAppUpdateStore();
@@ -278,7 +278,7 @@ function selectValue(e: Event): string {
   return (e.target as HTMLSelectElement).value;
 }
 
-// Backup (Phase 6 Stage 6)
+// Backup
 const backupFiles = useBackupFiles();
 const backupSettings = useBackupSettings();
 const setBackup = useSetBackupSettings();

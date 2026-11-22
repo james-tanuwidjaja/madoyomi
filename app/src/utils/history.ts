@@ -2,7 +2,7 @@ import type { HistoryItem, HistoryTarget } from "../api/types";
 import { progressText } from "./progress";
 
 /*
- * The History view's pure parts (Phase 6 Stage 2): the items grouped by local day, a row's time and progress line,
+ * The History view's pure parts: the items grouped by local day, a row's time and progress line,
  * and where Resume goes.
  */
 
@@ -35,7 +35,7 @@ export function dayLabel(d: Date, now: Date): string {
 }
 
 /**
- * `items` (newest first, as the backend gives them) in groups by local day, in the same order. Phase 6 Stage 3: any
+ * `items` (newest first, as the backend gives them) in groups by local day, in the same order. Any
  * item with an `at` in epoch seconds (the Updates rows too).
  */
 export function groupByDay<T extends { at: number }>(

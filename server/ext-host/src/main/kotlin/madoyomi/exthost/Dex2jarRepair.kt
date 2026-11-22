@@ -38,7 +38,7 @@ import kotlin.io.path.readBytes
  *    `new T` and its `invokespecial S.<init>` into `T.<init>`, and gives `T` (and every class between `T` and `S`)
  *    the constructor R8 removed, which only calls `super`. Sites it can't map unambiguously are skipped and reported.
  *    dex2jar doesn't always fold the pair: where it keeps `new T` and only the `<init>` call names `S` (mangafire,
- *    comix and mangakakalot, Phase 2 §10), the class is already right and only the call is rewritten to `T.<init>`.
+ *    comix and mangakakalot), the class is already right and only the call is rewritten to `T.<init>`.
  *    Such a site counts as one of `S`'s once its `<init>` turns out to be `S`'s.
  * 2. **Elided super constructors.** The same removal seen from the subclass: a constructor of `C` calls
  *    `X.<init>` on `this`, where `X` is an ancestor beyond `C`'s direct superclass `U`, whose no-op constructor R8

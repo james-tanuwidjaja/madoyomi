@@ -9,7 +9,7 @@ This module holds the Aniyomi extension API (`eu.kanade.tachiyomi.animesource.*`
 | `eu/kanade/tachiyomi/animesource/**` (26 files) | [aniyomiorg/aniyomi](https://github.com/aniyomiorg/aniyomi) @ `9741444` (2026-09-14), `source-api/src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/` | Apache License 2.0 |
 | `mihon/core/common/extensions/JsonObject.kt` | the same Aniyomi commit, `core/common` module | Apache License 2.0 |
 
-The license text is in [`src/main/kotlin/eu/kanade/tachiyomi/LICENSE`](src/main/kotlin/eu/kanade/tachiyomi/LICENSE). Each file carries an Apache-2.0 header naming its origin. The code was first ported for the Phase 0 spike (`spikes/anime-harness`) and copied here in Phase 1.
+The license text is in [`src/main/kotlin/eu/kanade/tachiyomi/LICENSE`](src/main/kotlin/eu/kanade/tachiyomi/LICENSE). Each file carries an Apache-2.0 header naming its origin. The code was first ported for an early spike (`spikes/anime-harness`) and then copied here.
 
 ## Changes from upstream
 

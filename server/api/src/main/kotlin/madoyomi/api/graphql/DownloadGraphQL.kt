@@ -45,9 +45,9 @@ import java.io.File
 import java.util.concurrent.CompletableFuture
 
 /*
- * The download queue (Phase 6 Stage 4, madoyomi.core.downloads), for both kinds (manga in Stage 4, anime in Stage 5):
+ * The download queue (madoyomi.core.downloads), for both kinds:
  * the queue and the completed list, queueing, pause, resume, retry, cancel, reorder, deleting downloaded chapters and
- * episodes, the settings with the tools' check (Stage 5), playing a downloaded episode (Stage 5), and the
+ * episodes, the settings with the tools' check, playing a downloaded episode, and the
  * `downloadsChanged` subscription (the WS "downloads" event). Named apart from upstream's
  * `enqueueChapterDownloads`/`downloadStatus`, which stay but the app doesn't use.
  */
@@ -152,7 +152,7 @@ data class DownloadQueueType(
     val animeDone: Int,
     @GraphQLDescription("Epoch milliseconds of the last item done; 0 if none is in the completed list")
     val lastFinishedAt: Long,
-    @GraphQLDescription("Why nothing new starts now (the downloads folder is moving or out of reach), or null. Phase 7 Stage 3")
+    @GraphQLDescription("Why nothing new starts now (the downloads folder is moving or out of reach), or null.")
     val heldBecause: String? = null,
 ) {
     companion object {
@@ -167,7 +167,7 @@ data class DownloadQueueType(
     }
 }
 
-@GraphQLDescription("The downloads folder (Phase 7 Stage 3): where it is, whether it is there, and its last change")
+@GraphQLDescription("The downloads folder: where it is, whether it is there, and its last change")
 data class DownloadsFolderType(
     @GraphQLDescription("The folder, absolute")
     val path: String,
@@ -287,7 +287,7 @@ class DownloadQueueQuery {
     fun downloadSettings(): DownloadSettingsType = settingsType(DownloadSettingsStore.current())
 
     @RequireAuth
-    @GraphQLDescription("The downloads folder: where it is, whether it is there, and how its last change went (Phase 7 Stage 3)")
+    @GraphQLDescription("The downloads folder: where it is, whether it is there, and how its last change went")
     fun downloadsFolder(): DownloadsFolderType = DownloadsFolderType(DownloadsFolder.status())
 
     @RequireAuth
@@ -492,7 +492,7 @@ class DownloadQueueMutation {
 
     @RequireAuth
     @GraphQLDescription(
-        "Changes the downloads folder (Phase 7 Stage 3). The new folder must be empty or new, and nothing queued or " +
+        "Changes the downloads folder. The new folder must be empty or new, and nothing queued or " +
             "downloading (BAD_REQUEST names what is wrong). MOVE moves everything downloaded (copied and then deleted " +
             "across drives); START_EMPTY leaves the old files and forgets them. It goes on in the background: follow " +
             "downloadsFolder.change",
@@ -543,7 +543,7 @@ class DownloadQueueSubscription {
     }
 }
 
-/** Whether an episode is downloaded (Stage 5: `EpisodeType.downloaded`), for a page of episodes in one query. */
+/** Whether an episode is downloaded (`EpisodeType.downloaded`), for a page of episodes in one query. */
 class EpisodeDownloadedDataLoader : KotlinDataLoader<Int, Boolean> {
     override val dataLoaderName = "EpisodeDownloadedDataLoader"
 
@@ -556,7 +556,7 @@ class EpisodeDownloadedDataLoader : KotlinDataLoader<Int, Boolean> {
         }
 }
 
-/** An anime's downloaded episodes (Stage 5: `AnimeType.downloadCount`, its seasons' for a Seasons entry). */
+/** An anime's downloaded episodes (`AnimeType.downloadCount`, its seasons' for a Seasons entry). */
 class AnimeDownloadCountDataLoader : KotlinDataLoader<Int, Int> {
     override val dataLoaderName = "AnimeDownloadCountDataLoader"
 

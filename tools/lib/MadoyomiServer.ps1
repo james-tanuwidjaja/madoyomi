@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Helpers for scripts that drive a Madoyomi-Server jar over its API (smoke-api.ps1; the Phase 2 compat harness).
+  Helpers for scripts that drive a Madoyomi-Server jar over its API (smoke-api.ps1; the compat harness).
 
 .DESCRIPTION
   Dot-source this file: . (Join-Path $PSScriptRoot 'lib\MadoyomiServer.ps1')
@@ -20,7 +20,7 @@
 # --- server ---
 
 # The JDK 21 the build uses: MADOYOMI_JDK when set, else tools\bin\jdk-21 (the dev desktop's), else JAVA_HOME (CI's
-# actions/setup-java, Phase 7 Stage 5). It must be a full JDK (jlink.ps1 needs its jmods).
+# actions/setup-java). It must be a full JDK (jlink.ps1 needs its jmods).
 function Get-MadoyomiJdk([string]$RepoRoot) {
     if ($env:MADOYOMI_JDK) { return $env:MADOYOMI_JDK }
     $local = Join-Path $RepoRoot 'tools\bin\jdk-21'

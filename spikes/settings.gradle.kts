@@ -1,4 +1,4 @@
-// Throwaway Phase 0 spikes (see docs/phases/phase-0-spikes.md). Not part of the real backend.
+// Throwaway early spikes (see spikes/README.md). Not part of the real backend.
 rootProject.name = "madoyomi-spikes"
 
 pluginManagement {

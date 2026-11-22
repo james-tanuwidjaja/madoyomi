@@ -1,5 +1,5 @@
-// Phase 0 / S2 spike: parse a Mihon extension-store index (index.pb) and print every extension.
-// Schema: docs/research/index-pb.proto. Throwaway code.
+// Spike S2: parse a Mihon extension-store index (index.pb) and print every extension.
+// Schema: index-pb.proto (next to this project). Throwaway code.
 @file:OptIn(ExperimentalSerializationApi::class)
 
 package madoyomi.spike.indexpb

@@ -153,7 +153,7 @@ imageio-webp = "com.github.usefulness:webp-imageio:0.11.0"
 
 # Testing
 mockk = "io.mockk:mockk:1.14.11"
-# Madoyomi: test only, a fake mpv on a real Windows named pipe (Phase 4); Java can't create one
+# Madoyomi: test only, a fake mpv on a real Windows named pipe; Java can't create one
 jna-platform = "net.java.dev.jna:jna-platform:5.17.0"
 
 # cron scheduler

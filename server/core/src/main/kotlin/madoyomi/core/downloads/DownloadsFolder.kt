@@ -40,7 +40,7 @@ enum class DownloadsFolderMode { MOVE, START_EMPTY }
 enum class DownloadsFolderChangeState { MOVING, DONE, FAILED }
 
 /**
- * The downloads folder of one's choice (Phase 7 Stage 3; phase-6 §9 "Stage 4" left it for Phase 7).
+ * The downloads folder of one's choice.
  *
  * The folder is [DownloadSettings.folder] (`downloads.json`), else upstream's `server.downloadsPath`, else
  * `<data dir>/downloads`. Upstream's setting falls back to the default when its folder is missing; Madoyomi's never

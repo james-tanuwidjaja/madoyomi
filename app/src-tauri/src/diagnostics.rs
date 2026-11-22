@@ -1,4 +1,4 @@
-//! Settings → "Export logs" and the crash dialog's export (Phase 7 Stage 3), and the folder picker.
+//! Settings → "Export logs" and the crash dialog's export, and the folder picker.
 //!
 //! The shell writes the zip, so it works while the backend is down. What goes in:
 //! - `logs/`: every log in the log folder, the rolled ones too: `sidecar*.log` (the shell, the backend's output, the

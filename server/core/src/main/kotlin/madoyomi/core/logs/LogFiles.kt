@@ -9,7 +9,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
 
 /**
- * Numbered log files (Phase 7 Stage 3): `mpv.log` is the current one, `mpv.1.log` the one before, and so on. The shell
+ * Numbered log files: `mpv.log` is the current one, `mpv.1.log` the one before, and so on. The shell
  * keeps `sidecar.log` the same way (app/src-tauri/src/sidecar.rs); the backend's own `madoyomi.log` is rolled by
  * upstream's logback setup (`xyz.nulldev.ts.config.Logging`).
  */
@@ -26,8 +26,8 @@ object LogFiles {
      * Makes room for a new [file]: the oldest of [keep] files is deleted, each other one moves up a number, and [file]
      * becomes `.1`. [keep] counts [file] too, so at most [keep] files are left once the new one is written. Best
      * effort: a move or delete that fails is tried again for about a second (Windows refuses one while another
-     * program still has the file open, such as a virus scanner reading the log mpv just closed; Phase 7 Stage 5
-     * saw it in CI), then logged, and the new output replaces a current log that couldn't move.
+     * program still has the file open, such as a virus scanner reading the log mpv just closed; seen in
+     * CI), then logged, and the new output replaces a current log that couldn't move.
      */
     fun rotate(
         file: File,

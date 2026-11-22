@@ -28,7 +28,7 @@ import { queryKeys, type BrowseKey } from "./queryKeys";
 
 /*
  * Stored entries and their episodes/chapters/seasons (the database, not the source), the refresh from the source,
- * the library flag and the library lists (Phase 3 Stage 5). A refresh or a library change writes what the server
+ * the library flag and the library lists. A refresh or a library change writes what the server
  * returns into the cache, so nothing is fetched twice and the source's site isn't asked again.
  */
 
@@ -94,7 +94,7 @@ export function useChapters(mangaId: MaybeRefOrGetter<number | null>) {
 }
 
 /**
- * Progress changed (Phase 6 Stage 2): a watched or read mark, a reader save, a playback session. The library's counts
+ * Progress changed: a watched or read mark, a reader save, a playback session. The library's counts
  * and "last read" and the History of `kind` are fetched again (only the ones on screen right away; the others when
  * they are next shown).
  */
@@ -104,7 +104,7 @@ export function invalidateProgress(
 ) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.library(kind) });
   void queryClient.invalidateQueries({ queryKey: queryKeys.history(kind) });
-  // Phase 6 Stage 3: the Updates rows show the watched/read state too
+  // The Updates rows show the watched/read state too
   void queryClient.invalidateQueries({ queryKey: queryKeys.updates(kind) });
 }
 
@@ -220,7 +220,7 @@ export function useSetInLibrary() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Watched marks (Phase 4 Stage 3)
+// Watched marks
 
 export interface UpdateEpisodesRequest {
   ids: number[];
@@ -248,7 +248,7 @@ export function useUpdateEpisodes(animeId: MaybeRefOrGetter<number>) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Read marks and reading progress (Phase 5 Stage 2)
+// Read marks and reading progress
 
 /**
  * The chapters as stored replace their rows in the manga's cached chapter list (no refetch); the library's counts and

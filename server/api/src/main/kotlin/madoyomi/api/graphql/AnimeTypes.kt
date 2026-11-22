@@ -108,21 +108,21 @@ class AnimeType(
     fun seasons(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<AnimeNodeList> =
         dataFetchingEnvironment.getValueFromDataLoader("SeasonsForAnimeDataLoader", id)
 
-    @GraphQLDescription("The categories it is in, by position; empty when it is in Default (Phase 6)")
+    @GraphQLDescription("The categories it is in, by position; empty when it is in Default")
     fun categories(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<List<AnimeCategoryType>> =
         dataFetchingEnvironment.getValueFromDataLoader("CategoriesForAnimeDataLoader", id)
 
     @GraphQLDescription(
-        "Episodes not watched (a Seasons entry: its seasons'), for the library's badge; as upstream's MangaType.unreadCount (Phase 6)",
+        "Episodes not watched (a Seasons entry: its seasons'), for the library's badge; as upstream's MangaType.unreadCount",
     )
     fun unwatchedCount(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Int> =
         dataFetchingEnvironment.getValueFromDataLoader<Int, AnimeHistory.Stats>("AnimeStatsDataLoader", id).thenApply { it.unwatchedCount }
 
-    @GraphQLDescription("Epoch seconds when an episode (a Seasons entry: of its seasons) was last played, 0 if never (Phase 6)")
+    @GraphQLDescription("Epoch seconds when an episode (a Seasons entry: of its seasons) was last played, 0 if never")
     fun lastSeenAt(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Long> =
         dataFetchingEnvironment.getValueFromDataLoader<Int, AnimeHistory.Stats>("AnimeStatsDataLoader", id).thenApply { it.lastSeenAt }
 
-    @GraphQLDescription("Episodes downloaded (Phase 6 Stage 5), a Seasons entry's seasons' included")
+    @GraphQLDescription("Episodes downloaded, a Seasons entry's seasons' included")
     fun downloadCount(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Int> =
         dataFetchingEnvironment.getValueFromDataLoader("AnimeDownloadCountDataLoader", id)
 
@@ -180,7 +180,7 @@ class EpisodeType(
     val summary: String?,
     val previewUrl: String?,
 ) : Node {
-    @GraphQLDescription("Whether the episode is downloaded (Phase 6 Stage 5): playDownloadedEpisode plays its file")
+    @GraphQLDescription("Whether the episode is downloaded: playDownloadedEpisode plays its file")
     fun downloaded(dataFetchingEnvironment: DataFetchingEnvironment): CompletableFuture<Boolean> =
         dataFetchingEnvironment.getValueFromDataLoader("EpisodeDownloadedDataLoader", id)
 

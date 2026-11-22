@@ -14,7 +14,7 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 
 /**
- * The library update check's "new" marks (Phase 6 Stage 3): a check that finds new items marks the library entry with
+ * The library update check's "new" marks: a check that finds new items marks the library entry with
  * their count until the entry is opened.
  * - `ANIME_UPDATE_MARK`: `ANIME` (FK, `CASCADE`, unique), `NEW_COUNT`, `MARKED_AT` (epoch seconds);
  * - `MANGA_UPDATE_MARK`: `MANGA` and `USER_ID` (FKs, `CASCADE`, unique pair: upstream's library is per user), `NEW_COUNT`,

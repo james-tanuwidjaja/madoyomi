@@ -1,5 +1,5 @@
 /*
- * Design tokens (Phase 3 §9): a Windows 11 / Fluent-like look. Segoe UI Variable, neutral layered surfaces,
+ * Design tokens: a Windows 11 / Fluent-like look. Segoe UI Variable, neutral layered surfaces,
  * 4/8 px radii, subtle borders, one accent, compact density.
  *
  * Dark and light both ship. The theme follows Windows (prefers-color-scheme) unless <html data-theme="dark|light">

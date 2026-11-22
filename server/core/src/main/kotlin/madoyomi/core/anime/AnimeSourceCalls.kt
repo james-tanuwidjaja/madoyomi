@@ -29,7 +29,7 @@ object AnimeSourceCalls {
     /**
      * The stack of the threads source calls run on. Android's regex engine (ICU) is iterative, `java.util.regex`
      * recurses once per repetition of a group, so an extension's `(?:a|b)*` over a long page overflows a JVM thread's
-     * default 1 MB stack where it works on Android (anizone, Phase 2 §10: a 41K-character `JSON.parse('…')` needs more
+     * Default 1 MB stack where it works on Android (anizone, a 41K-character `JSON.parse('…')` needs more
      * than 16 MB; 64 MB was enough up to 250K). Windows only reserves a thread's stack and commits it as it is used.
      */
     const val STACK_SIZE: Long = 128L * 1024 * 1024
@@ -49,7 +49,7 @@ object AnimeSourceCalls {
      * inherits the access-control context of the stack that creates it: the protection domain of every extension
      * frame on it, and so that extension's class loader, for as long as the thread lives. The threads it starts in
      * turn inherit that too (a pool thread that once ran kickassanime started reanime's local server, which then kept
-     * kickassanime's loader after uninstall; Phase 2 §10, Stage 6). Created privileged, a thread inherits only the
+     * kickassanime's loader after uninstall). Created privileged, a thread inherits only the
      * host's own frames.
      */
     @Suppress("DEPRECATION")

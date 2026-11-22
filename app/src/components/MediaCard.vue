@@ -6,16 +6,16 @@ import type { EntrySummary } from "../api/types";
 
 /**
  * A browse or library card: the cover, the title and an "In library" mark, linking to the entry's details. The
- * cover is the backend's thumbnail route (`thumbnailUrl`, which applies the source's headers; Phase 3 step 21), with
+ * cover is the backend's thumbnail route (`thumbnailUrl`, which applies the source's headers), with
  * `?token=` added by `useAssetUrl`, so it follows a backend restart. Without a cover, or when it fails, the card
  * shows the title's first letter.
  */
 /**
- * `hideLibraryBadge`: for the Library itself, where every card is in it. `selectable` (the Library's selection, Phase 6):
+ * `hideLibraryBadge`: for the Library itself, where every card is in it. `selectable` (the Library's selection):
  * the card is a toggle button instead of a link, `selected` marks it, and a click emits `select` with the event (for
- * Shift+click ranges). `count` (Phase 6 Stage 2): the unwatched/unread badge, shown above 0. `newCount` (Stage 3):
- * the "N new" mark of an entry a library update check found new items in, until it is opened. `downloaded` (Stage 4):
- * how many of its chapters (Stage 5: or episodes) are downloaded, shown above 0.
+ * Shift+click ranges). `count`: the unwatched/unread badge, shown above 0. `newCount`:
+ * the "N new" mark of an entry a library update check found new items in, until it is opened. `downloaded`:
+ * How many of its chapters (or episodes) are downloaded, shown above 0.
  */
 const props = defineProps<{
   entry: EntrySummary;

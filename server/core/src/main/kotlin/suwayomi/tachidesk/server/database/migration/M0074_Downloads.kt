@@ -14,7 +14,7 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 
 /**
- * The download queue (Phase 6 Stage 4), for both kinds: `DOWNLOAD`, one row per chapter (`MANGA`, `CHAPTER`) or
+ * The download queue, for both kinds: `DOWNLOAD`, one row per chapter (`MANGA`, `CHAPTER`) or
  * episode (`ANIME`, `EPISODE`), the four references nullable and `CASCADE`, `CHAPTER` and `EPISODE` unique; `KIND`,
  * `USER_ID`, `SOURCE_ID`, `STATE` (`QUEUED`, `DOWNLOADING`, `PAUSED`, `FAILED`, `DONE`), `POSITION`, `PROGRESS_DONE`,
  * `PROGRESS_TOTAL`, `BYTES`, `TRIES`, `ERROR`, `ADDED_AT` and `FINISHED_AT` (epoch milliseconds).

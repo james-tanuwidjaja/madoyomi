@@ -22,7 +22,7 @@ import TrustDialog from "../components/TrustDialog.vue";
 import VirtualList from "../components/VirtualList.vue";
 
 /*
- * Extensions (Phase 3 step 12): the current kind's extensions in three tabs (Available, Installed, Updates), with a
+ * Extensions: the current kind's extensions in three tabs (Available, Installed, Updates), with a
  * search, a language filter and "Show 18+". Install, update and uninstall show their live steps from the events
  * store (src/api/realtime.ts follows every install), and an installed extension whose certificate isn't trusted
  * offers the trust prompt (TrustDialog), which also opens by itself after such an install.

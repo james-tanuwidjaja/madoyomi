@@ -28,7 +28,7 @@ import suwayomi.tachidesk.manga.model.dataclass.IncludeOrExclude
 import suwayomi.tachidesk.server.database.dbTransaction
 
 /**
- * The anime library's categories (Phase 6 Stage 1), with upstream's rules for manga categories (`Category`,
+ * The anime library's categories, with upstream's rules for manga categories (`Category`,
  * `CategoryManga`, `CategoryMutation`, `Library.addMangaToLibrary`):
  * - one "Default" category ([AnimeCategoryTable.isDefaultCategory]) holds the library entries that are in no other
  *   category; it can't be renamed, flagged for new entries or deleted, and its name is reserved;

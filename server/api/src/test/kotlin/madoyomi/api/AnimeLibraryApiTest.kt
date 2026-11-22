@@ -13,7 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** `updateAnime` and `updateAnimes` (Phase 3 Stage 5): the library flag, in upstream's `updateManga` shape. */
+/** `updateAnime` and `updateAnimes`: the library flag, in upstream's `updateManga` shape. */
 class AnimeLibraryApiTest : AnimeApiTest() {
     private val source = FakeAnimeSource(id = 6_161L)
 

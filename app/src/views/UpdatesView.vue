@@ -20,7 +20,7 @@ import PageLayout from "../components/PageLayout.vue";
 import UpdatesRow from "../components/UpdatesRow.vue";
 
 /*
- * Updates (Phase 6 Stage 3) of the kind the switch shows, as History: the new episodes or chapters of library entries,
+ * Updates of the kind the switch shows, as History: the new episodes or chapters of library entries,
  * newest fetch first, grouped by day, 50 at a time (Mihon's Updates screen). A row opens the episode's picker or the
  * chapter in the reader, and clears its entry's "new" mark; "Mark all seen" clears them all. The header says what the
  * last check found and when the next scheduled one comes, has "Update library" (Stop while one runs), and lists the

@@ -1,7 +1,7 @@
 # Minimal protobuf wire-format reader for the repo indexes (index.pb). No schema: a message is decoded into a
 # hashtable of field number -> list of raw values (varints as [UInt64], length-delimited fields as [byte[]]).
 # Callers decode nested messages and strings themselves (Read-PbMessage on the bytes, Get-PbString).
-# Field numbers of the two index schemas are documented in docs/phases/phase-1-backend-foundation.md section 10 and in
+# Field numbers of the two index schemas are documented in spikes/index-pb/index-pb.proto and in
 # server/core/src/main/kotlin/madoyomi/core/repo/AnimeNetworkExtensionStore.kt (Aniyomi) and upstream's
 # NetworkExtensionStore.kt (Mihon).
 

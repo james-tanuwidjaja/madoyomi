@@ -136,7 +136,7 @@ object Page {
 
         val cacheSaveDir = getChapterCachePath(mangaId, chapterId)
 
-        // Madoyomi: through PageImages/PageCache (Phase 5): one fetch per page at a time, a retry (an expired image URL
+        // Madoyomi: through PageImages/PageCache: one fetch per page at a time, a retry (an expired image URL
         // got anew), SOURCE_FAILED errors, and the cache's size cap with LRU eviction. Upstream:
         // getImageResponse(cacheSaveDir, fileName) { source.getImage(tachiyomiPage) }
         return PageImages.get(mangaId, chapterId, index, cacheSaveDir, fileName, source, tachiyomiPage)

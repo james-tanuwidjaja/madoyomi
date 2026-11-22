@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.name
 
 /**
- * What each extension needs from the host and doesn't get: the Android API gaps of Phase 2's "missing class/method
+ * What each extension needs from the host and doesn't get: the Android API gaps of the "missing class/method
  * logger". In memory only, per package, bounded ([MAX_ISSUES_PER_PKG] distinct issues).
  *
  * Fed by:
@@ -28,7 +28,7 @@ import kotlin.io.path.name
  *   host ([ExtensionIncompatibility]);
  * - the static link check at install ([staticReport], [ExtensionCompat]).
  *
- * Every distinct issue is logged once (`[compat] <pkg>: <kind> <target>`); after that only its count grows. Stage 4
+ * Every distinct issue is logged once (`[compat] <pkg>: <kind> <target>`); after that only its count grows. The API
  * exposes [issues] as GraphQL `extension.compatIssues`.
  */
 object ExtensionCompatLog {

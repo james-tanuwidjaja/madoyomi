@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The two R8 patterns of the Phase 2 manga sample that `Dex2jarRepair` didn't handle (Phase 2 §10, Stage 2), on the
+ * The two R8 patterns of the manga sample that `Dex2jarRepair` didn't handle, on the
  * real APKs of `tools/compat-test/apks/` (fetched by `tools/compat-test/scan.ps1`; skipped when missing): every class
  * links and verifies after the repair, and no site is left unrepaired.
  */

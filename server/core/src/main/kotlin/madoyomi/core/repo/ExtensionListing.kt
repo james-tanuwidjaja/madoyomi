@@ -23,7 +23,7 @@ data class ExtensionListing(
     val lang: String,
     val apkUrl: String,
     val iconUrl: String,
-    /** Keiyoushi's prebuilt jar (protobuf field 501). Kept for upstream's manga install until Stage 6 ignores it. */
+    /** Keiyoushi's prebuilt jar (protobuf field 501). Kept for upstream's manga install until it is ignored. */
     val jarUrl: String?,
     /** The extensions-lib version the index states, e.g. `"1.6"` or `"14"`. */
     val lib: String,

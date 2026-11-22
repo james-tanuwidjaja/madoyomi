@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * The transition panels around a chapter's pages (Phase 5, every mode): "Previous chapter: …" before the first page
+ * The transition panels around a chapter's pages (every mode): "Previous chapter: …" before the first page
  * (only when there is a previous chapter), and "Finished: … · Next chapter: …" after the last one, or that there is
- * no next chapter. Stage 4: they are the seamless transition: one more step past them goes on into that chapter
+ * No next chapter. They are the seamless transition: one more step past them goes on into that chapter
  * without leaving the reader (its page list is fetched ahead, so it opens at once). Their buttons don't reach the
  * reader's zones.
  */

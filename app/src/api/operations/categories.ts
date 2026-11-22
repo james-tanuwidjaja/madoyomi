@@ -2,7 +2,7 @@ import { api } from "../client";
 import type { CategoryPatch, EntryCategoriesPatch, LibraryCategory, MediaKind } from "../types";
 
 /*
- * The library's categories (Phase 6 Stage 1), one list per kind: upstream's `categories` and category mutations for
+ * The library's categories, one list per kind: upstream's `categories` and category mutations for
  * manga, Madoyomi's `animeCategories` and `…AnimeCategory…` mutations for anime (the same shapes). Each call takes the
  * kind and picks the document.
  */

@@ -28,11 +28,11 @@ The full dependency set is in `server/gradle/libs.versions.toml` and the module 
 
 The Tauri app's Rust and npm dependencies are listed in `app/src-tauri/Cargo.lock` and `app/pnpm-lock.yaml`.
 
-## Bundled with release builds (Phase 7)
+## Bundled with release builds
 
 Release builds (`tools/build-release.ps1`) bundle these programs and the runtime beside the app; the installers put them in the install folder. They are not in git: `tools/fetch-binaries.ps1` downloads the versions pinned in [`tools/binaries.json`](tools/binaries.json) and checks their SHA-256, and `tools/jlink.ps1` links the runtime from the JDK. Each runs as a separate program (mpv, ffmpeg, yt-dlp) or is the JVM the backend runs on; Madoyomi starts them and talks to them over pipes and the command line, and links none of them.
 
-Every bundled program carries its license texts in its own folder, pinned by SHA-256 in `binaries.json` like the programs (Phase 7 Stage 2). Madoyomi's own `LICENSE`, `NOTICE` and this file are at the top of the install folder.
+Every bundled program carries its license texts in its own folder, pinned by SHA-256 in `binaries.json` like the programs. Madoyomi's own `LICENSE`, `NOTICE` and this file are at the top of the install folder.
 
 | Component | Version | License | License texts in the install folder | Source |
 |---|---|---|---|---|
@@ -64,7 +64,7 @@ mpv's Windows build ships these as DLLs beside `mpv.exe` (LuaJIT is linked into 
 | GCC runtime (`libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libssp-0.dll`) | Ubuntu's `g++-mingw-w64` | GPL-3.0 with the GCC Runtime Library Exception | `GCC-COPYING.RUNTIME.txt`, `GCC-COPYING3.txt` (from `releases/gcc-13.3.0`) | [gcc-mirror/gcc](https://github.com/gcc-mirror/gcc) |
 | winpthreads (`libwinpthread-1.dll`) | Ubuntu's `mingw-w64` | MIT and ZPL-2.1 | `winpthreads-COPYING.txt` (from `v11.0.1`) | [mingw-w64](https://www.mingw-w64.org/), [mingw-w64-libraries/winpthreads](https://github.com/mingw-w64/mingw-w64/tree/v11.0.1/mingw-w64-libraries/winpthreads) |
 
-**Corresponding source (GPL).** mpv, FFmpeg (both builds) and the GCC runtime are GPL; libiconv, FriBidi and libplacebo are LGPL. Madoyomi redistributes these binaries unmodified, and the tables link the source of each at the version in the build. mpv's build script fetches several libraries at their newest commit, so for those the source link is the project, not an exact tag. Each release links the sources instead of attaching an archive of them (decided in Phase 7 Stage 5, `docs/phases/phase-7-packaging-release.md` §9): its text names each bundled program with its source and points here, at the release's tag. Madoyomi's own source, with the Suwayomi-Server fork (MPL-2.0), is the release's tag in this repo (public from the first published release on).
+**Corresponding source (GPL).** mpv, FFmpeg (both builds) and the GCC runtime are GPL; libiconv, FriBidi and libplacebo are LGPL. Madoyomi redistributes these binaries unmodified, and the tables link the source of each at the version in the build. mpv's build script fetches several libraries at their newest commit, so for those the source link is the project, not an exact tag. Each release links the sources instead of attaching an archive of them: its text names each bundled program with its source and points here, at the release's tag. Madoyomi's own source, with the Suwayomi-Server fork (MPL-2.0), is the release's tag in this repo (public from the first published release on).
 
 ## Not committed
 

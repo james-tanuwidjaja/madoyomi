@@ -9,7 +9,7 @@ import {
 import ErrorNotice from "./ErrorNotice.vue";
 
 /**
- * "Update library" (Phase 6 Stage 3), in the Library's toolbar and on the Updates page: checks the kind's library for
+ * "Update library", in the Library's toolbar and on the Updates page: checks the kind's library for
  * new episodes or chapters (the categories flagged for updates), or with `category` only that category, whatever its
  * flag. While a check runs (of either kind, scheduled too) it shows how far it got and Stop.
  */

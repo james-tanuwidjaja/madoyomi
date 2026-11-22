@@ -26,7 +26,7 @@ import suwayomi.tachidesk.manga.model.table.MangaUserTable
 import suwayomi.tachidesk.server.database.dbTransaction
 
 /**
- * What the Updates view lists (Phase 6 Stage 3): the episodes and chapters of library entries that were fetched after
+ * What the Updates view lists: the episodes and chapters of library entries that were fetched after
  * the entry joined the library, newest fetch first, as upstream's `Chapter.getRecentChapters` and Mihon's Updates
  * screen. One rule more: an entry's first fetch (the items whose `fetched_at` is the entry's earliest) is left out, so
  * an entry added to the library before it was ever opened doesn't fill the list with its whole back catalogue on its

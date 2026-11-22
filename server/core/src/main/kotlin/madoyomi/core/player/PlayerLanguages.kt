@@ -6,7 +6,7 @@ package madoyomi.core.player
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /**
- * The languages the subtitle and audio preferences can name (Phase 4 Stage 5), and how a track's label is matched to
+ * The languages the subtitle and audio preferences can name, and how a track's label is matched to
  * one. Sources label tracks freely ("English", "English (eng)", "English [CC]", "Português (Brasil)", "jpn", "en-US"),
  * and mpv's own tracks carry a `lang` code ("eng", "jpn") and maybe a `title`. A label matches a language when:
  * - one of its words is the language's English or native name ("english", "português"), or one of its ISO 639-2

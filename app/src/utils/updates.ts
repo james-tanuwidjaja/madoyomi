@@ -3,7 +3,7 @@ import { extensionKindOf } from "../api/types";
 import { formatCount } from "./format";
 
 /*
- * The library update check's pure parts (Phase 6 Stage 3): what the Updates view and the Library say about the check,
+ * The library update check's pure parts: what the Updates view and the Library say about the check,
  * where an Updates row opens, the toast's text, and the subscription's changes the app acts on.
  */
 

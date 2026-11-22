@@ -1,4 +1,4 @@
-// Phase 0 / S4 helper: a local reverse proxy that refuses requests without the expected headers.
+// Spike S4 helper: a local reverse proxy that refuses requests without the expected headers.
 // It stands in for a source that 403s without Referer/User-Agent, so we can check that mpv sends
 // the headers on every request: the MP4 range requests, the HLS playlists, every HLS segment and
 // the subtitle file.
@@ -11,7 +11,7 @@
 //
 // Required headers: Referer: https://madoyomi.test/  and  User-Agent containing "MadoyomiSpike".
 //
-// Expiring mode (Phase 4 Stage 4), for the player's retry on an expired URL. No header check: the request's headers
+// Expiring mode, for the player's retry on an expired URL. No header check: the request's headers
 // are forwarded to the upstream URL (minus host/connection), and logged once per token:
 //
 //   /expire/<token>?u=<upstream URL>&after=<seconds>&requests=<n>
@@ -20,7 +20,7 @@
 // request, or it has served `requests` requests; then 403 for good. `after=0` (or `requests=0`) is expired from the
 // start; without either it never expires. A new token starts fresh, as a refetched URL would.
 //
-// An HLS playlist (Phase 4 Stage 6) is rewritten so that every URI in it (variant playlists, segments, keys, media
+// An HLS playlist is rewritten so that every URI in it (variant playlists, segments, keys, media
 // renditions) goes through the same token, absolute: the stream's segments then expire with it, mid-play. The
 // rewritten URL keeps the upstream file name (/expire/<token>/<name>?u=...), and an `image/*` type is not passed on:
 // some hosts serve their TS segments as .jpg/.png, which FFmpeg then takes for images when it has no extension.

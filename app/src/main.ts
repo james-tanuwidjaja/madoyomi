@@ -11,7 +11,7 @@ import "./styles/main.css";
 
 const queryClient = createQueryClient();
 const app = createApp(App).use(createPinia()).use(router).use(VueQueryPlugin, { queryClient });
-// Phase 7 Stage 3: uncaught errors into the shell's sidecar.log (Export logs)
+// Uncaught errors into the shell's sidecar.log (Export logs)
 installUiErrorLog(app);
 // After Pinia: it follows the backend store, and fills the events store.
 startRealtime({ queryClient });

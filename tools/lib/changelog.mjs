@@ -1,9 +1,9 @@
-// CHANGELOG.md's section of a version (Phase 7 Stage 5; the heading's match fixed in Stage 6), used by
+// CHANGELOG.md's section of a version (the heading's match fixed in 0.1.1), used by
 // tools/release-notes.mjs and tested by app/src/utils/__tests__/changelog.spec.ts.
 //
 // The section is everything under a heading "## X.Y.Z" (also "## [X.Y.Z]", "## X.Y.Z - 2026-11-21" or
 // "## X.Y.Z (2026-11-21)") up to the next "## " heading, trimmed. Only spaces and tabs may follow the version on the
-// heading's line: Stage 5's `\s*` also matched the line breaks after it, so a section starting with a "- " bullet
+// heading's line: the earlier `\s*` also matched the line breaks after it, so a section starting with a "- " bullet
 // lost that bullet to the "heading" (found when 0.1.1's one-bullet section came out empty).
 
 /**

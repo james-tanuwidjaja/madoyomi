@@ -21,7 +21,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import EntryCategoriesButton from "../EntryCategoriesButton.vue";
 
-/* A details page's Categories button (Phase 6 Stage 1): one entry's categories through the picker. */
+/* A details page's Categories button: one entry's categories through the picker. */
 let pinia: Pinia;
 let queryClient: QueryClient;
 let wrapper: VueWrapper;

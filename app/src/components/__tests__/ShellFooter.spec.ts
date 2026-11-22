@@ -7,7 +7,7 @@ import { useBackendStore } from "../../stores/backend";
 import { useEventsStore } from "../../stores/events";
 import { backendStatus, healthyStatus } from "../../test/backendStatus";
 
-// Ported from Stage 1's HomeView tests: the sidebar footer now shows what the placeholder home did.
+// Ported from the early HomeView tests: the sidebar footer now shows what the placeholder home did.
 const tauri = vi.hoisted(() => ({
   isTauri: vi.fn(() => true),
   invoke: vi.fn(),

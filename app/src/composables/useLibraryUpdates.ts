@@ -21,7 +21,7 @@ import { useBackendStore } from "../stores/backend";
 import { queryKeys } from "./queryKeys";
 
 /*
- * The library update check (Phase 6 Stage 3): its status (fetched once, then kept current by the `libraryUpdates`
+ * The library update check: its status (fetched once, then kept current by the `libraryUpdates`
  * subscription in api/realtime.ts), start and stop, the settings (Settings → Updates), the Updates feed of a kind in
  * pages of `UPDATES_PAGE`, and the entries' "new" marks (the Library's cards, the sidebar's count), cleared when an
  * entry is opened.

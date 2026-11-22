@@ -56,7 +56,7 @@ object TestApks {
     /**
      * Loads and links every class of [jar] (`getDeclaredMethods` forces linking, which runs the bytecode verifier) and
      * returns the `VerifyError`s. Other linkage errors are printed, not returned (an anime class may reference an
-     * Android API the stubs lack; that is Phase 2's business).
+     * Android API the stubs lack; that is the compat work's business).
      */
     fun verifyErrors(jar: Path): List<String> =
         URLClassLoader(arrayOf(jar.toUri().toURL()), TestApks::class.java.classLoader).use { loader ->

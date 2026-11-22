@@ -9,9 +9,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        // Phase 7 Stage 3: the save dialog of Export logs and the downloads folder picker, used from Rust only.
+        // The save dialog of Export logs and the downloads folder picker, used from Rust only.
         .plugin(tauri_plugin_dialog::init())
-        // Phase 7 Stage 4: the app's own updates (src/updater.rs), driven from Rust; the feed and the key in tauri.conf.json.
+        // The app's own updates (src/updater.rs), driven from Rust; the feed and the key in tauri.conf.json.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updater::AppUpdates::new())
         .setup(|app| {

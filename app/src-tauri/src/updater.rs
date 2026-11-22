@@ -1,4 +1,4 @@
-//! The app's own updates (Phase 7 Stage 4), through `tauri-plugin-updater`, driven from Rust only.
+//! The app's own updates, through `tauri-plugin-updater`, driven from Rust only.
 //!
 //! - The feed is `plugins.updater.endpoints` in tauri.conf.json: the GitHub release's `latest.json`. A test build
 //!   points it at a local feed with a config of its own (never shipped).

@@ -14,7 +14,7 @@ const errorModelKt = fs.readFileSync(
   "utf8",
 );
 
-/* Readable error lines (Phase 3 step 22, "API client error handling"): every code the server or the client can give
+/* Readable error lines ("API client error handling"): every code the server or the client can give
    has one, and the client's list of server codes is the server's. */
 
 const CLIENT_CODES: ClientErrorCode[] = ["NETWORK", "BACKEND_UNAVAILABLE", "BAD_RESPONSE"];

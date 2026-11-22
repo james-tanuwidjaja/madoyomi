@@ -31,10 +31,10 @@ import {
 import ErrorNotice from "./ErrorNotice.vue";
 
 /**
- * The video picker (Phase 4 step 12): Play on an episode opens it. It asks the source for the episode's hosters
+ * The video picker: Play on an episode opens it. It asks the source for the episode's hosters
  * (`fetchEpisodeVideos`) and lists each with its state: a lazy one loads on request, a failed one shows why and can
  * be retried (`fetchHosterVideos`). Each video shows its quality and its subtitle and audio counts, and the source's
- * own pick is marked, as is the player settings' preferred server and quality (Stage 5; the backend sorts the list by
+ * own pick is marked, as is the player settings' preferred server and quality (the backend sorts the list by
  * it). The last choice for this source (the hoster's name, the video's title or resolution; kept on this device) is
  * preselected, else the preference's pick, else the source's, so Enter plays it.
  *
@@ -43,7 +43,7 @@ import ErrorNotice from "./ErrorNotice.vue";
  * "Resume from mm:ss" and "Start over"; any other plays from the start (a watched one too, as in Aniyomi). The dialog
  * stays open, "Starting…", until mpv is up, and shows a failure there.
  *
- * Opened because something failed (Stage 4: the video didn't play even after the videos were fetched again, or the
+ * Opened because something failed (the video didn't play even after the videos were fetched again, or the
  * next episode couldn't auto-play), it shows that `failure` above the videos and preselects its `preselect` (the
  * next video in the source's order) instead of the remembered choice.
  */

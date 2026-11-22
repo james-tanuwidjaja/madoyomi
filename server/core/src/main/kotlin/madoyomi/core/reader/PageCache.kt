@@ -53,9 +53,9 @@ data class PageCacheUsage(
 )
 
 /**
- * The chapter-page cache (Phase 5 steps 2 and 4): upstream's
+ * The chapter-page cache: upstream's
  * `<data dir>/cache/manga/<source>/<manga title>/<scanlator_><chapter name>/NNN.<ext>` (`getChapterCachePath`, in the
- * data dir since the Phase 3 exit run), with what upstream's `ImageResponse` lacks:
+ * data dir), with what upstream's `ImageResponse` lacks:
  * - **one fetch per page at a time**: concurrent requests for a page (the reader and a prefetch, two `<img>`s) wait for
  *   the same download and share its result or its error, instead of each fetching and writing the same `.tmp` file;
  *   the download runs in its own scope, so a caller that goes away doesn't cancel it for the others;
@@ -65,7 +65,7 @@ data class PageCacheUsage(
  * - **a size cap with LRU eviction** ([ReaderSettings.pageCacheLimitMb], 1 GiB by default, the user's decision): a hit
  *   sets the file's modification time, which orders the eviction; once the cache is over its cap, the oldest files go
  *   until it is at [TRIM_TO] of it. Files used in the last [KEEP_RECENT_MS] stay even over the cap: they are the
- *   chapter being read and its prefetch, and upstream's downloader stages a chapter's pages here (Phase 6).
+ *   chapter being read and its prefetch, and upstream's downloader stages a chapter's pages here.
  *
  * The size is counted once by a scan, then kept up to date as pages are added; it may drift between scans (the
  * upstream `clearCachedImages` mutation, files removed by hand), and the next scan corrects it.

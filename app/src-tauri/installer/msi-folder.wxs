@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Madoyomi's addition to Tauri's MSI (Phase 7 Stage 6, 0.1.2), linked through tauri.conf.json
+  Madoyomi's addition to Tauri's MSI (0.1.2), linked through tauri.conf.json
   (bundle.windows.wix.fragmentPaths, and componentGroupRefs for the empty group below, which pulls this
   whole fragment into the product).
 

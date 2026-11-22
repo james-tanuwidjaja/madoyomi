@@ -23,8 +23,8 @@ function stored(): Pins {
 }
 
 /**
- * Browse's pinned sources, per kind, in the order they were pinned (Phase 3 step 13). Kept in this device's
- * `localStorage`, like Mihon's `pinnedSources` app preference (Phase 3 §9 "Stage 4"). A pin of a source that is no
+ * Browse's pinned sources, per kind, in the order they were pinned. Kept in this device's
+ * `localStorage`, like Mihon's `pinnedSources` app preference. A pin of a source that is no
  * longer installed stays, and shows again if it comes back.
  */
 export const usePinnedSourcesStore = defineStore("pinnedSources", () => {

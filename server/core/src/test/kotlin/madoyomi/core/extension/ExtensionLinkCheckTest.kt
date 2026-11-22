@@ -81,7 +81,7 @@ class ExtensionLinkCheckTest {
         val report = checkRealExtension(TestApks.MANGAPILL)
         assertEquals(emptyList(), report.of(Kind.MISSING_CLASS))
         assertEquals(emptyList(), report.of(Kind.MISSING_MEMBER))
-        // Stage 1 found android.os.LocaleList stubs here; AndroidCompat implements LocaleList since Stage 2
+        // android.os.LocaleList stubs used to be found here; AndroidCompat implements LocaleList now
         assertEquals(emptyList(), report.of(Kind.STUB))
     }
 

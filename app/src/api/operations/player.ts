@@ -2,7 +2,7 @@ import { api } from "../client";
 import type { MpvCheck, PlayerLanguage, PlayerSettings, PlayerSettingsPatch } from "../types";
 
 /*
- * The player settings (Phase 4 Stage 5): kept by the backend in its data dir, because the backend applies them (the
+ * The player settings: kept by the backend in its data dir, because the backend applies them (the
  * watched mark, the video order, the subtitle and audio tracks, which mpv it starts). A change takes effect at the
  * next play; the watched threshold also in the session that plays.
  */

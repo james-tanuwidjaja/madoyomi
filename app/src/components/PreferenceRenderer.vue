@@ -5,7 +5,7 @@ import { changeFor, type PreferenceValue } from "../utils/preferences";
 import PreferenceField from "./PreferenceField.vue";
 
 /**
- * A source's settings screen (Phase 3 step 19), drawn from the backend's `Preference` union: List, EditText, Switch,
+ * A source's settings screen, drawn from the backend's `Preference` union: List, EditText, Switch,
  * CheckBox and MultiSelect, each with its title and summary, disabled when the extension disables it, hidden when it
  * hides it. A change emits the one preference that changed, by its position in the full list (hidden ones count),
  * which is how the server addresses it.

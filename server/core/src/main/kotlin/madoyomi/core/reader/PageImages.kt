@@ -44,7 +44,7 @@ data class PrefetchResult(
 )
 
 /**
- * A chapter's page images from its source, through [PageCache] (Phase 5 steps 1–4). Upstream's `Page.getPageImage`
+ * A chapter's page images from its source, through [PageCache]. Upstream's `Page.getPageImage`
  * resolves the page and its cache folder and calls [get] (a Madoyomi edit, server/UPSTREAM.md "Manga reader"); the
  * request itself is upstream's: `HttpSource.getImage`, with the source's client (its headers, cookie jar and rate
  * limits).
@@ -69,7 +69,7 @@ object PageImages {
 
     /**
      * The image of [page] (page [index] of chapter [chapterId]) from the folder [saveDir], else from [source]. A
-     * folder outside the page cache (a download's staging, Phase 6) passes [counted] false, so its files don't count
+     * folder outside the page cache (a download's staging) passes [counted] false, so its files don't count
      * towards the cache's cap.
      */
     suspend fun get(

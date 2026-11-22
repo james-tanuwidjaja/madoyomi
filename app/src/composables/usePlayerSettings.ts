@@ -7,7 +7,7 @@ import { WATCHED_THRESHOLD } from "../utils/progress";
 import { queryKeys } from "./queryKeys";
 
 /*
- * The backend's player settings (Phase 4 Stage 5, Settings → Player). The backend keeps and applies them; the app
+ * The backend's player settings (Settings → Player). The backend keeps and applies them; the app
  * reads them for the Settings section and for what it decides itself: the resume prompt's upper bound (the watched
  * threshold). The rest (the video order, the tracks, which mpv) the backend applies at the next play.
  */

@@ -6,7 +6,7 @@ The release build runs in GitHub Actions ([`.github/workflows/release.yml`](.git
 
 | Step | What |
 |---|---|
-| Toolchain | Temurin JDK 21.0.13, Node 26.13.0, pnpm 12.16.1, Rust 1.99.1: the dev desktop's (README, "Prerequisites"). The JDK's patch is pinned because the jlink runtime sits at its 60 MB cap. Actions are pinned by commit |
+| Toolchain | Temurin JDK 21.0.13, Node 26.13.0, pnpm 12.16.1, Rust 1.99.1: the dev desktop's ([CONTRIBUTING.md](CONTRIBUTING.md#prerequisites), "Prerequisites"). The JDK's patch is pinned because the jlink runtime sits at its 60 MB cap. Actions are pinned by commit |
 | Caches | Gradle (`setup-gradle`'s basic cache), the pnpm store, cargo (`rust-cache`), the pinned downloads in `tools/bin/downloads` (keyed on `tools/binaries.json`) and the test APKs in `tools/apks` |
 | Version | `tools/version.ps1` (VERSION and its five copies) and its `-SelfTest`; on a tag, the tag must be `v` + VERSION |
 | Notes | `node tools/release-notes.mjs X.Y.Z`: `CHANGELOG.md`'s `## X.Y.Z` section. A tag run fails without it |
@@ -16,20 +16,21 @@ The release build runs in GitHub Actions ([`.github/workflows/release.yml`](.git
 | Release | On a tag: `gh release create vX.Y.Z --draft` with `Madoyomi_X.Y.Z_x64-setup.exe`, its `.sig`, `Madoyomi_X.Y.Z_x64_en-US.msi`, `latest.json` and `SHA256SUMS.txt`. The release text is the section plus how to install (the SmartScreen note) and the bundled programs with their sources. A rerun replaces a draft's files; a published release is never touched |
 | Dry run | Actions → Release → **Run workflow**: the same tests, signed build and checks, no release. The small files (`latest.json`, the `.sig` files, `SHA256SUMS.txt`, the release text) are kept as the run's artifact for 7 days; the installers aren't (577 MiB) |
 
-A run takes about 26–31 minutes with warm caches (0.1.0 and 0.1.1, Phase 7 Stage 6). A private repo pays for its Windows minutes (about $0.01 a minute past the plan's allowance); a public repo's are free.
+A run takes about 26–31 minutes with warm caches (0.1.0 and 0.1.1). A private repo pays for its Windows minutes (about $0.01 a minute past the plan's allowance); a public repo's are free.
 
 ## One-time setup
 
-1. **The repo is public before the first release is published.** The updater can't read a private repo's releases (the user's decision, phase-7 §9 "Stage 5"). Drafts work while the repo is private.
-2. **The updater's key as secrets.** The key and its password are in your password manager and, on the dev desktop, in the gitignored `tools/dev-data/updater-key/`. Install the GitHub CLI once (`winget install GitHub.cli`, then `gh auth login`), then from the repo root in PowerShell:
+1. **The repo is public before the first release is published** (done). The updater can't read a private repo's releases. Drafts work while a repo is private.
+2. **The updater's key as secrets** (done; again only after a rotation). The key and its password are kept outside the repo folder ([The updater's key](#the-updaters-key)). Install the GitHub CLI once (`winget install GitHub.cli`, then `gh auth login`), restore the two files from the private drive to a folder outside the repo (`$k` below), then in PowerShell:
 
    ```powershell
-   cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY --repo james-tanuwidjaja/madoyomi < tools\dev-data\updater-key\madoyomi.key"
-   cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo james-tanuwidjaja/madoyomi < tools\dev-data\updater-key\password.txt"
+   $k = 'X:\madoyomi-updater-key'   # the restored folder, outside the repo
+   cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY --repo james-tanuwidjaja/madoyomi < `"$k\madoyomi.key`""
+   cmd /c "gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo james-tanuwidjaja/madoyomi < `"$k\password.txt`""
    gh secret list --repo james-tanuwidjaja/madoyomi
    ```
 
-   `cmd`'s `<` sends the files' bytes as they are (PowerShell's pipe would add a line break). Neither file ends with a line break; if you ever recreate one, keep it that way. Never paste the key into a workflow, an issue or a log.
+   `cmd`'s `<` sends the files' bytes as they are (PowerShell's pipe would add a line break). Neither file ends with a line break; if you ever recreate one, keep it that way. Never paste the key into a workflow, an issue or a log. Remove the restored copy when you're done.
 
 ## Making a release
 
@@ -54,8 +55,8 @@ A run takes about 26–31 minutes with warm caches (0.1.0 and 0.1.1, Phase 7 Sta
    ```
 
    `check-release.ps1` must end with `OK`. Its checks: the four files and `SHA256SUMS.txt`; the installers' versions; the MSI's upgrade code; `latest.json`'s version and notes; its URL, which must be `https://github.com/james-tanuwidjaja/madoyomi/releases/download/vX.Y.Z/Madoyomi_X.Y.Z_x64-setup.exe` (a draft's own download links are `…/download/untagged-…/…` until it is published; the URL in `latest.json` is the one it gets then); and the signature against the public key in `tauri.conf.json`. Read the release text too: the notes, the SmartScreen line, the sources.
-7. **Smoke test on a clean Windows 11 machine** (no Java, mpv, ffmpeg or yt-dlp; Phase 7 Stage 6 did it on the dev desktop instead, with nothing on PATH and a fresh `--data-dir`, through the job runner, and a friend's PC as the clean machine): install `Madoyomi_X.Y.Z_x64-setup.exe` from the draft's download. It isn't code-signed, so SmartScreen says "Windows protected your PC": choose **More info → Run anyway**. SmartScreen only checks a file with the Mark of the Web: browsers write it, but a download manager that takes over the download (Internet Download Manager, on the dev desktop in Stage 6) doesn't: Alt+click the link to bypass it, or turn its browser integration off, to see the warning. Then add a repo, install an anime and a manga extension, play an episode, read a chapter, Export logs, and uninstall (keeping the data). For an update, install the previous version first and update to this one once it's published (step 9).
-8. **Publish:** on the draft's page, **Publish release** with "Set as the latest release" ticked (or `gh release edit vX.Y.Z --repo james-tanuwidjaja/madoyomi --draft=false --latest`). Publishing doesn't move the tag. From then on `releases/latest/download/latest.json` is this version's.
+7. **Smoke test on a clean Windows 11 machine** (no Java, mpv, ffmpeg or yt-dlp; or the dev desktop with nothing on PATH and a fresh `--data-dir`): install `Madoyomi_X.Y.Z_x64-setup.exe` from the draft's download. It isn't code-signed, so SmartScreen says "Windows protected your PC": choose **More info → Run anyway**. SmartScreen only checks a file with the Mark of the Web: browsers write it, but a download manager that takes over the download (Internet Download Manager, on the dev desktop) doesn't: Alt+click the link to bypass it, or turn its browser integration off, to see the warning. Then add a repo, install an anime and a manga extension, play an episode, read a chapter, Export logs, and uninstall (keeping the data). For an update, install the previous version first and update to this one once it's published (step 9).
+8. **Publish:** on the draft's page, tick **Set as the latest release** and **Create a discussion for this release** (category: Announcements), then **Publish release**. From the command line: `gh release edit vX.Y.Z --repo james-tanuwidjaja/madoyomi --draft=false --latest --discussion-category Announcements`. Publishing doesn't move the tag. From then on `releases/latest/download/latest.json` is this version's.
 9. **After publishing:** `Invoke-RestMethod https://github.com/james-tanuwidjaja/madoyomi/releases/latest/download/latest.json` shows the new version. An installed earlier version with "Check for app updates" on offers it at its next start, or on Settings → General → Check now.
 
 ### When something is wrong
@@ -73,10 +74,11 @@ A run takes about 26–31 minutes with warm caches (0.1.0 and 0.1.1, Phase 7 Sta
 
 The private key signs every installer the updater accepts. Installed copies only accept installers signed by the key whose public half they were built with (`plugins.updater.pubkey` in `tauri.conf.json`).
 
-- **Kept:** in your password manager (the backup), in the gitignored `tools/dev-data/updater-key/` on the dev desktop (local signed builds), and as the two repo secrets. Nowhere else: not in the repo, a log, an artifact or a zip. The workflow's scan fails the run if the key or its password turns up in an output.
+- **Kept:** in your password manager, on a private drive, and as the two repo secrets (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), which CI uses. **No copy in the repo folder** (not even the gitignored `tools/dev-data/`), and none in a log, an artifact or a zip. The workflow's scan fails the run if the key or its password turns up in an output.
+- **A local signed build** (rarely needed; CI makes the releases) needs the key restored first: copy `madoyomi.key` and `password.txt` from the private drive to a folder outside the repo, then `$env:TAURI_SIGNING_PRIVATE_KEY = '<that folder>\madoyomi.key'` and `$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = Get-Content -Raw '<that folder>\password.txt'` before `.\tools\build-release.ps1`. Without them the script stops and says so; `.\tools\build-release.ps1 -NoUpdater` builds unsigned installers with no key at all. Delete the restored copy afterwards.
 - **If the key leaks:** someone could sign an installer that installed copies accept, if they could also serve it from the feed (the GitHub release). Rotate it (below), and delete the secrets right away.
 - **If the key is lost, or to rotate it:**
-  1. `pnpm tauri signer generate -w tools\dev-data\updater-key\madoyomi.key` in `app/` (with a new password into `password.txt`, no trailing line break). Back both up in the password manager.
+  1. `pnpm tauri signer generate -w X:\madoyomi-updater-key\madoyomi.key` in `app/`, writing to a folder **outside the repo** (with a new password into `password.txt` beside it, no trailing line break). Back both up in the password manager and on the private drive.
   2. Put the new public key (`madoyomi.key.pub`'s text) into `plugins.updater.pubkey` in `tauri.conf.json`, and replace both secrets (the commands above).
   3. Release a new version with it. **Installed copies built with the old key can't update to it:** the updater rejects the new signature. Their users must download and run the new installer once by hand (an install over the old one keeps the data). Say so in that release's notes and on the release page.
   4. If the old key still exists, one bridge release is possible: sign version N with the **old** key but carry the **new** public key in its `tauri.conf.json`. Old copies update to N, and N then accepts N+1 signed with the new key. Without the old key there is no bridge.

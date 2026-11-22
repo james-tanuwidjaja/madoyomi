@@ -48,11 +48,11 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * `playEpisode`, `stopPlayback` and `playbackSession` (Phase 4 Stage 1) with a fake mpv ([FakeMpv], a small Java
+ * `playEpisode`, `stopPlayback` and `playbackSession` with a fake mpv ([FakeMpv], a small Java
  * program started as mpv would be): the video resolved before the launch, the command line and include file, one
  * session at a time, mpv exiting by itself, a missing mpv, and the orphans of a crashed backend.
  *
- * Stage 2, over IPC with a fake mpv that serves a real named pipe ([FakeMpvServer] as a process, on Windows): progress
+ * Over IPC with a fake mpv that serves a real named pipe ([FakeMpvServer] as a process, on Windows): progress
  * saved into `EPISODE` while playing and at the end, the watched mark, the external tracks with their titles, a
  * graceful `quit`, and the `playbackEvents` subscription (ENDED with the next episode, ERROR, CLOSED).
  */
@@ -200,7 +200,7 @@ class PlaybackApiTest : AnimeApiTest() {
         assertTrue("force-media-title=%21%One Piece - Episode 1\n" in include, include)
         assertTrue("referrer=%25%https://play.example.org/\n" in include, include)
         assertTrue("http-header-fields-append=%29%sec-ch-ua: \"Chromium\";v=\"130\"\n" in include, include)
-        // the tracks are added over IPC with their labels (Stage 2), not from the include file
+        // the tracks are added over IPC with their labels, not from the include file
         assertFalse("sub-files-append" in include || "audio-files-append" in include, include)
         assertTrue("demuxer-max-bytes=%3%50M\n" in include, include)
         assertFalse("evil.lua" in include, include)
@@ -240,7 +240,7 @@ class PlaybackApiTest : AnimeApiTest() {
     }
 
     @Test
-    fun `each session writes its own mpv log, and only the last ten are kept (Phase 7 Stage 3)`() {
+    fun `each session writes its own mpv log, and only the last ten are kept`() {
         val episodeId = episode(PlaySource())
         val log = PlaybackSessions.dirs().log
         val logs = log.parentFile
@@ -275,7 +275,7 @@ class PlaybackApiTest : AnimeApiTest() {
         val episodeId = episode(source)
         val id = play(episodeId).assertNoErrors().dataPath("playEpisode", "session", "id") as String
 
-        // it exited before playing (Stage 4): the videos are fetched again and a second session starts, which exits
+        // It exited before playing: the videos are fetched again and a second session starts, which exits
         // the same way, and that is final
         val deadline = System.currentTimeMillis() + 30_000
         while (currentSession().path("id") == id || currentSession().path("state") == "RUNNING") {
@@ -360,7 +360,7 @@ class PlaybackApiTest : AnimeApiTest() {
         File(records, "orphan-test.txt").delete()
     }
 
-    // Stage 2: over IPC, with FakeMpvServer (core's tests) as mpv
+    // Over IPC, with FakeMpvServer (core's tests) as mpv
 
     private val ipcClasspath =
         listOf(FakeMpvServer::class.java, com.sun.jna.Native::class.java, com.sun.jna.platform.win32.Kernel32::class.java)
@@ -474,7 +474,7 @@ class PlaybackApiTest : AnimeApiTest() {
         assertEquals(Triple(20_000L, 20_000L, true), progressOf(first), "milliseconds, as Aniyomi stores them")
         assertEquals(Triple(0L, 0L, false), progressOf(second))
 
-        // the external tracks went over IPC, with their labels as titles; then (Stage 5, no language set) the first
+        // the external tracks went over IPC, with their labels as titles; then (no language set) the first
         // subtitle track selected, and the first audio track too, since the fake's file has no audio of its own
         val sent = receivedBy(id)
         assertTrue(
@@ -564,7 +564,7 @@ class PlaybackApiTest : AnimeApiTest() {
     }
 
     /**
-     * Stage 4's source: hoster Main with 1080p and 720p, hoster Backup with 480p, already resolved. [urls] gives each
+     * A source with hoster Main with 1080p and 720p, hoster Backup with 480p, already resolved. [urls] gives each
      * fetch's URL query by its number (from 1), so a fetch can hand the fake mpv a URL that fails.
      */
     private class RetrySource(
@@ -784,7 +784,7 @@ class PlaybackApiTest : AnimeApiTest() {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
-    fun `a stream that never played a frame is fetched again once, though mpv reported its start position (Stage 6)`() {
+    fun `a stream that never played a frame is fetched again once, though mpv reported its start position`() {
         fakeIpc(duration = 40.0, speed = 10.0)
         // as mpv with an HLS stream whose playlist opens but whose segments all fail: time-pos at the start, then
         // "no audio or video data played", exit 2, no HTTP error in its log
@@ -859,7 +859,7 @@ class PlaybackApiTest : AnimeApiTest() {
         receivedBy(id)
     }
 
-    /** Stage 5: KickAssAnime's shape, two subtitle and two audio tracks, plus a Japanese audio track of the file's own. */
+    /** KickAssAnime's shape, two subtitle and two audio tracks, plus a Japanese audio track of the file's own. */
     private class LanguageSource : AnimeHttpSource() {
         override val name = "Fake language source"
         override val lang = "en"
@@ -911,11 +911,11 @@ class PlaybackApiTest : AnimeApiTest() {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
-    fun `the subtitle and audio languages select mpv's tracks - the source's and the file's own (Stage 5)`() {
+    fun `the subtitle and audio languages select mpv's tracks - the source's and the file's own`() {
         fakeIpc(duration = 1000.0, speed = 1.0)
         val episodeId = episode(LanguageSource())
 
-        // no language: Stage 2's rule, the source's first subtitle; the file's own audio stays
+        // no language: the default rule, the source's first subtitle; the file's own audio stays
         val plain = playAndReadTracks(episodeId) { sid, aid -> sid == "1" && aid == "1" }
         assertEquals("1" to "1", plain.first to plain.second)
 
@@ -936,7 +936,7 @@ class PlaybackApiTest : AnimeApiTest() {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
-    fun `the watched threshold of the settings marks the episode (Stage 5)`() {
+    fun `the watched threshold of the settings marks the episode`() {
         fakeIpc(duration = 20.0, speed = 5.0)
         PlayerSettingsStore.update(PlayerSettings.Patch(watchedThreshold = 0.5))
         val episodeId = episode(PlaySource())
@@ -947,7 +947,7 @@ class PlaybackApiTest : AnimeApiTest() {
     }
 
     @Test
-    fun `a wrong mpv path in the settings is PLAYER_NOT_FOUND naming the setting, and clearing it falls back (Stage 5)`() {
+    fun `a wrong mpv path in the settings is PLAYER_NOT_FOUND naming the setting, and clearing it falls back`() {
         PlaybackSessions.executable = defaultExecutable
         val missing = File(System.getProperty("java.io.tmpdir"), "madoyomi-no-mpv/mpv.exe").absolutePath
         PlayerSettingsStore.update(PlayerSettings.Patch(mpvPath = missing))

@@ -14,7 +14,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 /**
- * Writes a chapter's staged files as a CBZ (Phase 6 Stage 4): a zip of the page images, in name order (upstream's
+ * Writes a chapter's staged files as a CBZ: a zip of the page images, in name order (upstream's
  * `001.jpg` …, which its reader sorts by name too), and `ComicInfo.xml`. Images are stored as they are (already
  * compressed; storing keeps the write cheap), the XML deflated. Every entry gets the same time, so the same pages give
  * the same file. The CBZ is written next to its place as `<name>.part`, then moved over it, so a reader never sees half

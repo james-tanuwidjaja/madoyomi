@@ -17,7 +17,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** The reader settings' file (Phase 5 Stage 1): the default cap, a change, its bounds, and a file edited by hand. */
+/** The reader settings' file: the default cap, a change, its bounds, and a file edited by hand. */
 class ReaderSettingsTest {
     private val dir: File = Files.createTempDirectory("reader-settings").toFile()
     private val file = File(dir, ReaderSettingsStore.FILE_NAME)

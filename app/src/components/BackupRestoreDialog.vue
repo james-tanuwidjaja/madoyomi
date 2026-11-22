@@ -24,7 +24,7 @@ import { clockTime } from "../utils/updates";
 import ErrorNotice from "./ErrorNotice.vue";
 
 /**
- * Restoring a backup file (Phase 6 Stage 6): what it holds, checked against this install first (`validateMadoyomiBackup`),
+ * Restoring a backup file: what it holds, checked against this install first (`validateMadoyomiBackup`),
  * then merge or replace, what to restore, and the trust prompt for what it would add: the repos (adding one trusts
  * its signing key), the certificates the user had trusted, and the extensions reinstalled from their repos. Only what
  * stays checked is added, trusted or installed. Restore starts it in the background and closes; Settings shows the

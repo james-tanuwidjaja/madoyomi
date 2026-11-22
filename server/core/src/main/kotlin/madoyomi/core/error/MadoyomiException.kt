@@ -54,15 +54,15 @@ enum class ErrorCode(
      */
     EXTENSION_INCOMPATIBLE(501),
 
-    /** mpv was not found (`details.path` and `details.origin` for a configured path that isn't there). Phase 4. */
+    /** mpv was not found (`details.path` and `details.origin` for a configured path that isn't there). */
     PLAYER_NOT_FOUND(503),
 
-    /** mpv could not be started, or a playback session failed (`details.cause`). Phase 4. */
+    /** mpv could not be started, or a playback session failed (`details.cause`). */
     PLAYER_FAILED(500),
 
     /**
      * The downloads folder isn't there (an unplugged drive, `details.path`): downloaded chapters and episodes can't be
-     * read or played from it until it is back or another folder is chosen. Phase 7 Stage 3.
+     * read or played from it until it is back or another folder is chosen.
      */
     DOWNLOADS_UNREACHABLE(503),
 

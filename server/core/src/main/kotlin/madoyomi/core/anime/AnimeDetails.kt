@@ -151,7 +151,7 @@ object AnimeDetails {
      * - `source_order` counts from the oldest (1) to the newest, as upstream numbers chapters;
      * - an episode the list no longer has is deleted, and its watch state, history and first fetch date move to a new
      *   episode with the same number (≥ 0), as upstream carries the read state, `last_read_at` and `fetched_at` over
-     *   (Phase 6 Stage 3: so a re-listed episode isn't new in the Updates view);
+     *   (so a re-listed episode isn't new in the Updates view);
      * - an update never touches the watch state (`watched`, `bookmark`, `last_second_seen`, `total_seconds`) or
      *   `fetched_at`; a `date_upload` of 0 keeps the stored date, and a new episode without one gets the newest date
      *   of the older episodes in the list (or now), as upstream does;

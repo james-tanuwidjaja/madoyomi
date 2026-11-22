@@ -1,7 +1,7 @@
 import { api } from "../client";
 
 /*
- * What the backend adds to Export logs (Phase 7 Stage 3): a JSON document with its versions, the repos, the installed
+ * What the backend adds to Export logs: a JSON document with its versions, the repos, the installed
  * extensions and the settings without secrets, and the library's titles only when asked. The shell writes it into the
  * zip as diagnostics.json.
  */

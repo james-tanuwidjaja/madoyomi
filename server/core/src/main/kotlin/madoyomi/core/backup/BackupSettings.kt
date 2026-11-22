@@ -19,7 +19,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.Date
 
-/** The scheduled backups (Phase 6 Stage 6, Settings → Backup), in `<data dir>/backup-settings.json`. */
+/** The scheduled backups (Settings → Backup), in `<data dir>/backup-settings.json`. */
 @Serializable
 data class BackupSettings(
     /** Hours between scheduled backups: 0 (off on a fresh install, the user's decision), 24 (daily) or 168 (weekly). */

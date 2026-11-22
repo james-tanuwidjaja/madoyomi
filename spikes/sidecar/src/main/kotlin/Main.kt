@@ -1,5 +1,5 @@
-// Phase 0 / S5 spike: dummy JVM backend that the Tauri shell spawns.
-// Contract (also used by the real server in Phase 1):
+// Spike S5: dummy JVM backend that the Tauri shell spawns.
+// Contract (also used by the real server):
 //   - binds 127.0.0.1 on a random free port (port 0)
 //   - prints exactly one line `MADOYOMI_PORT=<port>` to stdout once it is listening
 //   - serves GET /health -> {"status":"ok",...}

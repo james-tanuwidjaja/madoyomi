@@ -41,7 +41,7 @@ import okhttp3.Headers
  * - **Resolving.** A video that isn't `initialized` may need the source's `resolveVideo` before it plays (AnimePahe:
  *   the page URL becomes the stream URL). [resolveVideo] does that on the video of the last fetch, kept in memory for
  *   a while per episode.
- * - **The player settings' preference** (Phase 4 Stage 5, [VideoPreferences]): after the source's sorts, the hosters
+ * - **The player settings' preference** ([VideoPreferences]): after the source's sorts, the hosters
  *   and each hoster's videos are sorted by the preferred server and quality (stable), as the settings were when the
  *   fetch started. Indexes are positions in that order, for the whole fetch; `sourceIndex` is the source's own.
  */
@@ -201,8 +201,7 @@ object AnimeVideos {
     /**
      * Forgets the fetches whose source is no longer the live instance in [AnimeGetSource] (unloaded, updated,
      * re-instantiated). [AnimeGetSource] calls it when it drops sources: a kept fetch holds its source, and so the
-     * class loader of an uninstalled extension (the compat harness found 18 of 20 loaders alive after uninstalling all;
-     * Phase 2 §10).
+     * class loader of an uninstalled extension (the compat harness found 18 of 20 loaders alive after uninstalling all).
      */
     internal fun dropStale() {
         synchronized(cache) { cache.values.removeIf { AnimeGetSource.cached(it.source.id) !== it.source } }
@@ -210,7 +209,7 @@ object AnimeVideos {
 
     /**
      * The hosters of the episode's last fetch as they are now (loaded ones READY, the rest IDLE), without asking the
-     * source; null if there is none kept. The player picks the next video to offer from it (Phase 4 Stage 4).
+     * source; null if there is none kept. The player picks the next video to offer from it.
      */
     internal fun cachedHosters(episodeId: Int): List<EpisodeHoster>? {
         val fetch = synchronized(cache) { cache[episodeId] } ?: return null

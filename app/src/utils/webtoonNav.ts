@@ -1,7 +1,7 @@
 import { keyAction, type KeyAction, type KeyLike } from "./pagedNav";
 
 /*
- * The webtoon reader's layout and navigation (Phase 5 Stage 3, step 7), pure so it is unit-tested without the view.
+ * The webtoon reader's layout and navigation (step 7), pure so it is unit-tested without the view.
  *
  * The strip is a column of items: the "Previous: …" panel (only when there is a previous chapter), the pages, and the
  * end panel. Items are addressed by their position, as in the paged reader: -1 the previous panel, 0 to
@@ -210,8 +210,7 @@ export interface StripWindow {
 
 /**
  * The strip's load window: a screen behind, two ahead, and at least `preload − 2` pages past the viewport (the
- * preload count, Stage 5, counts from the page shown; the viewport already holds one or two): 2 with the default 4,
- * as in Stage 3.
+ * preload count counts from the page shown; the viewport already holds one or two): 2 with the default 4.
  */
 export function stripWindow(viewportHeight: number, preload = 4): StripWindow {
   const minAhead = Math.max(2, preload - 2);
@@ -298,7 +297,7 @@ export function scrollAmount(kind: "line" | "screen", viewportHeight: number): n
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The wheel past the strip's ends (Stage 4, the seamless next chapter)
+// The wheel past the strip's ends (the seamless next chapter)
 
 /**
  * The wheel at the strip's ends: the strip scrolls natively, so at its bottom (the end panel fully shown) a further

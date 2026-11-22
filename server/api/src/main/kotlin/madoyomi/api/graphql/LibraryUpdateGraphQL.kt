@@ -35,7 +35,7 @@ import suwayomi.tachidesk.server.user.requireUser
 import java.util.concurrent.CompletableFuture
 
 /*
- * The library update check (Phase 6 Stage 3, madoyomi.core.library): start and stop it, its status (the query and the
+ * The library update check (madoyomi.core.library): start and stop it, its status (the query and the
  * `libraryUpdates` subscription, the WS "library.updates" event), its settings, the Updates feed of each kind, and the
  * entries' "new" marks. Named apart from upstream's manga-only `updateLibrary`/`libraryUpdateStatus`, which stay.
  */

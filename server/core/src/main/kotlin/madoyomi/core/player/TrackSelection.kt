@@ -10,16 +10,16 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Which subtitle and audio track mpv plays (Phase 4 Stage 5), chosen from mpv's `track-list` once the video's external
+ * Which subtitle and audio track mpv plays, chosen from mpv's `track-list` once the video's external
  * tracks are loaded: the file's own tracks (an MKV's, an HLS stream's) and the source's, added over IPC with their
  * labels as titles. A track's language is matched by [PlayerLanguages.matches] on its `title` and its `lang`.
  *
  * - **Subtitles:** [PlayerSettings.SUBTITLES_OFF] turns them off. A language selects the first matching track, the
  *   file's own first, then the source's in the source's order; a forced (signs-only) track only if no other matches.
- *   No language, or nothing matching: Stage 2's rule, the source's first subtitle track, else mpv's own choice.
+ *   No language, or nothing matching: the default rule, the source's first subtitle track, else mpv's own choice.
  * - **Audio:** a language selects the first matching track (the same order). No language, or nothing matching: the
  *   file's own audio as mpv chose it, else (an HLS stream whose audio comes only as the source's tracks) the source's
- *   first audio track (Stage 2's rule).
+ *   first audio track (the default rule).
  */
 object TrackSelection {
     sealed interface Choice {

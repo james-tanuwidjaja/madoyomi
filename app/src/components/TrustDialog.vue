@@ -15,7 +15,7 @@ import { useExtensionStores, useTrustExtension } from "../composables/useExtensi
 import ErrorNotice from "./ErrorNotice.vue";
 
 /**
- * The trust prompt (Mihon/Aniyomi model, Phase 1 §9): an installed extension whose signing certificate isn't trusted
+ * The trust prompt (Mihon/Aniyomi model): an installed extension whose signing certificate isn't trusted
  * is never loaded. This shows what would be trusted and asks. Trust calls `trustExtension` (which trusts the
  * certificate and loads everything it signs) and closes; Cancel, Escape or a click outside close and do nothing.
  */

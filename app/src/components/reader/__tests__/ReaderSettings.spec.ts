@@ -6,7 +6,7 @@ import { READER_PREFS_KEY, useReaderStore } from "../../../stores/reader";
 import { DEFAULT_READER_PREFS } from "../../../utils/readerSettings";
 import ReaderSettings from "../ReaderSettings.vue";
 
-/* The reader's settings sheet (Phase 5 Stage 5): the manga's own mode and direction with where the mode comes from,
+/* The reader's settings sheet: the manga's own mode and direction with where the mode comes from,
    "Use default" and the reset, and the global settings on this device. */
 
 let wrapper: VueWrapper;

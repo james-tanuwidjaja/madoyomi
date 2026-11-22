@@ -31,7 +31,7 @@ import kotlin.test.assertContentEquals
 
 /**
  * A downloaded chapter's page streamed from its CBZ (upstream's `ArchiveProvider`, the reader's path for a downloaded
- * chapter): the stream owns its archive (phase-6 §10 "Stage 4": a page cut off by `ClosedChannelException`).
+ * Chapter): the stream owns its archive (a page cut off by `ClosedChannelException`).
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CbzPageStreamTest : ApplicationTest() {

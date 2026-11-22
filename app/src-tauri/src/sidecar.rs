@@ -21,16 +21,16 @@
 //!
 //! The backend's stdout and stderr, the shell's own lifecycle lines and the UI's uncaught errors go to
 //! `<dataDir>/logs/sidecar.log`. It rolls at every app start and past [`LOG_LIMIT`], keeping [`LOGS_KEPT`] files
-//! (`sidecar.log`, `sidecar.1.log`, `sidecar.2.log`; Phase 7 Stage 3). The server writes its own log to
+//! (`sidecar.log`, `sidecar.1.log`, `sidecar.2.log`). The server writes its own log to
 //! `<dataDir>/logs/madoyomi.log` (rolled by logback), mpv one per session (`mpv.log`, `mpv.1.log` …), and a JVM crash
 //! its `hs_err_pid*.log` there too (the backend's working directory is the log folder).
 //!
-//! Crashes are counted (Phase 7 Stage 3): every run that ends without the app asking. [`Status::recent_crashes`] is
+//! Crashes are counted: every run that ends without the app asking. [`Status::recent_crashes`] is
 //! how many happened in the last [`CRASH_WINDOW`], and the UI shows its crash dialog (Export logs, Open logs folder)
 //! once there are [`CRASH_ALERT`] of them, or when the supervisor gives up (`failed`).
 //!
 //! On Windows every child is put into one Job Object with `KILL_ON_JOB_CLOSE`, so the JVM is killed even when this
-//! process crashes or is killed from Task Manager. The backend owns mpv (Phase 4): mpv is the JVM's child, so it is
+//! process crashes or is killed from Task Manager. The backend owns mpv: mpv is the JVM's child, so it is
 //! in the same job and dies with the app too. The shell only tells the backend where mpv and its config dir are
 //! (`MADOYOMI_MPV`, `MADOYOMI_PLAYER_DIR`; see [`resolve_player`]).
 
@@ -255,7 +255,7 @@ impl Backend {
         &self.token
     }
 
-    /// A `[shell]` line in `sidecar.log` (Phase 7 Stage 4: the app's updater says what it does).
+    /// A `[shell]` line in `sidecar.log` (the app's updater says what it does).
     pub(crate) fn log_shell(&self, msg: &str) {
         self.shared.log.shell(msg);
     }
@@ -1092,8 +1092,8 @@ struct Launch {
 }
 
 fn resolve_launch(app: &AppHandle) -> Launch {
-    // Release builds bundle the JRE, the jar, mpv, ffmpeg and yt-dlp as resources beside the exe (Phase 7 Stage 1:
-    // tauri.release.conf.json, tools/build-release.ps1). Debug builds use the repo.
+    // Release builds bundle the JRE, the jar, mpv, ffmpeg and yt-dlp as resources beside the exe
+    // (tauri.release.conf.json, tools/build-release.ps1). Debug builds use the repo.
     let resources = if cfg!(debug_assertions) {
         None
     } else {
@@ -1117,7 +1117,7 @@ fn env_path(name: &str) -> Option<PathBuf> {
 }
 
 /// `--data-dir <path>` on the command line, else `MADOYOMI_DATA_DIR`, else `%APPDATA%\Madoyomi` (the server's own
-/// default), else Tauri's app data dir. The argument (Phase 7 Stage 4) survives the updater's restart, which passes
+/// default), else Tauri's app data dir. The argument survives the updater's restart, which passes
 /// the app's arguments on but starts it with the user's own environment.
 fn resolve_data_dir(app: &AppHandle) -> PathBuf {
     if let Some(dir) = data_dir_arg(std::env::args_os().skip(1)) {
@@ -1238,12 +1238,12 @@ fn jar_from(
     }
 }
 
-/// What the backend is told about mpv (Phase 4 §9): `MADOYOMI_MPV` and `MADOYOMI_PLAYER_DIR`. `None` leaves it to the
+/// What the backend is told about mpv: `MADOYOMI_MPV` and `MADOYOMI_PLAYER_DIR`. `None` leaves it to the
 /// backend: mpv from PATH, and a config dir in the data dir.
 struct Player {
     mpv: Option<PathBuf>,
     config_dir: Option<PathBuf>,
-    /// Phase 6 Stage 5: the anime downloads' programs, `MADOYOMI_FFMPEG` and `MADOYOMI_YTDLP`, found as mpv is.
+    /// The anime downloads' programs, `MADOYOMI_FFMPEG` and `MADOYOMI_YTDLP`, found as mpv is.
     ffmpeg: Option<PathBuf>,
     yt_dlp: Option<PathBuf>,
 }
@@ -1258,7 +1258,7 @@ fn resolve_player(resources: Option<&Path>) -> Player {
     }
 }
 
-/// `MADOYOMI_MPV`, else the bundled `<resources>/mpv/mpv.exe` (release, Phase 7) or the repo's
+/// `MADOYOMI_MPV`, else the bundled `<resources>/mpv/mpv.exe` (release) or the repo's
 /// `tools/bin/mpv/mpv.exe` (debug) when it is there, else `None` (the backend looks on PATH). The override is passed
 /// on even if it's missing: the backend reports it as `PLAYER_NOT_FOUND` with the path.
 fn mpv_from(
@@ -1269,7 +1269,7 @@ fn mpv_from(
     tool_from(override_mpv, resources, dev_root, "mpv")
 }
 
-/// A bundled program `name` as mpv is found (Phase 6 Stage 5 adds ffmpeg and yt-dlp): the override, else
+/// A bundled program `name` as mpv is found (also ffmpeg and yt-dlp): the override, else
 /// `<resources>/<name>/<name>.exe` (release) or the repo's `tools/bin/<name>/<name>.exe` (debug) when it is there,
 /// else `None` (the backend looks in its settings, then on PATH).
 fn tool_from(
@@ -1854,7 +1854,7 @@ mod tests {
 
     #[test]
     fn mpv_comes_from_the_override_then_the_bundle_or_the_repo_else_path() {
-        // Phase 4 §9: MADOYOMI_MPV, the bundled mpv (release) or tools/bin/mpv (debug), else the backend's PATH.
+        // MADOYOMI_MPV, the bundled mpv (release) or tools/bin/mpv (debug), else the backend's PATH.
         let dir = std::env::temp_dir().join(format!("madoyomi-mpv-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let exe = if cfg!(windows) { "mpv.exe" } else { "mpv" };
@@ -1890,7 +1890,7 @@ mod tests {
 
     #[test]
     fn the_download_tools_come_from_the_override_then_the_bundle_or_the_repo_else_path() {
-        // Phase 6 Stage 5: MADOYOMI_FFMPEG / MADOYOMI_YTDLP, the bundled ones (release) or tools/bin (debug).
+        // MADOYOMI_FFMPEG / MADOYOMI_YTDLP, the bundled ones (release) or tools/bin (debug).
         let dir = std::env::temp_dir().join(format!("madoyomi-tools-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let exe = if cfg!(windows) {
@@ -1952,7 +1952,7 @@ mod tests {
 
     #[test]
     fn java_comes_from_the_override_then_the_bundled_runtime_or_the_repo_else_path() {
-        // Phase 7 Stage 1: MADOYOMI_JAVA, the jlink runtime in <resources>/jre (release) or tools/bin/jdk-21 (debug),
+        // MADOYOMI_JAVA, the jlink runtime in <resources>/jre (release) or tools/bin/jdk-21 (debug),
         // else `java` from PATH.
         let dir = std::env::temp_dir().join(format!("madoyomi-java-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -1985,7 +1985,7 @@ mod tests {
 
     #[test]
     fn a_release_build_runs_its_bundled_jar_not_the_dev_build() {
-        // Phase 7 Stage 1: <resources>/server/Madoyomi-Server.jar, copied there by tools/build-release.ps1.
+        // <resources>/server/Madoyomi-Server.jar, copied there by tools/build-release.ps1.
         let dir = std::env::temp_dir().join(format!("madoyomi-bundled-jar-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let build = dir.join("build");
@@ -2026,7 +2026,7 @@ mod tests {
 
     #[test]
     fn a_jar_that_appears_later_is_found_on_the_next_resolve() {
-        // Retry resolves the jar again (Phase 3 §10, Stage 7): a jar built after a failed start is used.
+        // Retry resolves the jar again: a jar built after a failed start is used.
         let dir = std::env::temp_dir().join(format!("madoyomi-jar-later-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();

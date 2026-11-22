@@ -27,7 +27,7 @@ vi.mock("../../api/operations", async (importOriginal) => ({
 
 import VideoPicker from "../VideoPicker.vue";
 
-/* The video picker and its resume prompt (Phase 4 steps 12-13), against mocked operations. */
+/* The video picker and its resume prompt, against mocked operations. */
 
 const SOURCE = "2196071447214431390";
 
@@ -163,7 +163,7 @@ describe("VideoPicker", () => {
     expect(document.activeElement).toBe(action("confirm-play"));
   });
 
-  it("shows no server name for a source without hosters, only its videos (Phase 7 Stage 6)", async () => {
+  it("shows no server name for a source without hosters, only its videos", async () => {
     ops.fetchEpisodeVideos.mockResolvedValue([hoster(0, { name: "no_hoster_list" })]);
     await open();
 
@@ -445,7 +445,7 @@ describe("VideoPicker", () => {
   });
 });
 
-describe("VideoPicker: the player settings (Phase 4 Stage 5)", () => {
+describe("VideoPicker: the player settings", () => {
   // as the backend sorts them: the preferred server's hoster first, its preferred quality first
   const sorted = () => [
     hoster(0, {

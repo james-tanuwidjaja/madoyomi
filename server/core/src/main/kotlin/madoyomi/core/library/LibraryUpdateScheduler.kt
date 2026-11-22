@@ -14,7 +14,7 @@ import suwayomi.tachidesk.util.HAScheduler
 import java.util.Date
 
 /**
- * The scheduled library update check (Phase 6 Stage 3): every [LibraryUpdateSettings.intervalHours] (off by default,
+ * The scheduled library update check: every [LibraryUpdateSettings.intervalHours] (off by default,
  * the user's decision), both kinds, every user's manga library. Upstream's `HAScheduler`, which also catches up on a
  * check missed while the machine slept.
  *

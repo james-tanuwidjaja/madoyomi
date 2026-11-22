@@ -2,7 +2,7 @@ import type { App } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
 /*
- * The UI's uncaught errors go to the shell's sidecar.log as `[ui]` lines (Phase 7 Stage 3), so Export logs has them.
+ * The UI's uncaught errors go to the shell's sidecar.log as `[ui]` lines, so Export logs has them.
  * Only in the shell; at most `MAX_PER_MINUTE` a minute, so a loop of errors can't fill the log.
  */
 

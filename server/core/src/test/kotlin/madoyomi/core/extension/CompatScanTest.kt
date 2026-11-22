@@ -28,10 +28,10 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The static compat scan (Phase 2 Stage 2): every APK of `tools/compat-test/top20.txt` and `manga-sample.txt`
+ * The static compat scan: every APK of `tools/compat-test/top20.txt` and `manga-sample.txt`
  * (downloaded by `tools/compat-test/select-top.ps1 -Download` into the gitignored `tools/compat-test/apks/`) is
  * converted the way an install does (dex2jar + [Dex2jarRepair]), verified, and link-checked with
- * [ExtensionLinkCheck]. The result is `docs/research/compat-scan.md`: one row per extension and frequency tables of
+ * [ExtensionLinkCheck]. The result is `tools/compat-test/reports/compat-scan.md`: one row per extension and frequency tables of
  * the missing classes, missing members and stubs, which decide the order stubs get fixed in.
  *
  * Only runs with `MADOYOMI_COMPAT_SCAN=1` (`tools/compat-test/scan.ps1` sets it).
@@ -47,7 +47,7 @@ class CompatScanTest {
 
         private val compatDir = Path(System.getProperty("madoyomi.compatDir") ?: "../../tools/compat-test")
         private val apkDir = Path(System.getProperty("madoyomi.compatApks") ?: "$compatDir/apks")
-        private val output = Path(System.getProperty("madoyomi.compatOut") ?: "../../docs/research/compat-scan.md")
+        private val output = Path(System.getProperty("madoyomi.compatOut") ?: "$compatDir/reports/compat-scan.md")
         private val prefixes = listOf("eu.kanade.tachiyomi.animeextension.", "eu.kanade.tachiyomi.extension.")
 
         private fun short(pkg: String) = prefixes.fold(pkg) { p, prefix -> p.removePrefix(prefix) }

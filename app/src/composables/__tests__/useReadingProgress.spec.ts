@@ -10,7 +10,7 @@ import { PROGRESS_DEBOUNCE_MS, PROGRESS_RETRY_MS, useReadingProgress } from "../
 import { makeChapters } from "../../test/fixtures";
 import { withSetup } from "../../test/withSetup";
 
-/* Reading progress (Phase 5 Stage 2): debounced saves, the read mark on the last page, flushes, the cached list. */
+/* Reading progress: debounced saves, the read mark on the last page, flushes, the cached list. */
 let queryClient: QueryClient;
 let save: ReturnType<typeof vi.fn<(id: number, patch: ChapterPatch) => Promise<Chapter>>>;
 let unmount: () => void;

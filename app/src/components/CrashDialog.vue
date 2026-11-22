@@ -12,7 +12,7 @@ import { useBackendStore } from "../stores/backend";
 import ExportLogs from "./ExportLogs.vue";
 
 /**
- * The repeated-crash dialog (Phase 7 Stage 3): when the backend stopped `CRASH_ALERT` (3) times within 10 minutes
+ * The repeated-crash dialog: when the backend stopped `CRASH_ALERT` (3) times within 10 minutes
  * (the shell counts them) but still restarts, this says so, with Export logs and Open logs folder. Closing it keeps it
  * closed until the next crash. When the shell gives up (`failed`), the full-screen panel offers the same.
  */

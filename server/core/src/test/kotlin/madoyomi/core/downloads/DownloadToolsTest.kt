@@ -13,7 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/** The pure parts of anime downloads (Phase 6 Stage 5): finding the tools, quoting their arguments, their commands. */
+/** The pure parts of anime downloads: finding the tools, quoting their arguments, their commands. */
 class DownloadToolsTest {
     @Test
     fun `the tools are looked for in the settings, then the property, the env and PATH, and a named path must exist`() {

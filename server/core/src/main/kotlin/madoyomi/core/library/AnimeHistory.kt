@@ -27,7 +27,7 @@ import suwayomi.tachidesk.server.database.dbTransaction
 import java.time.Instant
 
 /**
- * Watch history (Phase 6 Stage 2) in `ANIME_HISTORY`, one row per episode with the epoch seconds it was last played
+ * Watch history in `ANIME_HISTORY`, one row per episode with the epoch seconds it was last played
  * (`last_seen`), as Aniyomi's `animehistory`. Written from the progress: the player's saves ([stamp] from
  * `EpisodeProgress.save`) and `updateEpisode(s)` given a position, never from a watched mark alone (upstream's rule for
  * `isRead`, which doesn't stamp `last_read_at`). Deleting history keeps the watched marks and positions in `EPISODE`.
@@ -203,7 +203,7 @@ object AnimeHistory {
         }
     }
 
-    /** All rows, for tests and the backup (Stage 6): episode id to epoch seconds. */
+    /** All rows, for tests and the backup: episode id to epoch seconds. */
     fun all(): Map<Int, Long> =
         dbTransaction {
             AnimeHistoryTable.selectAll().associate { it[AnimeHistoryTable.episode].value to it[AnimeHistoryTable.lastSeen] }

@@ -1,4 +1,4 @@
-; Madoyomi's English texts for Tauri's NSIS installer (Phase 7 Stage 2), set in tauri.conf.json
+; Madoyomi's English texts for Tauri's NSIS installer, set in tauri.conf.json
 ; (bundle.windows.nsis.customLanguageFiles). A copy of Tauri 2's own English.nsh with one change:
 ; the uninstaller's "Delete the application data" box says what it removes (installer/hooks.nsh
 ; removes the whole data dir: the library, settings, extensions, cache, logs and downloads).

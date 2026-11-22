@@ -21,10 +21,10 @@ function stored(): ReaderPrefs {
 }
 
 /**
- * The reader's global settings (Phase 5 Stage 5), kept on this device like the theme: the default mode and direction
+ * The reader's global settings, kept on this device like the theme: the default mode and direction
  * (a manga's own, in its meta, come first: `useMangaReaderSettings`), the page fit of the paged modes, the strip's
  * width, the page gap, the background and the preload count. A value that isn't known reads as its default
- * (utils/readerSettings.ts). The double-page "shift by one" (Stage 4) stays a switch for the app session: it is about
+ * (utils/readerSettings.ts). The double-page "shift by one" stays a switch for the app session: it is about
  * how a chapter's spreads fall, not a preference.
  */
 export const useReaderStore = defineStore("reader", () => {

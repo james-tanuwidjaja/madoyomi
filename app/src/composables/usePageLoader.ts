@@ -3,7 +3,7 @@ import { api, isApiError } from "../api/client";
 import { pagesToLoad } from "../utils/pagedNav";
 
 /*
- * The reader's page images (Phase 5 Stage 2): each page route is fetched as a blob (`api.fetchAsset`, the token in
+ * The reader's page images: each page route is fetched as a blob (`api.fetchAsset`, the token in
  * the header) and shown from an object URL. At most `maxConcurrent` requests run at a time, the current page first,
  * then the ones ahead and behind (`pagesToLoad`). A page that leaves the window is aborted if it is still loading,
  * and its object URL is revoked, so a long chapter holds only the pages around the reader. When every request is
@@ -12,12 +12,12 @@ import { pagesToLoad } from "../utils/pagedNav";
  * was away (`NETWORK`, `BACKEND_UNAVAILABLE`) are fetched again with any retry, and by `retryTransient` (the reader
  * calls it when the backend is ready again); a source's failure waits for its own click.
  *
- * Stage 3 (webtoon): the window can be given (`wanted`, the strip's pages around the viewport, in order) instead of
+ * The window can be given (`wanted`, the strip's pages around the viewport, in order) instead of
  * ±N of the position. A fetched page is decoded (`HTMLImageElement.decode()`) before it counts as loaded, so its
  * `<img>` paints at once and its natural size is known; the sizes stay for the chapter after a page is released, so
  * the strip keeps each page's height.
  *
- * Stage 6 (the exit run): the pages a neighbouring chapter opens on can be held ahead (`held`, by route): fetched and
+ * The pages a neighbouring chapter opens on can be held ahead (`held`, by route): fetched and
  * decoded once every page of the window has its request, and only while a request is free; a page of the window
  * that needs one takes it from them. When a new page list holds such a route, its loaded page is taken over as it
  * is, so the step into the next (previous) chapter shows its first (last) page in the first frame instead of two or
@@ -45,7 +45,7 @@ export interface PageLoaderOptions {
   /** The pages to load, most urgent first; when null, the ones around `position` (`behind`, `ahead`). */
   wanted?: MaybeRefOrGetter<readonly number[] | null>;
   behind?: number;
-  /** Pages ahead of the position when `wanted` is null (the preload count, Stage 5; a new value reloads the window). */
+  /** Pages ahead of the position when `wanted` is null (the preload count; a new value reloads the window). */
   ahead?: MaybeRefOrGetter<number>;
   maxConcurrent?: number;
   fetcher?: PageFetcher;

@@ -9,7 +9,7 @@ import madoyomi.core.anime.AnimeVideos.EpisodeHoster
 import madoyomi.core.anime.AnimeVideos.HosterState
 
 /**
- * A video by what stays the same between fetches of an episode's videos (Phase 4 Stage 4): its hoster's name and
+ * A video by what stays the same between fetches of an episode's videos: its hoster's name and
  * its title and resolution. Indexes don't: they are only valid for one fetch.
  */
 data class VideoRef(

@@ -11,7 +11,7 @@ import {
 import { useVirtualizer } from "@tanstack/vue-virtual";
 
 /**
- * A grid of cards in its own scroll area (Phase 3 step 20), built like VirtualList: the columns come from the scroll
+ * A grid of cards in its own scroll area, built like VirtualList: the columns come from the scroll
  * area's width (as many `minItemWidth` columns as fit, stretched to fill it), and above `threshold` items only the
  * rows in view (plus `overscan` rows) are in the DOM (`@tanstack/vue-virtual`, rows measured). Give it a height.
  *

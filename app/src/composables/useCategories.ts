@@ -23,7 +23,7 @@ import { applyAssignment, CATEGORY_SORT_KEY, formatSort, withSort } from "../uti
 import { queryKeys, type BrowseKey } from "./queryKeys";
 
 /*
- * The library's categories (Phase 6 Stage 1): the list per kind, and the changes, each written into the cache so the
+ * The library's categories: the list per kind, and the changes, each written into the cache so the
  * Library and the dialogs follow at once. Changes that the backend may have widened (a deletion, entries added to the
  * library) refetch.
  */

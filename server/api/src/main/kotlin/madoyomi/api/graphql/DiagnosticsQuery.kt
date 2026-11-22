@@ -12,7 +12,7 @@ import suwayomi.tachidesk.graphql.directives.RequireAuth
 class DiagnosticsQuery {
     @RequireAuth
     @GraphQLDescription(
-        "What Settings → Export logs puts beside the logs (Phase 7 Stage 3), as a JSON document: the backend's and Java's " +
+        "What Settings → Export logs puts beside the logs, as a JSON document: the backend's and Java's " +
             "versions, the repos, the installed extensions, the settings without secrets (server.conf's privacy-safe " +
             "keys, Madoyomi's settings files) and the downloads folder; the library's titles only with includeLibrary",
     )

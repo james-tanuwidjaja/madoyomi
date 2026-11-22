@@ -17,7 +17,7 @@ import {
 } from "../pagedNav";
 import { makeChapters } from "../../test/fixtures";
 
-/* The paged reader's navigation (Phase 5 Stage 2): pure, so every boundary is checked here. */
+/* The paged reader's navigation: pure, so every boundary is checked here. */
 const both = { hasPrevious: true, hasNext: true };
 const none = { hasPrevious: false, hasNext: false };
 

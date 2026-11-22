@@ -22,7 +22,7 @@ const initial = (): SourcePageState => ({
 });
 
 /**
- * The state of each source page while the app runs (Phase 3 step 14), keyed by kind and source: the tab, the search
+ * The state of each source page while the app runs, keyed by kind and source: the tab, the search
  * and the applied filters stay when you open an entry and come back. Nothing is persisted: a new session starts at
  * Popular with the source's defaults.
  */

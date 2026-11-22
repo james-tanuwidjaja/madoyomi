@@ -152,7 +152,7 @@ class ErrorModelTest : ApiGraphQLTest() {
             val thrown = assertFailsWith<IOException> { client.newCall(Request.Builder().url(url).build()).execute().close() }
 
             val classified = ErrorClassifier.classify(CompletionException(thrown))
-            assertEquals(ErrorCode.SOURCE_FAILED, classified.code, "was INTERNAL before Stage 5")
+            assertEquals(ErrorCode.SOURCE_FAILED, classified.code, "was INTERNAL before")
             assertEquals(mapOf("reason" to ErrorClassifier.REASON_CLOUDFLARE), classified.details)
             assertEquals(ErrorClassifier.CLOUDFLARE_BLOCKED, classified.message)
             assertTrue(classified.expected, "the site's doing, not a server fault")
